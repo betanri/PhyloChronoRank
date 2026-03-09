@@ -8,15 +8,13 @@ It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTim
 
 `PhyloChronoRank (PCR)` uses three core metric families. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying ideas each family is trying to capture.
 
-An optional fourth family, `uncertainty width`, can be added when competing chronograms provide comparable confidence or credibility intervals.
-
 - `pulse preservation`: asks whether a dated tree keeps the same branching rhythm seen in the source phylogram. In practice, this means preserving clustered speciation bursts and quiet intervals instead of smearing them into evenly spaced splits. In this workflow, the pulse family is reported three ways: `burst loss` is the standalone burst-flattening submetric, `pulse preservation (burst)` is the burst-priority composite selector, and `pulse preservation (overall)` is the balanced composite selector. This follows the literature on extracting diversification tempo from phylogenies and on distinguishing burst-like from unusually regular branching patterns ([Nee et al. 1992](https://doi.org/10.1073/pnas.89.17.8322); [Pybus and Harvey 2000](https://doi.org/10.1098/rspb.2000.1278); [Ford et al. 2009](https://doi.org/10.1093/sysbio/syp018)).
 
 - `gap burden`: asks how much extra unseen lineage history the dated tree implies relative to the calibration evidence. This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148); [O'Connor and Wills 2016](https://doi.org/10.1093/sysbio/syw039)). Lower is usually better, but it should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)).
 
 - `rate plausibility`: asks whether the dated tree implies branchwise rate changes that still look biologically reasonable. It penalizes trees that require rates to become too extreme, too erratic, or too jumpy from parent branch to child branch. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
-- `uncertainty width` (optional): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In the current repo, this fourth family is demonstrated only for the Syngnatharia example.
+- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In the current repo, this optional layer is demonstrated only for the Syngnatharia example.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
@@ -69,7 +67,7 @@ autocorr_penalty = 1 - max(rate_autocorr_spearman, 0)
 
 What it means: the score rises when branchwise rates are more dispersed, jump more sharply from parent to child, produce more extreme outlier branches, or lose positive autocorrelation.
 
-`uncertainty width` (optional)
+`uncertainty width` (optional precision layer)
 
 ```text
 mean_interval_width = mean(width_i)
@@ -87,14 +85,6 @@ overall_mean_rank = mean(pulse_family_rank, gap_rank, rate_rank)
 
 What it means: pulse contributes `1/3` of the final rank, gap contributes `1/3`, and rate contributes `1/3`.
 
-`optional extended overall rank`
-
-```text
-overall_mean_rank_4 = mean(pulse_family_rank, gap_rank, rate_rank, uncertainty_rank)
-```
-
-What it means: this is the optional four-family extension used only when a comparable uncertainty-width layer is available.
-
 </details>
 
 ## Run PCR on your own data
@@ -111,7 +101,7 @@ At minimum, it expects:
 It can also take:
 
 - a calibration table with `taxonA,taxonB,age_min,age_max` and an optional `candidate` column when calibration applicability differs by method
-- an uncertainty table with `candidate` plus comparable interval-width summaries when you want to use the optional fourth family
+- an uncertainty table with `candidate` plus comparable interval-width summaries when you want to report the optional precision layer
 
 Example commands:
 
@@ -215,8 +205,7 @@ That is the key point of this second example: the choice to prefer `RelTime` cam
 - `RelTime` is the core PCR winner in this comparison
 - `RelTime` wins all three pulse summaries and also wins `rate plausibility`
 - `MCMCTree` wins the simple calibration-fit layer through lower `mean relative gap`
-- `MCMCTree` also wins the optional `uncertainty width` layer through narrower extracted HPD bars
-- under the optional four-family extension, the comparison becomes a tie
+- `MCMCTree` also has narrower extracted HPD bars, so it wins the optional precision layer on interval width
 - `Figure A` is the original visual rationale from the paper; `Figure B` is the quantitative post-fit follow-up
 
 ### Figure A: Original visual rationale from the paper
@@ -227,25 +216,24 @@ This is the original paper figure from [Santaquiteria et al. 2024](https://www.j
 
 ### Ranked post-fit results (lower is better)
 
-Two overall summaries are shown below. The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate plausibility`, so pulse contributes one-third of the final score. The optional extended rank adds `uncertainty width` as a fourth family, so each family contributes one-quarter. In this example, the uncertainty-width layer is based on the extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
+The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate plausibility`, so pulse contributes one-third of the final score. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, the uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
 
-| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate plausibility | uncertainty width (mean HPD width, Ma) | core overall mean rank (pulse = 1/3) | extended overall mean rank (1/4 each) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `RelTime` | `0.1620` | `0.1874` | `0.2077` | `0.2689` | `1.1514` | `11.41` | `1.33` | `1.50 (tie)` |
-| `MCMCTree` | `0.2396` | `0.2560` | `0.2600` | `0.2184` | `1.5531` | `6.24` | `1.67` | `1.50 (tie)` |
+| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate plausibility | uncertainty width (mean HPD width, Ma) | core overall mean rank (pulse = 1/3) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | `0.1620` | `0.1874` | `0.2077` | `0.2689` | `1.1514` | `11.41` | `1.33` |
+| `MCMCTree` | `0.2396` | `0.2560` | `0.2600` | `0.2184` | `1.5531` | `6.24` | `1.67` |
 
 ### Figure B: Post-fit comparison across metric families
 
 ![Syngnatharia post-fit evaluation metric families](figures/syngnatharia_postfit_metric_family_values.png)
 
-Figure B shows both the core PCR comparison and the optional uncertainty-width extension. The three pulse panels are still averaged into one pulse-family contribution. In the core PCR rank, `pulse`, `mean relative gap`, and `rate plausibility` each contribute one-third. In the extended panel, `uncertainty width` is added as a fourth family and each family contributes one-quarter.
+Figure B shows the core PCR comparison and also displays `uncertainty width` as a separate optional precision layer. The three pulse panels are still averaged into one pulse-family contribution, and in the core PCR rank `pulse`, `mean relative gap`, and `rate plausibility` each contribute one-third.
 
 ### Interpretation for this example
 
 - `RelTime` is the core PCR winner because it leads all three pulse summaries and also leads `rate plausibility`, while losing only the simple calibration-fit layer
 - `MCMCTree` has the lower `mean relative gap`, so it stays closer to the calibration minima on average in this scoring
-- `MCMCTree` also has the narrower extracted HPD bars, so it wins the optional `uncertainty width` layer on precision
-- once that optional fourth family is added, the comparison becomes a tie: `RelTime` wins pulse and rate, while `MCMCTree` wins gap and uncertainty width
+- `MCMCTree` also has the narrower extracted HPD bars, so it wins the optional uncertainty-width layer on precision
 - the post-fit metrics therefore support, rather than reverse, the original visual rationale from Figure A: `RelTime` better preserves the branching bursts seen in the RAxML phylogram
 - this is exactly the kind of case where a visual choice made before these metrics existed can now be quantified explicitly instead of being left as impression only
 
@@ -253,10 +241,9 @@ Figure B shows both the core PCR comparison and the optional uncertainty-width e
 
 1. If you want the core PCR winner focused on chronogram behavior, choose `RelTime`.
 2. If you care most about preserving diversification bursts and smoother implied rate behavior, choose `RelTime`.
-3. If you care primarily about calibration fit and narrower interval estimates, `MCMCTree` wins `mean relative gap` and the optional `uncertainty width` layer.
-4. If you force all four families to contribute equally, this example becomes a tie.
-5. Report the tradeoff explicitly: here the core chronogram-behavior layer favors `RelTime`, while the calibration-plus-precision side favors `MCMCTree`.
-6. The original visual choice to favor `RelTime` is supported quantitatively by the current core post-fit layer.
+3. If you care primarily about calibration fit and narrower interval estimates, `MCMCTree` wins `mean relative gap` and the optional uncertainty-width layer.
+4. Report the tradeoff explicitly: here the core chronogram-behavior layer favors `RelTime`, while the calibration-plus-precision side favors `MCMCTree`.
+5. The original visual choice to favor `RelTime` is supported quantitatively by the current core post-fit layer.
 
 ### Files behind this example
 
@@ -284,4 +271,4 @@ Figure B shows both the core PCR comparison and the optional uncertainty-width e
 - Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
 - The current repo reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework currently evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- An optional `uncertainty width` layer is currently demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, so the core PCR rank remains the three-family version.
+- An optional `uncertainty width` layer is currently demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.

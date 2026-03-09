@@ -106,10 +106,6 @@ summary_df$rank_mean_core <- rowMeans(core_mat, na.rm = TRUE)
 summary_df$rank_mean_core_rank <- pcr_rank_low(summary_df$rank_mean_core)
 if ('uncertainty_mean_width_ma' %in% names(summary_df)) {
   summary_df$rank_uncertainty_mean_width <- pcr_rank_low(summary_df$uncertainty_mean_width_ma)
-  ext_mat <- cbind(summary_df$rank_pulse_family, summary_df$rank_mean_relative_gap, summary_df$rank_rate_irregularity, summary_df$rank_uncertainty_mean_width)
-  summary_df$extended_n_families_ranked <- rowSums(is.finite(ext_mat))
-  summary_df$rank_mean_extended <- rowMeans(ext_mat, na.rm = TRUE)
-  summary_df$rank_mean_extended_rank <- pcr_rank_low(summary_df$rank_mean_extended)
 }
 write.csv(summary_df, file.path(outdir, 'summary_pcr_metrics.csv'), row.names = FALSE)
 if (length(pulse_default_detail)) write.csv(do.call(rbind, pulse_default_detail), file.path(outdir, 'pulse_default_details.csv'), row.names = FALSE)
@@ -127,8 +123,8 @@ lines <- c(
   paste0('Best pulse preservation (burst): ', summary_df$candidate[which.min(summary_df$pulse_burst_selector_error)]),
   if (all(!is.na(summary_df$mean_relative_gap))) paste0('Best mean relative gap: ', summary_df$candidate[which.min(summary_df$mean_relative_gap)]) else 'Mean relative gap: not scored',
   paste0('Best rate plausibility: ', summary_df$candidate[which.min(summary_df$rate_irregularity)]),
-  paste0('Core overall winner: ', summary_df$candidate[which.min(summary_df$rank_mean_core)]),
-  if ('rank_mean_extended' %in% names(summary_df)) paste0('Extended overall winner: ', paste(summary_df$candidate[summary_df$rank_mean_extended == min(summary_df$rank_mean_extended, na.rm=TRUE)], collapse = ', ')) else 'Extended overall winner: not scored'
+  if ('rank_uncertainty_mean_width' %in% names(summary_df)) paste0('Most precise by uncertainty width: ', summary_df$candidate[which.min(summary_df$uncertainty_mean_width_ma)]) else 'Uncertainty width: not scored',
+  paste0('Core overall winner: ', summary_df$candidate[which.min(summary_df$rank_mean_core)])
 )
 writeLines(lines, file.path(outdir, 'interpretation.txt'))
 message('Wrote PCR outputs to: ', outdir)

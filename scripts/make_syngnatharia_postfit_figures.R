@@ -50,18 +50,15 @@ text(bp, d$rank_mean_3families,
      pos = 3, cex = 0.9)
 mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
 
-par(mar = c(8, 5, 4, 1))
-bp <- barplot(d$rank_mean_4families, names.arg = labels, col = cols, las = 2,
-              ylab = 'Mean rank across 4 families',
-              main = 'Extended overall rank (optional; 1/4 each)',
-              ylim = c(0, max(d$rank_mean_4families, na.rm = TRUE) * 1.3))
-rank_labels <- ifelse(abs(d$rank_mean_4families_rank - round(d$rank_mean_4families_rank)) < 1e-9,
-                      paste0(sprintf('%.2f', d$rank_mean_4families), ' (rank ', d$rank_mean_4families_rank, ')'),
-                      paste0(sprintf('%.2f', d$rank_mean_4families), ' (tie)'))
-text(bp, d$rank_mean_4families, labels = rank_labels, pos = 3, cex = 0.9)
-mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
+par(mar = c(2, 2, 2, 2))
+plot.new()
+text(0.5, 0.78, 'Optional precision note', cex = 1.3, font = 2)
+text(0.5, 0.56, 'Uncertainty width is shown separately.', cex = 1.0)
+text(0.5, 0.43, 'It does not change the core PCR rank.', cex = 1.0)
+text(0.5, 0.28, 'Core winner: RelTime', cex = 1.0)
+text(0.5, 0.16, 'Narrower intervals: MCMCTree', cex = 1.0)
 
 mtext('Syngnatharia example: post-fit evaluation metrics across RelTime and MCMCTree', side = 3, outer = TRUE, line = 0.5, cex = 1.5, font = 2)
-mtext('Core PCR rank balances pulse, gap, and rate. The extended panel adds uncertainty width as an optional fourth family for this example only.', side = 1, outer = TRUE, line = 0.5, cex = 1.0)
+mtext('Core PCR rank balances pulse, gap, and rate. Uncertainty width is shown separately as an optional precision layer for this example only.', side = 1, outer = TRUE, line = 0.5, cex = 1.0)
 dev.off()
 message('Done. Wrote: ', normalizePath(file.path(out_fig, 'syngnatharia_postfit_metric_family_values.png'), winslash = '/'))
