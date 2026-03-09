@@ -1,0 +1,16 @@
+"calibration_id","taxonA_name","taxonB_name","age_min","age_max","use_MCMCTree","use_RelTime","note","taxonA","taxonB","missing_taxon_in_tree"
+"1","Syngnathus louisianae","Taractichthys longipinnis",92,103.5,TRUE,FALSE,"Root calibration; RelTime does not allow root calibrations.","Syngnathidae_Syngnathus_louisianae_CEO104","Bramidae_Taractichthys_longipinnis_CEO67",FALSE
+"2","Syngnathus louisianae","Eurypegasus draconis",83.6,Inf,TRUE,TRUE,"","Syngnathidae_Syngnathus_louisianae_CEO104","Pegasidae_Eurypegasus_draconis_CEO49",FALSE
+"3","Solenostomus cyanopterus","Syngnathus louisianae",48.5,83.6,TRUE,TRUE,"","Solenostomidae_Solenostomus_cyanopterus_CEO37","Syngnathidae_Syngnathus_louisianae_CEO104",FALSE
+"4","Hippocampus abdominalis","Hippocampus kuda",11.6,48.5,TRUE,TRUE,"","Syngnathidae_Hippocampus_abdominalis_CEO144","Syngnathidae_Hippocampus_kuda_CEO52",FALSE
+"5","Aulostomus maculatus","Aeoliscus strigatus",61.5,83.6,TRUE,TRUE,"","Aulostomidae_Aulostomus_maculatus_CEO156","Centriscidae_Aeoliscus_strigatus_CEO32",FALSE
+"6","Fistularia corneta","Aulostomus maculatus",48.5,61.5,TRUE,TRUE,"","Fistulariidae_Fistularia_corneta_CEO62","Aulostomidae_Aulostomus_maculatus_CEO156",FALSE
+"7","Pegasus volitans","Dactylopterus volitans",54,83.6,TRUE,TRUE,"","Pegasidae_Pegasus_volitans_CEO58","Dactylopteridae_Dactylopterus_volitans_CEO70",FALSE
+"8","Draconetta xenica","Callionymus scaber",48.5,83.6,TRUE,TRUE,"","Draconettidae_Draconetta_xenica_CSIROGT11264","Callionymidae_Callionymus_scaber_CEO64",FALSE
+"9","Aeoliscus strigatus","Macroramphosus gracilis",48.5,61.5,TRUE,TRUE,"","Centriscidae_Aeoliscus_strigatus_CEO32","Centriscidae_Macroramphosus_gracilis_CEO68",FALSE
+"10","Upeneichthys stotti","Mullus auratus",13,83.6,TRUE,TRUE,"","Mullidae_Upeneichthys_stotti_CSIROGT5950","Mullidae_Mullus_auratus_CEO95",FALSE
+"11","Nerophis ophidion","Entelurus aequoreus",13.5,48.5,TRUE,TRUE,"","Syngnathidae_Nerophis_ophidion_CEO112","Syngnathidae_Entelurus_aequoreus_CEO113",FALSE
+"12","Aulostomus maculatus","Aulostomus chinensis",2.8,Inf,FALSE,FALSE,"Only used for congruification analyses in treePL.","Aulostomidae_Aulostomus_maculatus_CEO156",NA,TRUE
+"13a","Mulloidichthys martinicus","Mulloidichthys dentatus",2.8,Inf,TRUE,TRUE,"","Mullidae_Mulloidichthys_martinicus_CEO27","Mullidae_Mulloidichthys_dentatus_CEO43",FALSE
+"13b","Mulloidichthys martinicus","Mulloidichthys vanicolensis",2.8,Inf,TRUE,TRUE,"","Mullidae_Mulloidichthys_martinicus_CEO27","Mullidae_Mulloidichthys_vanicolensis_CEO44",FALSE
+"14","Hippocampus ingens","Hippocampus reidi",2.8,Inf,TRUE,TRUE,"","Syngnathidae_Hippocampus_ingens_CEO39","Syngnathidae_Hippocampus_reidi_CEO53",FALSE
