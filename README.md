@@ -6,13 +6,9 @@ It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTim
 
 ## What it evaluates
 
-The framework keeps three layers conceptually separate:
+`PhyloChronoRank (PCR)` uses three core metric families. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying ideas each family is trying to capture.
 
-- `clock fitting`: which model is preferred by fit statistics
-- `lambda tuning`: which smoothing strength is preferred within a fitted model search
-- `post-fit evaluation`: which finished dated tree behaves best biologically
-
-`PhyloChronoRank (PCR)` is about that third layer. It uses three metric families. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying ideas each family is trying to capture.
+An optional fourth family, `uncertainty width`, can be added when competing chronograms provide comparable confidence or credibility intervals. That layer is not part of the current core implementation.
 
 - `pulse preservation`: asks whether a dated tree keeps the same branching rhythm seen in the source phylogram. In practice, this means preserving clustered speciation bursts and quiet intervals instead of smearing them into evenly spaced splits. In this workflow, the pulse family is reported three ways: `burst loss` is the standalone burst-flattening submetric, `pulse preservation (burst)` is the burst-priority composite selector, and `pulse preservation (overall)` is the balanced composite selector. This follows the literature on extracting diversification tempo from phylogenies and on distinguishing burst-like from unusually regular branching patterns ([Nee et al. 1992](https://doi.org/10.1073/pnas.89.17.8322); [Pybus and Harvey 2000](https://doi.org/10.1098/rspb.2000.1278); [Ford et al. 2009](https://doi.org/10.1093/sysbio/syp018)).
 
