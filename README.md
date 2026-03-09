@@ -97,6 +97,41 @@ What it means: this is the optional four-family extension used only when a compa
 
 </details>
 
+## Run PCR on your own data
+
+`PhyloChronoRank (PCR)` now includes a standalone runner:
+
+- `scripts/run_pcr.R`
+
+At minimum, it expects:
+
+- one reference phylogram
+- one candidate manifest with `candidate,tree_file`
+
+It can also take:
+
+- a calibration table with `taxonA,taxonB,age_min,age_max` and an optional `candidate` column when calibration applicability differs by method
+- an uncertainty table with `candidate` plus comparable interval-width summaries when you want to use the optional fourth family
+
+Example commands:
+
+```bash
+Rscript scripts/run_pcr.R \
+  --ref-tree=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree \
+  --candidates-csv=examples/terapontoid/candidates.csv \
+  --calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv \
+  --outdir=out/terapontoid
+```
+
+```bash
+Rscript scripts/run_pcr.R \
+  --ref-tree=examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre \
+  --candidates-csv=examples/syngnatharia/candidates.csv \
+  --calibrations-csv=examples/syngnatharia/calibrations_by_candidate.csv \
+  --uncertainty-csv=examples/syngnatharia/uncertainty_summary_long.csv \
+  --outdir=out/syngnatharia
+```
+
 ## Example 1: Empirical dataset with five competing chronograms
 
 ### Fit layer vs post-fit layer
@@ -158,9 +193,12 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 
 - `examples/terapontoid/summary_terap_empirical_model_fits.csv`
 - `examples/terapontoid/summary_terap_empirical_postfit_metrics.csv`
-- the five trees in `examples/terapontoid/`
+- `examples/terapontoid/candidates.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv`
+- the five trees in `examples/terapontoid/`, including `Terapontoid_ML_MAIN_treePL_congruify.tre`
 - `figures/branching_tempo_tree_panel_clean_v3.png`
 - `figures/postfit_metric_family_values.png`
+- `scripts/run_pcr.R`
 - `scripts/make_terapontoid_postfit_figures.R`
 - `scripts/make_terapontoid_pulse_tree_panel.R`
 
@@ -222,21 +260,28 @@ Figure B shows both the core PCR comparison and the optional uncertainty-width e
 
 ### Files behind this example
 
+- `examples/syngnatharia/candidates.csv`
+- `examples/syngnatharia/calibrations_by_candidate.csv`
 - `examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre`
 - `examples/syngnatharia/CalibratedTree_backbone_MCMCTree_matrix75_RAXML.tre`
 - `examples/syngnatharia/CalibratedTree_backbone_RelTime_matrix75_RAXML.tre`
 - `examples/syngnatharia/Fig_S5_Burst_preservation.png`
 - `examples/syngnatharia/syngnatharia_HPD_summary.csv`
 - `examples/syngnatharia/syngnatharia_HPD_widths_extracted.csv`
+- `examples/syngnatharia/uncertainty_summary_long.csv`
 - `examples/syngnatharia/postfit_metrics/syngnatharia_postfit_metrics.csv`
 - `examples/syngnatharia/postfit_metrics/syngnatharia_fossil_gap_side_by_side.csv`
 - `examples/syngnatharia/postfit_metrics/syngnatharia_tableS2_method_audit.csv`
 - `figures/syngnatharia_postfit_metric_family_values.png`
+- `scripts/run_pcr.R`
 - `scripts/make_syngnatharia_postfit_figures.R`
 
 ## Scope notes
 
-- The current pulse-family weights are user-chosen defaults. They are transparent, but they are not yet backed by a formal sensitivity analysis.
+- The current pulse-family weights are user-chosen defaults. They are transparent, and the bundled examples now include a small fixed robustness check, but they are not yet backed by a full sensitivity analysis.
+- A small fixed sensitivity check is now included for the bundled examples in `examples/weight_sensitivity/`. Across five modest perturbation sets, neither the pulse-family winner nor the core PCR winner changed in either bundled example.
 - `rate plausibility` is useful for comparing candidates within the same dataset, but the absolute values are not meant to be compared across unrelated datasets.
+- Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
+- The current repo reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework currently evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
 - An optional `uncertainty width` layer is currently demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, so the core PCR rank remains the three-family version.

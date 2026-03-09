@@ -1,0 +1,3 @@
+"example","n_sets","default_pulse_family_winner","default_core_winner","pulse_family_winner_stable","core_winner_stable"
+"syngnatharia",5,"RelTime","RelTime",TRUE,TRUE
+"terapontoid",5,"chronos_discrete","chronos_discrete",TRUE,TRUE
