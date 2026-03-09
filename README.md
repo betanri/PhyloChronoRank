@@ -1,10 +1,8 @@
 # PhyloChronoRank (PCR)
 
-`PhyloChronoRank (PCR)` is a post-fit evaluation framework for researchers who already have a set of competing chronograms and need to decide which one is the most biologically defensible.
+`PhyloChronoRank (PCR)` is a post-fit evaluation framework for researchers who already have a set of competing chronograms and need to decide which one is the most biologically defensible. It "amplifies" the signal already present in finished dated trees by scoring them under a common set of diagnostics.
 
-It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow. The point is not to refit clocks. The point is to compare finished dated trees under a common set of diagnostics.
-
-`PCR` pun intended: the framework is meant to amplify signal across competing chronograms.
+It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow. The point is not to refit clocks.
 
 ## What it evaluates
 
