@@ -1,0 +1,11 @@
+statistic,MCMCTree,RelTime
+n_bars,137,193
+mean_Ma,6.24,11.41
+median_Ma,6.53,11.85
+sd_Ma,1.51,4.17
+min_Ma,1.63,2.96
+max_Ma,10.41,32.96
+q25_Ma,5.31,9.26
+q75_Ma,7.14,13.7
+sum_Ma,854.9,2202.96
+ratio_RelTime_over_MCMCTree_mean,,1.83
