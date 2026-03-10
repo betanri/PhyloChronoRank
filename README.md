@@ -4,7 +4,7 @@
 
 It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow. The point is not to refit clocks.
 
-PCR starts from finished chronograms. It does not perform clock-model fitting or lambda tuning itself. If your upstream workflow produced competing trees via explicit model fitting, you can report that fit context alongside PCR. If not, you can still run PCR directly on any set of competing chronograms.
+PCR starts from finished chronograms. It does not perform clock-model fitting. If your upstream workflow produced competing trees via explicit model fitting, you can report that fit context alongside PCR. If not, you can still run PCR directly on any set of competing chronograms.
 
 ## What it evaluates
 
