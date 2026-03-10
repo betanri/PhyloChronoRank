@@ -4,6 +4,8 @@
 
 It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow. The point is not to refit clocks.
 
+PCR starts from finished chronograms. It does not perform clock-model fitting or lambda tuning itself. If your upstream workflow produced competing trees via explicit model fitting, you can report that fit context alongside PCR. If not, you can still run PCR directly on any set of competing chronograms.
+
 ## What it evaluates
 
 `PhyloChronoRank (PCR)` uses three core metric families. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying ideas each family is trying to capture.
@@ -14,7 +16,7 @@ It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTim
 
 - `rate plausibility`: asks whether the dated tree implies branchwise rate changes that still look biologically reasonable. It penalizes trees that require rates to become too extreme, too erratic, or too jumpy from parent branch to child branch. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
-- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In this documentation, this optional layer is shown only for the Syngnatharia example.
+- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In this documentation, this optional layer is shown only for the Syngnatharia example, but PCR can also summarize interval widths directly from annotated Newick trees when common embedded HPD/CI metadata are present.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
@@ -74,7 +76,7 @@ mean_interval_width = mean(width_i)
 median_interval_width = median(width_i)
 ```
 
-What it means: lower values indicate narrower confidence or credible intervals and therefore greater precision. In the Syngnatharia example, these widths come from extracted HPD bars in the published figure rather than from interval metadata embedded in the Newick trees.
+What it means: lower values indicate narrower confidence or credible intervals and therefore greater precision. In the Syngnatharia example, these widths come from extracted HPD bars in the published figure rather than from interval metadata embedded in the Newick trees, but PCR can also summarize widths directly from annotated Newick trees when those intervals are present in embedded metadata.
 
 `overall family-balanced rank`
 
@@ -103,6 +105,8 @@ It can also take:
 - a calibration table with `taxonA,taxonB,age_min,age_max` and an optional `candidate` column when calibration applicability differs by method
 - an uncertainty table with `candidate` plus comparable interval-width summaries when you want to report the optional precision layer
 
+If you do not provide `--uncertainty-csv`, PCR will try to extract interval widths directly from annotated Newick trees. The current parser looks for common embedded interval forms such as `height_95%_HPD={low,high}`, `age_95%_HPD={low,high}`, `HPD={low,high}`, and `CI={low,high}`. When multiple or unusual metadata fields exist, a separate uncertainty CSV is still the safer option.
+
 Example commands:
 
 ```bash
@@ -124,9 +128,9 @@ Rscript scripts/run_pcr.R \
 
 ## Example 1: Empirical dataset with five competing chronograms
 
-### Fit layer vs post-fit layer
+### Optional upstream fit context
 
-Fit and post-fit point in a similar direction here, but not in exactly the same way. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood and the best overall post-fit rank. So this is not a case where one model wins everything. It is a case where `clock` and `discrete` are the two strongest `chronos` candidates, but for different reasons.
+PCR itself does not do model fitting, but this example comes from a workflow where upstream fit statistics were available. Those upstream results and the post-fit results point in a similar direction here, but not in exactly the same way. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood and the best overall post-fit rank. So this is not a case where one model wins everything. It is a case where `clock` and `discrete` are the two strongest `chronos` candidates, but for different reasons.
 
 ### Quick takeaway
 
@@ -176,7 +180,7 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 1. If you want one overall post-fit winner, choose `chronos_discrete`.
 2. If you want the best implied rate behavior, choose `chronos_clock`.
 3. If you care specifically about the standalone burst-flattening penalty, `chronos_correlated` minimizes `burst_loss`.
-4. If fit-based selection and post-fit evaluation point to different trees, report both explicitly rather than collapsing them into one claim.
+4. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
 5. In this example, `treePL` is not the leading solution under the post-fit layer, and under family-balanced ranking it places last.
 
 ### Files behind this example

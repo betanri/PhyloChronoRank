@@ -281,3 +281,62 @@ pcr_resolve_path <- function(path_value, base_dir) {
   if (grepl('^/', path_value)) return(normalizePath(path_value, winslash = '/', mustWork = TRUE))
   normalizePath(file.path(base_dir, path_value), winslash = '/', mustWork = TRUE)
 }
+
+pcr_extract_uncertainty_from_newick <- function(tree_path) {
+  txt <- paste(readLines(tree_path, warn = FALSE), collapse = " ")
+  if (!nzchar(txt)) return(NULL)
+
+  # Common annotated-Newick forms:
+  #   [&height_95%_HPD={1.2,3.4}]
+  #   [&age_95%_HPD={1.2,3.4}]
+  #   [&HPD={1.2,3.4}]
+  #   [&CI={1.2,3.4}]
+  pattern <- gregexpr(
+    "(?i)([A-Za-z0-9_%.:-]+)\\s*=\\s*[\\{\\[]\\s*([-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\\s*,\\s*([-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\\s*[\\}\\]]",
+    txt,
+    perl = TRUE
+  )
+  hits <- regmatches(txt, pattern)[[1]]
+  if (!length(hits)) return(NULL)
+
+  keep_widths <- numeric(0)
+  keep_keys <- character(0)
+
+  for (h in hits) {
+    m <- regexec(
+      "(?i)([A-Za-z0-9_%.:-]+)\\s*=\\s*[\\{\\[]\\s*([-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\\s*,\\s*([-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\\s*[\\}\\]]",
+      h,
+      perl = TRUE
+    )
+    mm <- regmatches(h, m)[[1]]
+    if (length(mm) != 4) next
+    key <- mm[2]
+    lo <- suppressWarnings(as.numeric(mm[3]))
+    hi <- suppressWarnings(as.numeric(mm[4]))
+    if (!is.finite(lo) || !is.finite(hi) || hi < lo) next
+
+    key_l <- tolower(key)
+    include <- grepl("hpd|ci|cred|interval|age|height|time", key_l)
+    exclude <- grepl("length|rate|ucld|branch|clock|posterior|prob", key_l)
+    if (!include || exclude) next
+
+    keep_widths <- c(keep_widths, hi - lo)
+    keep_keys <- c(keep_keys, key)
+  }
+
+  if (!length(keep_widths)) return(NULL)
+
+  data.frame(
+    uncertainty_source = "tree_embedded_intervals",
+    uncertainty_n_bars = length(keep_widths),
+    uncertainty_mean_width_ma = mean(keep_widths),
+    uncertainty_median_width_ma = stats::median(keep_widths),
+    uncertainty_sd_width_ma = if (length(keep_widths) > 1) stats::sd(keep_widths) else 0,
+    uncertainty_min_width_ma = min(keep_widths),
+    uncertainty_max_width_ma = max(keep_widths),
+    uncertainty_q25_width_ma = as.numeric(stats::quantile(keep_widths, 0.25, names = FALSE, type = 8)),
+    uncertainty_q75_width_ma = as.numeric(stats::quantile(keep_widths, 0.75, names = FALSE, type = 8)),
+    uncertainty_keys_detected = paste(unique(keep_keys), collapse = ";"),
+    stringsAsFactors = FALSE
+  )
+}

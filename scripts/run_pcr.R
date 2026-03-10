@@ -86,6 +86,11 @@ for (i in seq_len(nrow(cand))) {
     if (nrow(u)) {
       for (nm in setdiff(names(u), 'candidate')) row[[nm]] <- u[[nm]][1]
     }
+  } else {
+    u_tree <- pcr_extract_uncertainty_from_newick(cand$tree_path[i])
+    if (!is.null(u_tree)) {
+      for (nm in names(u_tree)) row[[nm]] <- u_tree[[nm]][1]
+    }
   }
   rows[[length(rows)+1L]] <- row
   pd <- p_overall$detail; pd$candidate <- cand$candidate[i]; pulse_default_detail[[length(pulse_default_detail)+1L]] <- pd
