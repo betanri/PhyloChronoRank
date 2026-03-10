@@ -128,36 +128,12 @@ run_pcr <- function(args_vec, outdir) {
 }
 
 # README vs shipped CSVs
-table1 <- extract_table_after_heading("Example 1: Empirical dataset with five competing chronograms (Terapontoidei)")
-csv1 <- read.csv(file.path(repo_dir, "examples", "terapontoid", "summary_terap_empirical_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+table1 <- extract_table_after_heading("Example 1: Empirical dataset with two competing chronograms (Syngnatharia)")
+csv1 <- read.csv(file.path(repo_dir, "examples", "syngnatharia", "postfit_metrics", "syngnatharia_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
 assert_table_matches(
   "Example 1",
   table1,
   csv1,
-  mapping = c(
-    "burst loss" = "burst_loss",
-    "pulse preservation (burst)" = "pulse_burst_selector_error",
-    "pulse preservation (overall)" = "pulse_default_selector_error",
-    "gap burden" = "fossil_gap_burden",
-    "rate irregularity" = "rate_irregularity",
-    "overall mean rank (pulse = 1/3)" = "rank_mean_3families"
-  ),
-  digits = c(
-    "burst loss" = 4,
-    "pulse preservation (burst)" = 4,
-    "pulse preservation (overall)" = 4,
-    "gap burden" = 4,
-    "rate irregularity" = 4,
-    "overall mean rank (pulse = 1/3)" = 2
-  )
-)
-
-table2 <- extract_table_after_heading("Example 2: Empirical dataset with two competing chronograms (Syngnatharia)")
-csv2 <- read.csv(file.path(repo_dir, "examples", "syngnatharia", "postfit_metrics", "syngnatharia_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-assert_table_matches(
-  "Example 2",
-  table2,
-  csv2,
   mapping = c(
     "burst loss" = "burst_loss",
     "pulse preservation (burst)" = "pulse_burst_selector_error",
@@ -175,6 +151,28 @@ assert_table_matches(
     "rate irregularity" = 4,
     "uncertainty width (mean HPD width, Ma)" = 2,
     "core overall mean rank (pulse = 1/3)" = 2
+  )
+)
+
+table2 <- extract_table_after_heading("Example 2: Empirical dataset with five competing chronograms (Terapontoidei)")
+csv2 <- read.csv(file.path(repo_dir, "examples", "terapontoid", "summary_terap_empirical_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+assert_table_matches(
+  "Example 2",
+  table2,
+  csv2,
+  mapping = c(
+    "burst loss" = "burst_loss",
+    "pulse preservation (burst)" = "pulse_burst_selector_error",
+    "pulse preservation (overall)" = "pulse_default_selector_error",
+    "rate irregularity" = "rate_irregularity",
+    "overall mean rank (pulse = 1/2)" = "rank_mean_core"
+  ),
+  digits = c(
+    "burst loss" = 4,
+    "pulse preservation (burst)" = 4,
+    "pulse preservation (overall)" = 4,
+    "rate irregularity" = 4,
+    "overall mean rank (pulse = 1/2)" = 2
   )
 )
 
@@ -206,37 +204,33 @@ assert_table_matches(
 # Rerun public examples
 rerun1 <- run_pcr(
   c(
-    "--ref-tree=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree",
-    "--candidates-csv=examples/terapontoid/candidates.csv",
-    "--calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv"
+    paste0("--ref-tree=", file.path(repo_dir, "examples", "syngnatharia", "backbone_Raxml_besttree_matrix75.tre")),
+    paste0("--candidates-csv=", file.path(repo_dir, "examples", "syngnatharia", "candidates.csv")),
+    paste0("--calibrations-csv=", file.path(repo_dir, "examples", "syngnatharia", "calibrations_by_candidate.csv")),
+    paste0("--uncertainty-csv=", file.path(repo_dir, "examples", "syngnatharia", "uncertainty_summary_long.csv"))
   ),
-  outdir = file.path(tempdir(), "pcr_validate_terap")
-)
-expected1 <- transform(
-  csv1,
-  mean_relative_gap = fossil_gap_burden
+  outdir = file.path(tempdir(), "pcr_validate_syng")
 )
 compare_frames(
   "Example 1",
   rerun1,
-  expected1,
+  csv1,
   cols = c(
     "pulse_default_selector_error",
     "burst_loss",
     "pulse_burst_selector_error",
     "rate_irregularity",
-    "mean_relative_gap"
+    "mean_relative_gap",
+    "uncertainty_mean_width_ma"
   )
 )
 
 rerun2 <- run_pcr(
   c(
-    "--ref-tree=examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre",
-    "--candidates-csv=examples/syngnatharia/candidates.csv",
-    "--calibrations-csv=examples/syngnatharia/calibrations_by_candidate.csv",
-    "--uncertainty-csv=examples/syngnatharia/uncertainty_summary_long.csv"
+    paste0("--ref-tree=", file.path(repo_dir, "examples", "terapontoid", "Terapontoid_ML_MAIN_phylogram_used.tree")),
+    paste0("--candidates-csv=", file.path(repo_dir, "examples", "terapontoid", "candidates.csv"))
   ),
-  outdir = file.path(tempdir(), "pcr_validate_syng")
+  outdir = file.path(tempdir(), "pcr_validate_terap")
 )
 compare_frames(
   "Example 2",
@@ -247,8 +241,7 @@ compare_frames(
     "burst_loss",
     "pulse_burst_selector_error",
     "rate_irregularity",
-    "mean_relative_gap",
-    "uncertainty_mean_width_ma"
+    "rank_mean_core"
   )
 )
 

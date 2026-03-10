@@ -14,7 +14,7 @@ PCR starts from finished chronograms. It does not perform clock-model fitting. I
 
 - `pulse preservation`: asks whether a dated tree keeps the same branching rhythm seen in the source phylogram. In practice, this means preserving clustered speciation bursts and quiet intervals instead of smearing them into evenly spaced splits. In this workflow, the pulse family is reported three ways: `burst loss` is the standalone burst-flattening submetric, `pulse preservation (burst)` is the burst-priority composite selector, and `pulse preservation (overall)` is the balanced composite selector. This follows the literature on extracting diversification tempo from phylogenies and on distinguishing burst-like from unusually regular branching patterns ([Nee et al. 1992](https://doi.org/10.1073/pnas.89.17.8322); [Pybus and Harvey 2000](https://doi.org/10.1098/rspb.2000.1278); [Ford et al. 2009](https://doi.org/10.1093/sysbio/syp018)).
 
-- `gap burden`: asks how much extra unseen lineage history the dated tree implies relative to the calibration evidence. This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148); [O'Connor and Wills 2016](https://doi.org/10.1093/sysbio/syw039)). Lower is usually better, but it should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)).
+- `gap burden`: asks how much extra unseen lineage history the dated tree implies relative to the calibration evidence. This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148); [O'Connor and Wills 2016](https://doi.org/10.1093/sysbio/syw039)). Lower is usually better, but it should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)). In PCR, this should be treated as a core metric only when the calibrations are primary evidence. With secondary or congruified ages, the same calculation becomes calibration slack against inherited ages rather than an independent biological diagnostic.
 
 - `rate irregularity`: for each branch, divides the phylogram branch length (substitutions) by the chronogram branch duration (time) to get an implied evolutionary rate. The score rises when those implied rates are too dispersed, jump sharply from parent to child branch, produce too many outlier branches, or lose the positive autocorrelation expected among closely related lineages. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
@@ -59,7 +59,7 @@ relative_gap_i = (node_age_i - age_min_i) / age_min_i
 mean_relative_gap = mean(relative_gap_i)
 ```
 
-What it means: the average amount of extra inferred lineage history beyond the calibration minima, scaled by the minimum ages. Depending on the comparison, this can behave as fossil-gap burden or as calibration slack.
+What it means: the average amount of extra inferred lineage history beyond the calibration minima, scaled by the minimum ages. Use it as a core metric only when the calibration ages are primary evidence. With secondary or congruified ages, report it separately as calibration slack or omit it from the core rank.
 
 `rate irregularity`
 
@@ -84,10 +84,10 @@ What it means: lower values indicate narrower confidence or credible intervals a
 
 ```text
 pulse_family_rank = mean(rank(burst_loss), rank(pulse_burst), rank(pulse_overall))
-overall_mean_rank = mean(pulse_family_rank, gap_rank, rate_rank)
+overall_mean_rank = mean(pulse_family_rank, available_nonpulse_family_ranks)
 ```
 
-What it means: pulse contributes `1/3` of the final rank, gap contributes `1/3`, and rate contributes `1/3`.
+What it means: when pulse, gap, and rate are all used, each contributes `1/3` of the final rank. When gap is omitted because it is not independently informative, pulse and rate each contribute `1/2`.
 
 </details>
 
@@ -115,7 +115,6 @@ Example commands:
 Rscript scripts/run_pcr.R \
   --ref-tree=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree \
   --candidates-csv=examples/terapontoid/candidates.csv \
-  --calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv \
   --outdir=out/terapontoid
 ```
 
@@ -134,83 +133,13 @@ To validate the bundled examples and the displayed README tables, run:
 Rscript scripts/validate_examples.R
 ```
 
-## Example 1: Empirical dataset with five competing chronograms (Terapontoidei)
-
-### Optional upstream fit context
-
-PCR itself does not do model fitting, but this example comes from a workflow where upstream fit statistics were available. Those upstream results and the post-fit results point in a similar direction here, but not in exactly the same way. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood and the best overall post-fit rank. So this is not a case where one model wins everything. It is a case where `clock` and `discrete` are the two strongest `chronos` candidates, but for different reasons.
-
-### Quick takeaway
-
-- `chronos_discrete` is the best overall tree in this post-fit comparison
-- `chronos_clock` is a near-tie second and is the best tree for `rate irregularity`
-- `treePL` is not the top solution in this example
-- `Figure A` is only for the pulse issue; `Figure B` is the broader post-fit comparison
-
-### Figure A: Pulse-layer tree-shape comparison among bundled chronos trees
-
-![Pulse preservation tree panel](figures/branching_tempo_tree_panel_clean_v3.png)
-
-This figure shows the pulse layer directly on alternative `chronos` trees (estimated with different clock models); `treePL` is not shown here. It helps explain why `discrete` and `clock` sit at the top of the pulse-preservation ranking. This figure is only to illustrate the pulse issue; it does not show the `gap burden` or `rate irregularity` parts of the broader PCR toolkit.
-
-### Ranked post-fit results (lower is better)
-
-In this example, `gap burden` behaves as `point-calibration slack`, not as fossil-minimum ghost-lineage burden, because the comparison uses point calibrations.
-
-The overall mean rank below is family-balanced. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-third of the final overall rank, while `gap burden` and `rate irregularity` contribute the other two thirds.
-
-| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | gap burden | rate irregularity | overall mean rank (pulse = 1/3) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `chronos_discrete` | `0.1346` | `0.1462` | `0.1603` | `0.0733` | `2.5982` | `1.44` |
-| `chronos_clock` | `0.1348` | `0.1464` | `0.1605` | `0.0736` | `2.5861` | `1.78` |
-| `chronos_correlated` | `0.1158` | `0.1478` | `0.1722` | `0.1058` | `3.4566` | `3.11` |
-| `chronos_relaxed` | `0.1382` | `0.1684` | `0.1949` | `0.1030` | `4.5535` | `4.22` |
-| `treePL` | `0.1550` | `0.1604` | `0.1729` | `0.1615` | `3.4631` | `4.44` |
-
-In short: `chronos_discrete` leads both pulse selector summaries and `gap burden`, `chronos_correlated` minimizes the standalone `burst_loss` submetric, and `chronos_clock` leads `rate irregularity`. When pulse is treated as one family contributing one-third of the final score, `chronos_relaxed` edges above `treePL` overall because `treePL` has the highest `gap burden`.
-
-### Figure B: Post-fit comparison across metric families
-
-![Post-fit evaluation metric families](figures/postfit_metric_family_values.png)
-
-Figure B uses the same family-balanced rule as the table. Even though three pulse panels are shown, they do not count as three separate thirds. They are averaged into one pulse-family contribution, and that pulse family contributes one-third of the overall rank.
-
-### Interpretation for this example
-
-- `chronos_discrete` is the overall post-fit winner because it leads both pulse summaries and gap burden while staying near-best on rate irregularity
-- `chronos_clock` is essentially tied at the top on pulse preservation, nearly tied on gap burden, and is the best tree on rate irregularity
-- `chronos_correlated` sits in the middle and is the best tree on standalone `burst_loss`
-- `treePL` beats `chronos_relaxed` on the two pulse selectors and on rate irregularity, but it has the highest gap burden in this comparison
-- under the family-balanced overall rank, `treePL` drops below `chronos_relaxed` because pulse contributes only one-third of the final score
-
-### Practical decision rule
-
-1. If you want one overall post-fit winner, choose `chronos_discrete`.
-2. If you want the best implied rate behavior, choose `chronos_clock`.
-3. If you care specifically about the standalone burst-flattening penalty, `chronos_correlated` minimizes `burst_loss`.
-4. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
-5. In this example, `treePL` is not the leading solution under the post-fit layer, and under family-balanced ranking it places last.
-
-### Files behind this example
-
-- `examples/terapontoid/summary_terap_empirical_model_fits.csv`
-- `examples/terapontoid/summary_terap_empirical_postfit_metrics.csv`
-- `examples/terapontoid/candidates.csv`
-- `examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv`
-- the five trees in `examples/terapontoid/`, including `Terapontoid_ML_MAIN_treePL_congruify.tre`
-- `figures/branching_tempo_tree_panel_clean_v3.png`
-- `figures/postfit_metric_family_values.png`
-- `scripts/run_pcr.R`
-- `scripts/make_terapontoid_postfit_figures.R`
-- `scripts/make_terapontoid_pulse_tree_panel.R`
-
-## Example 2: Empirical dataset with two competing chronograms (Syngnatharia)
+## Example 1: Empirical dataset with two competing chronograms (Syngnatharia)
 
 ### Visual choice before metrics
 
 This example is different. It does not start from a `chronos` fit search. It starts from an earlier visual comparison among the `RAxML` phylogram, `MCMCTree`, and `RelTime`. In that original comparison, the practical choice was to favor `RelTime` because it visually preserved the diversification bursts in the phylogram better than `MCMCTree`, as discussed in [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931).
 
-That is the key point of this second example: the choice to prefer `RelTime` came first as a visual judgment. The post-fit metrics are being added here to quantify that older rationale.
+That is the key point of this first example: the choice to prefer `RelTime` came first as a visual judgment. The post-fit metrics are being added here to quantify that older rationale.
 
 ### Quick takeaway
 
@@ -224,11 +153,11 @@ That is the key point of this second example: the choice to prefer `RelTime` cam
 
 ![Syngnatharia paper figure showing the original visual choice](examples/syngnatharia/Fig_S5_Burst_preservation.png)
 
-This is the original paper figure from [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931) that motivated the visual preference for `RelTime`. The RAxML phylogram on the left shows clustered branching bursts in several parts of the tree. In the middle panel, `MCMCTree` spreads many of those events out more evenly through time. In the right panel, `RelTime` better tracks the burst structure seen in the phylogram. That was the original rationale back then. This panel addresses the pulse issue only. It does not show the calibration-fit layer or the rate-plausibility layer.
+This is the original paper figure from [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931) that motivated the visual preference for `RelTime`. The RAxML phylogram on the left shows clustered branching bursts in several parts of the tree. In the middle panel, `MCMCTree` spreads many of those events out more evenly through time. In the right panel, `RelTime` better tracks the burst structure seen in the phylogram. That was the original rationale back then. This panel addresses the pulse issue only. It does not show the calibration-fit layer or the rate layer.
 
 ### Ranked post-fit results (lower is better)
 
-The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, that separate reporting appears in two places: the `uncertainty width` column in the table and the `Uncertainty width` panel in Figure B. The uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
+The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. Here the gap layer is informative because the comparison uses primary calibration information summarized from Table S2 rather than secondary congruified ages. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, that separate reporting appears in two places: the `uncertainty width` column in the table and the `Uncertainty width` panel in Figure B. The uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
 
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate irregularity | uncertainty width (mean HPD width, Ma) | core overall mean rank (pulse = 1/3) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -276,6 +205,76 @@ That separation is deliberate. The RelTime literature does not support a simple 
 - `figures/syngnatharia_postfit_metric_family_values.png`
 - `scripts/run_pcr.R`
 - `scripts/make_syngnatharia_postfit_figures.R`
+
+## Example 2: Empirical dataset with five competing chronograms (Terapontoidei)
+
+### Optional upstream fit context
+
+PCR itself does not do model fitting, but this example comes from a workflow where upstream fit statistics were available. Those upstream results and the post-fit results point in a similar direction here, but not in exactly the same way. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood. Under the current core PCR comparison, `clock` and `discrete` emerge as the two strongest `chronos` candidates for different reasons.
+
+### Quick takeaway
+
+- the core PCR comparison in this example uses `pulse` and `rate irregularity`, not `gap burden`
+- `chronos_discrete` and `chronos_clock` are effectively co-leaders under that two-family core rank
+- `chronos_discrete` leads the pulse summaries, while `chronos_clock` is the best tree for `rate irregularity`
+- `treePL` is not the top solution in this example
+
+### Figure A: Pulse-layer tree-shape comparison among bundled chronos trees
+
+![Pulse preservation tree panel](figures/branching_tempo_tree_panel_clean_v3.png)
+
+This figure shows the pulse layer directly on alternative `chronos` trees (estimated with different clock models); `treePL` is not shown here. It helps explain why `discrete` and `clock` sit at the top of the pulse-preservation ranking. This figure is only to illustrate the pulse issue; `gap burden` is not computed in this example, and the panel does not show the `rate irregularity` part of the broader PCR toolkit.
+
+### Ranked post-fit results (lower is better)
+
+`gap burden` is not computed in this example because the trees were dated using congruified / secondary calibration ages rather than primary calibration evidence. In that setting, a gap score would just measure how closely each method reproduced inherited ages rather than providing an independent biological diagnostic.
+
+The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half.
+
+| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | rate irregularity | overall mean rank (pulse = 1/2) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chronos_discrete` | `0.1346` | `0.1462` | `0.1603` | `2.5982` | `1.50` |
+| `chronos_clock` | `0.1348` | `0.1464` | `0.1605` | `2.5861` | `1.50` |
+| `chronos_correlated` | `0.1158` | `0.1478` | `0.1722` | `3.4566` | `2.50` |
+| `treePL` | `0.1550` | `0.1604` | `0.1729` | `3.4631` | `4.00` |
+| `chronos_relaxed` | `0.1382` | `0.1684` | `0.1949` | `4.5535` | `5.00` |
+
+In short: `chronos_discrete` leads the pulse selector summaries, `chronos_correlated` minimizes the standalone `burst_loss` submetric, and `chronos_clock` leads `rate irregularity`. When pulse is treated as one family contributing one-half of the final score, `chronos_discrete` and `chronos_clock` tie at the top.
+
+### Figure B: Post-fit comparison across metric families
+
+![Post-fit evaluation metric families](figures/postfit_metric_family_values.png)
+
+Figure B uses the same family-balanced rule as the table. Even though three pulse panels are shown, they do not count as three separate halves. They are averaged into one pulse-family contribution, and that pulse family contributes one-half of the overall rank. `gap burden` is intentionally absent here because the calibration ages are secondary / congruified rather than primary evidence.
+
+### Interpretation for this example
+
+- `chronos_discrete` and `chronos_clock` are the co-leaders under the current core PCR rank
+- `chronos_discrete` is the strongest tree on the pulse selectors
+- `chronos_clock` is the best tree on `rate irregularity`
+- `chronos_correlated` sits in the middle and is the best tree on standalone `burst_loss`
+- `treePL` beats `chronos_relaxed`, but it still trails the two leading `chronos` solutions and also trails `chronos_correlated`
+
+### Practical decision rule
+
+1. If you want the strongest pulse-preservation candidate, choose `chronos_discrete`.
+2. If you want the smoothest implied rate behavior, choose `chronos_clock`.
+3. If you want one concise statement, report `chronos_discrete` and `chronos_clock` as the co-leading trees under the current core PCR comparison.
+4. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
+5. In this example, `treePL` is not the leading solution under the post-fit layer.
+
+### Files behind this example
+
+- `examples/terapontoid/summary_terap_empirical_model_fits.csv`
+- `examples/terapontoid/summary_terap_empirical_postfit_metrics.csv`
+- `examples/terapontoid/candidates.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv` (upstream congruified calibration ages used in dating; not scored in the core PCR rank)
+- the five trees in `examples/terapontoid/`, including `Terapontoid_ML_MAIN_treePL_congruify.tre`
+- `figures/branching_tempo_tree_panel_clean_v3.png`
+- `figures/postfit_metric_family_values.png`
+- `scripts/run_pcr.R`
+- `scripts/make_terapontoid_postfit_figures.R`
+- `scripts/make_terapontoid_pulse_tree_panel.R`
 
 ## Example 3: Unpublished vertebrate dataset (derived outputs only)
 
@@ -350,6 +349,7 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 - The pulse family treats the source phylogram as the reference for branching rhythm. That is useful when the question is whether a dated tree preserves the tempo structure visible in the starting phylogram, but it should not be read as proof that the phylogram itself is the true diversification history.
 - `rate irregularity` is useful for comparing candidates within the same dataset, but the absolute values are not meant to be compared across unrelated datasets.
 - Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
+- `gap burden` should be treated as a core family only when the calibration ages are primary evidence. With secondary or congruified ages, the same calculation becomes circular calibration slack and is better reported separately or omitted from the core rank.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
 - An optional `uncertainty width` layer is demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.
