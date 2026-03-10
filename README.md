@@ -14,7 +14,7 @@ It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTim
 
 - `rate plausibility`: asks whether the dated tree implies branchwise rate changes that still look biologically reasonable. It penalizes trees that require rates to become too extreme, too erratic, or too jumpy from parent branch to child branch. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
-- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In the current repo, this optional layer is demonstrated only for the Syngnatharia example.
+- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In this documentation, this optional layer is shown only for the Syngnatharia example.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
@@ -74,7 +74,7 @@ mean_interval_width = mean(width_i)
 median_interval_width = median(width_i)
 ```
 
-What it means: lower values indicate narrower confidence or credible intervals and therefore greater precision. In the current Syngnatharia example, these widths come from extracted HPD bars in the published figure rather than from interval metadata embedded in the Newick trees.
+What it means: lower values indicate narrower confidence or credible intervals and therefore greater precision. In the Syngnatharia example, these widths come from extracted HPD bars in the published figure rather than from interval metadata embedded in the Newick trees.
 
 `overall family-balanced rank`
 
@@ -89,7 +89,7 @@ What it means: pulse contributes `1/3` of the final rank, gap contributes `1/3`,
 
 ## Run PCR on your own data
 
-`PhyloChronoRank (PCR)` now includes a standalone runner:
+`PhyloChronoRank (PCR)` includes a standalone runner:
 
 - `scripts/run_pcr.R`
 
@@ -216,7 +216,7 @@ This is the original paper figure from [Santaquiteria et al. 2024](https://www.j
 
 ### Ranked post-fit results (lower is better)
 
-The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate plausibility`, so pulse contributes one-third of the final score. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, the uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
+The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate plausibility`, so pulse contributes one-third of the final score. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, that separate reporting appears in two places: the `uncertainty width` column in the table and the `Uncertainty width` panel in Figure B. The uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
 
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate plausibility | uncertainty width (mean HPD width, Ma) | core overall mean rank (pulse = 1/3) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -228,6 +228,8 @@ The core PCR rank shown below is family-balanced across `pulse`, `mean relative 
 ![Syngnatharia post-fit evaluation metric families](figures/syngnatharia_postfit_metric_family_values.png)
 
 Figure B shows the core PCR comparison and also displays `uncertainty width` as a separate optional precision layer. The three pulse panels are still averaged into one pulse-family contribution, and in the core PCR rank `pulse`, `mean relative gap`, and `rate plausibility` each contribute one-third.
+
+That separation is deliberate. The RelTime literature does not support a simple story that wider intervals are automatically worse or are just a generic consequence of not using MCMC. Instead, broader RelTime intervals are often discussed as a precision-versus-coverage tradeoff: the analytical confidence-interval procedure explicitly propagates branch-length uncertainty and rate heterogeneity, which can yield wider intervals than other fast methods and, in some scenarios, wider intervals than Bayesian HPDs. Those broader intervals can improve coverage while reducing precision ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). That is why PCR reports interval width here as an additional consideration rather than treating it as a fourth co-equal family in the core rank.
 
 ### Interpretation for this example
 
@@ -265,10 +267,10 @@ Figure B shows the core PCR comparison and also displays `uncertainty width` as 
 
 ## Scope notes
 
-- The current pulse-family weights are user-chosen defaults. They are transparent, and the bundled examples now include a small fixed robustness check, but they are not yet backed by a full sensitivity analysis.
-- A small fixed sensitivity check is now included for the bundled examples in `examples/weight_sensitivity/`. Across five modest perturbation sets, neither the pulse-family winner nor the core PCR winner changed in either bundled example.
+- The pulse-family weights are user-chosen defaults. They are transparent, and the bundled examples include a small fixed robustness check, but they are not yet backed by a full sensitivity analysis.
+- A small fixed sensitivity check is included for the bundled examples in `examples/weight_sensitivity/`. Across five modest perturbation sets, neither the pulse-family winner nor the core PCR winner changed in either bundled example.
 - `rate plausibility` is useful for comparing candidates within the same dataset, but the absolute values are not meant to be compared across unrelated datasets.
 - Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
-- The current repo reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
-- The framework currently evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- An optional `uncertainty width` layer is currently demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.
+- PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
+- The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
+- An optional `uncertainty width` layer is demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.
