@@ -126,7 +126,7 @@ Rscript scripts/run_pcr.R \
   --outdir=out/syngnatharia
 ```
 
-## Example 1: Empirical dataset with five competing chronograms
+## Example 1: Empirical dataset with five competing chronograms (Terapontoidei)
 
 ### Optional upstream fit context
 
@@ -196,7 +196,7 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 - `scripts/make_terapontoid_postfit_figures.R`
 - `scripts/make_terapontoid_pulse_tree_panel.R`
 
-## Example 2: Empirical dataset with two competing chronograms
+## Example 2: Empirical dataset with two competing chronograms (Syngnatharia)
 
 ### Visual choice before metrics
 
