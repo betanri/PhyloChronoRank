@@ -1,8 +1,8 @@
 # PhyloChronoRank (PCR)
 
-`PhyloChronoRank (PCR)` is a post-fit evaluation framework for researchers who already have a set of competing chronograms and need to decide which one is the most biologically defensible. It "amplifies" the signal already present in finished dated trees by scoring them under a common set of diagnostics.
+`PhyloChronoRank (PCR)` is a post-fit evaluation framework for phylogeneticists who already have a set of competing chronograms and need to decide which one is the most biologically defensible. It "amplifies" the signal already present in finished dated trees by scoring them under a common set of diagnostics.
 
-It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow. The point is not to refit clocks.
+It is method-agnostic. The candidates can come from `chronos`, `treePL`, `RelTime`, `MCMCTree`, or any other dating workflow.
 
 PCR starts from finished chronograms. It does not perform clock-model fitting. If your upstream workflow produced competing trees via explicit model fitting, you can report that fit context alongside PCR. If not, you can still run PCR directly on any set of competing chronograms.
 
@@ -105,7 +105,7 @@ It can also take:
 - a calibration table with `taxonA,taxonB,age_min,age_max` and an optional `candidate` column when calibration applicability differs by method
 - an uncertainty table with `candidate` plus comparable interval-width summaries when you want to report the optional precision layer
 
-If you do not provide `--uncertainty-csv`, PCR will try to extract interval widths directly from annotated Newick trees. The current parser looks for common embedded interval forms such as `height_95%_HPD={low,high}`, `age_95%_HPD={low,high}`, `HPD={low,high}`, and `CI={low,high}`. When multiple or unusual metadata fields exist, a separate uncertainty CSV is still the safer option.
+If you do not provide `--uncertainty-csv`, PCR will try to extract interval widths directly from annotated Newick trees. When multiple or unusual metadata fields exist, a separate uncertainty CSV is still the safer option.
 
 Example commands:
 
@@ -208,7 +208,7 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 
 This example is different. It does not start from a `chronos` fit search. It starts from an earlier visual comparison among the `RAxML` phylogram, `MCMCTree`, and `RelTime`. In that original comparison, the practical choice was to favor `RelTime` because it visually preserved the diversification bursts in the phylogram better than `MCMCTree`, as discussed in [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931).
 
-That is the key point of this second example: the choice to prefer `RelTime` came first as a visual judgment. The post-fit metrics are being added here to quantify that older rationale, not to replace it after the fact.
+That is the key point of this second example: the choice to prefer `RelTime` came first as a visual judgment. The post-fit metrics are being added here to quantify that older rationale.
 
 ### Quick takeaway
 
