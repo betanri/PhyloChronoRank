@@ -269,6 +269,73 @@ That separation is deliberate. The RelTime literature does not support a simple 
 - `scripts/run_pcr.R`
 - `scripts/make_syngnatharia_postfit_figures.R`
 
+## Example 3: Unpublished vertebrate dataset (derived outputs only)
+
+### Quick takeaway
+
+- `chronos_clock` is the core PCR winner in this comparison
+- `treePL (smooth = 100)` is the clear runner-up
+- the three non-clock `chronos` trees are much worse on pulse, gap, and rate
+- the raw trees and calibration table are not distributed here because this dataset is unpublished
+
+### Selected candidates
+
+This example uses `57` calibrations and compares five selected chronograms:
+
+- `chronos_clock` with `lambda = 1`
+- `chronos_correlated` with `lambda = 0.1`
+- `chronos_relaxed` with `lambda = 0.1`
+- `chronos_discrete` with `lambda = 0.1` and `nb_rate_cat = 5`
+- `treePL` with best `smooth = 100`
+
+Only derived outputs are shown in this repository. The raw input trees and calibration table are withheld because the dataset is unpublished.
+
+### Figure A: Relative tree-shape comparison across the selected chronograms
+
+![Unpublished vertebrate tree panel](figures/unpublished_vertebrate_tree_panel.png)
+
+This panel compares the reference phylogram and the five selected chronograms after scaling each tree to its own maximum root-to-tip depth. The point is to show relative branching tempo, not absolute branch-length units. Tip labels are hidden, and the raw trees are not distributed.
+
+### Ranked post-fit results (lower is better)
+
+The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate plausibility`, so pulse contributes one-third of the final score.
+
+| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate plausibility | core overall mean rank (pulse = 1/3) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_clock` | `0.1606` | `0.2106` | `0.2233` | `0.1235` | `1.5915` | `1.00` |
+| `treePL (smooth = 100)` | `0.1646` | `0.2209` | `0.2332` | `0.1548` | `1.7128` | `2.00` |
+| `chronos_discrete` | `0.3468` | `0.3172` | `0.2909` | `0.4129` | `3.5759` | `3.33` |
+| `chronos_correlated` | `0.3547` | `0.3268` | `0.2989` | `0.3951` | `3.6171` | `3.67` |
+| `chronos_relaxed` | `0.3635` | `0.3302` | `0.3009` | `0.4377` | `3.6971` | `5.00` |
+
+### Figure B: Post-fit comparison across metric families
+
+![Unpublished vertebrate post-fit metric families](figures/unpublished_vertebrate_postfit_metric_family_values.png)
+
+Figure B uses the same family-balanced rule as the table. The three pulse panels are shown separately for transparency, but together they count as one pulse family.
+
+### Interpretation for this example
+
+- `chronos_clock` leads all five core metrics in the selected 5-tree comparison
+- `treePL (smooth = 100)` is second on all five core metrics
+- `chronos_discrete` is the strongest of the three non-clock `chronos` trees, but it remains far behind `chronos_clock` and `treePL`
+- `chronos_correlated` and `chronos_relaxed` both score poorly across the full post-fit layer, especially on `rate plausibility` and `mean relative gap`
+- in this dataset, the post-fit layer cleanly supports `chronos_clock` over the competing non-clock `chronos` solutions
+
+### Practical decision rule
+
+1. If you want one core PCR winner, choose `chronos_clock`.
+2. If you want the closest alternative among the selected trees, choose `treePL (smooth = 100)`.
+3. If you report multiple candidate chronograms, the main contrast in this example is `chronos_clock` versus `treePL`, not among the three non-clock `chronos` trees.
+4. No optional `uncertainty width` layer is reported here.
+
+### Files behind this example
+
+- `examples/unpublished_vertebrate/postfit_metrics/summary_unpublished_vertebrate_postfit_metrics.csv`
+- `figures/unpublished_vertebrate_tree_panel.png`
+- `figures/unpublished_vertebrate_postfit_metric_family_values.png`
+- `scripts/make_unpublished_vertebrate_postfit_figure.R`
+
 ## Scope notes
 
 - The pulse-family weights are user-chosen defaults. They are transparent, and the bundled examples include a small fixed robustness check, but they are not yet backed by a full sensitivity analysis.
