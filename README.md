@@ -338,8 +338,8 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 
 ## Scope notes
 
-- The pulse-family weights are user-chosen defaults. They are transparent, and the bundled examples include a small fixed robustness check, but they are not yet backed by a full sensitivity analysis.
-- A small fixed sensitivity check is included for the bundled examples in `examples/weight_sensitivity/`. Across five modest perturbation sets, neither the pulse-family winner nor the core PCR winner changed in either bundled example.
+- The pulse-family weights are user-chosen defaults. A small fixed robustness check across five perturbation sets is included in `examples/weight_sensitivity/`; neither the pulse-family winner nor the core PCR winner changed in either bundled example. A broader sensitivity analysis across additional datasets has not yet been done.
+- The pulse family treats the source phylogram as the reference for branching rhythm. That is useful when the question is whether a dated tree preserves the tempo structure visible in the starting phylogram, but it should not be read as proof that the phylogram itself is the true diversification history.
 - `rate plausibility` is useful for comparing candidates within the same dataset, but the absolute values are not meant to be compared across unrelated datasets.
 - Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
