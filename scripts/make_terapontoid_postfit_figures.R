@@ -48,7 +48,7 @@ plot_panel(d$burst_loss, 'Burst loss', 'Burst loss', 'Lower is better')
 plot_panel(d$pulse_burst_selector_error, 'Pulse preservation (burst)', 'Selector error', 'Lower is better')
 plot_panel(d$pulse_default_selector_error, 'Pulse preservation (overall)', 'Selector error', 'Lower is better')
 plot_panel(d$fossil_gap_burden, paste0('Gap burden (', gap_label, ')'), 'Gap burden', 'Lower is better')
-plot_panel(d$rate_irregularity, 'Rate plausibility', 'Rate irregularity', 'Lower is better')
+plot_panel(d$rate_irregularity, 'Rate irregularity', 'Rate irregularity', 'Lower is better')
 
 par(mar = c(8,5,4,1))
 bp <- barplot(d$rank_mean_3families, names.arg = labels, col = cols, las = 2,
@@ -60,6 +60,6 @@ text(bp, d$rank_mean_3families,
      pos = 3, cex = 0.85)
 mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
 mtext('Terapontoid example: post-fit evaluation metrics across chronos models and treePL', side = 3, outer = TRUE, line = 0.5, cex = 1.6, font = 2)
-mtext('Overall rank is family-balanced: the 3 pulse panels are shown separately, but together they count as one pulse family (1/3), alongside gap burden (1/3) and rate plausibility (1/3).', side = 1, outer = TRUE, line = 0.5, cex = 1.0)
+mtext('Overall rank is family-balanced: the 3 pulse panels are shown separately, but together they count as one pulse family (1/3), alongside gap burden (1/3) and rate irregularity (1/3).', side = 1, outer = TRUE, line = 0.5, cex = 1.0)
 dev.off()
 message('Done. Wrote: ', normalizePath(file.path(out_fig, 'postfit_metric_family_values.png'), winslash = '/'))

@@ -127,7 +127,7 @@ lines <- c(
   paste0('Best burst loss: ', summary_df$candidate[which.min(summary_df$burst_loss)]),
   paste0('Best pulse preservation (burst): ', summary_df$candidate[which.min(summary_df$pulse_burst_selector_error)]),
   if (all(!is.na(summary_df$mean_relative_gap))) paste0('Best mean relative gap: ', summary_df$candidate[which.min(summary_df$mean_relative_gap)]) else 'Mean relative gap: not scored',
-  paste0('Best rate plausibility: ', summary_df$candidate[which.min(summary_df$rate_irregularity)]),
+  paste0('Best rate irregularity: ', summary_df$candidate[which.min(summary_df$rate_irregularity)]),
   if ('rank_uncertainty_mean_width' %in% names(summary_df)) paste0('Most precise by uncertainty width: ', summary_df$candidate[which.min(summary_df$uncertainty_mean_width_ma)]) else 'Uncertainty width: not scored',
   paste0('Core overall winner: ', summary_df$candidate[which.min(summary_df$rank_mean_core)])
 )

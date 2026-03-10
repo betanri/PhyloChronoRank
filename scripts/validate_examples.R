@@ -139,7 +139,7 @@ assert_table_matches(
     "pulse preservation (burst)" = "pulse_burst_selector_error",
     "pulse preservation (overall)" = "pulse_default_selector_error",
     "gap burden" = "fossil_gap_burden",
-    "rate plausibility" = "rate_irregularity",
+    "rate irregularity" = "rate_irregularity",
     "overall mean rank (pulse = 1/3)" = "rank_mean_3families"
   ),
   digits = c(
@@ -147,7 +147,7 @@ assert_table_matches(
     "pulse preservation (burst)" = 4,
     "pulse preservation (overall)" = 4,
     "gap burden" = 4,
-    "rate plausibility" = 4,
+    "rate irregularity" = 4,
     "overall mean rank (pulse = 1/3)" = 2
   )
 )
@@ -163,7 +163,7 @@ assert_table_matches(
     "pulse preservation (burst)" = "pulse_burst_selector_error",
     "pulse preservation (overall)" = "pulse_default_selector_error",
     "mean relative gap" = "mean_relative_gap",
-    "rate plausibility" = "rate_irregularity",
+    "rate irregularity" = "rate_irregularity",
     "uncertainty width (mean HPD width, Ma)" = "uncertainty_mean_width_ma",
     "core overall mean rank (pulse = 1/3)" = "rank_mean_3families"
   ),
@@ -172,7 +172,7 @@ assert_table_matches(
     "pulse preservation (burst)" = 4,
     "pulse preservation (overall)" = 4,
     "mean relative gap" = 4,
-    "rate plausibility" = 4,
+    "rate irregularity" = 4,
     "uncertainty width (mean HPD width, Ma)" = 2,
     "core overall mean rank (pulse = 1/3)" = 2
   )
@@ -190,7 +190,7 @@ assert_table_matches(
     "pulse preservation (burst)" = "pulse_burst_selector_error",
     "pulse preservation (overall)" = "pulse_default_selector_error",
     "mean relative gap" = "mean_relative_gap",
-    "rate plausibility" = "rate_irregularity",
+    "rate irregularity" = "rate_irregularity",
     "core overall mean rank (pulse = 1/3)" = "rank_mean_core"
   ),
   digits = c(
@@ -198,7 +198,7 @@ assert_table_matches(
     "pulse preservation (burst)" = 4,
     "pulse preservation (overall)" = 4,
     "mean relative gap" = 4,
-    "rate plausibility" = 4,
+    "rate irregularity" = 4,
     "core overall mean rank (pulse = 1/3)" = 2
   )
 )

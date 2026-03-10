@@ -37,7 +37,7 @@ plot_panel(d$burst_loss, 'Burst loss', 'Burst loss', 'Lower is better')
 plot_panel(d$pulse_burst_selector_error, 'Pulse preservation (burst)', 'Selector error', 'Lower is better')
 plot_panel(d$pulse_default_selector_error, 'Pulse preservation (overall)', 'Selector error', 'Lower is better')
 plot_panel(d$mean_relative_gap, gap_label, 'Mean relative gap', 'Lower is better')
-plot_panel(d$rate_irregularity, 'Rate plausibility', 'Rate irregularity', 'Lower is better')
+plot_panel(d$rate_irregularity, 'Rate irregularity', 'Rate irregularity', 'Lower is better')
 plot_panel(d$uncertainty_mean_width_ma, uncertainty_label, 'Mean HPD width (Ma)', 'Lower is better')
 
 par(mar = c(8, 5, 4, 1))

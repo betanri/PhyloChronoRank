@@ -33,7 +33,7 @@ plot_panel(d$burst_loss, 'Burst loss', 'Burst loss')
 plot_panel(d$pulse_burst_selector_error, 'Pulse preservation (burst)', 'Selector error')
 plot_panel(d$pulse_default_selector_error, 'Pulse preservation (overall)', 'Selector error')
 plot_panel(d$mean_relative_gap, 'Mean relative gap', 'Mean relative gap')
-plot_panel(d$rate_irregularity, 'Rate plausibility', 'Rate irregularity')
+plot_panel(d$rate_irregularity, 'Rate irregularity', 'Rate irregularity')
 bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
               ylab = 'Mean rank across 3 families',
               main = 'Core overall rank (family-balanced; pulse = 1/3)',
@@ -41,6 +41,6 @@ bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
 text(bp, d$rank_mean_core, labels = paste0(sprintf('%.2f', d$rank_mean_core), ' (rank ', d$rank_mean_core_rank, ')'), pos = 3, cex = 0.82)
 mtext('Lower is better', side = 1, line = 7.0, cex = 0.9)
 mtext('Unpublished vertebrate example: post-fit evaluation metrics across selected chronograms', side = 3, outer = TRUE, line = 0.5, cex = 1.5, font = 2)
-mtext('Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate plausibility (1/3).', side = 1, outer = TRUE, line = 0.7, cex = 1.0)
+mtext('Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3).', side = 1, outer = TRUE, line = 0.7, cex = 1.0)
 dev.off()
 message('Wrote: ', normalizePath(outfile, winslash = '/'))
