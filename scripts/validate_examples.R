@@ -1,0 +1,257 @@
+args <- commandArgs(trailingOnly = TRUE)
+quiet <- "--quiet" %in% args
+
+msg <- function(...) {
+  if (!quiet) cat(..., "\n", sep = "")
+}
+
+fail <- function(...) {
+  stop(paste0(...), call. = FALSE)
+}
+
+trim <- function(x) trimws(x, which = "both")
+
+script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]), winslash = "/", mustWork = FALSE))
+if (!nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
+repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
+
+readme_path <- file.path(repo_dir, "README.md")
+if (!file.exists(readme_path)) fail("README.md not found at repo root.")
+readme_lines <- readLines(readme_path, warn = FALSE)
+
+normalize_candidate <- function(x) {
+  x <- gsub("`", "", x, fixed = TRUE)
+  x <- trim(x)
+  x <- sub("^treePL \\(smooth *= *100\\)$", "treepl_best-smooth-100", x)
+  x
+}
+
+parse_md_table <- function(lines, start_idx) {
+  table_lines <- character(0)
+  for (i in start_idx:length(lines)) {
+    ln <- lines[i]
+    if (!startsWith(trim(ln), "|")) break
+    table_lines <- c(table_lines, ln)
+  }
+  if (length(table_lines) < 3) fail("Markdown table parsing failed near line ", start_idx, ".")
+
+  split_row <- function(line) {
+    parts <- strsplit(line, "|", fixed = TRUE)[[1]]
+    parts <- trim(parts)
+    parts[parts != ""]
+  }
+
+  header <- split_row(table_lines[1])
+  body <- table_lines[-c(1, 2)]
+  rows <- lapply(body, split_row)
+  max_cols <- length(header)
+  rows <- lapply(rows, function(r) {
+    if (length(r) != max_cols) fail("Unexpected markdown table width in README.")
+    r
+  })
+  out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
+  names(out) <- header
+  out[] <- lapply(out, function(col) trim(gsub("`", "", col, fixed = TRUE)))
+  out
+}
+
+extract_table_after_heading <- function(example_heading, table_heading = "### Ranked post-fit results (lower is better)") {
+  ex_idx <- grep(paste0("## ", example_heading), readme_lines, fixed = TRUE)
+  if (!length(ex_idx)) fail("Could not find example heading: ", example_heading)
+  tbl_head_idx <- grep(table_heading, readme_lines, fixed = TRUE)
+  tbl_head_idx <- tbl_head_idx[tbl_head_idx > ex_idx[1]]
+  if (!length(tbl_head_idx)) fail("Could not find table heading after ", example_heading)
+  start_idx <- grep("^\\| candidate \\|", readme_lines)
+  start_idx <- start_idx[start_idx > tbl_head_idx[1]]
+  if (!length(start_idx)) fail("Could not find markdown table after ", example_heading)
+  parse_md_table(readme_lines, start_idx[1])
+}
+
+fmt_num <- function(x, digits) sprintf(paste0("%.", digits, "f"), as.numeric(x))
+
+assert_table_matches <- function(name, table_df, csv_df, mapping, digits, candidate_transform = identity) {
+  table_df$candidate <- normalize_candidate(table_df$candidate)
+  csv_df$candidate <- normalize_candidate(candidate_transform(csv_df$candidate))
+  table_df <- table_df[order(table_df$candidate), , drop = FALSE]
+  csv_df <- csv_df[order(csv_df$candidate), , drop = FALSE]
+
+  if (!identical(table_df$candidate, csv_df$candidate)) {
+    fail(name, ": README candidates do not match CSV candidates.\nREADME: ",
+         paste(table_df$candidate, collapse = ", "),
+         "\nCSV: ", paste(csv_df$candidate, collapse = ", "))
+  }
+
+  for (col_label in names(mapping)) {
+    csv_col <- mapping[[col_label]]
+    digs <- digits[[col_label]]
+    left <- table_df[[col_label]]
+    right <- fmt_num(csv_df[[csv_col]], digs)
+    if (!identical(left, right)) {
+      fail(name, ": mismatch in column '", col_label, "'.\nREADME: ",
+           paste(left, collapse = ", "),
+           "\nCSV: ", paste(right, collapse = ", "))
+    }
+  }
+  msg("[ok] ", name, ": README table matches shipped CSV.")
+}
+
+compare_frames <- function(name, got, expected, cols, digits = 8) {
+  got$candidate <- normalize_candidate(got$candidate)
+  expected$candidate <- normalize_candidate(expected$candidate)
+  got <- got[order(got$candidate), , drop = FALSE]
+  expected <- expected[order(expected$candidate), , drop = FALSE]
+  if (!identical(got$candidate, expected$candidate)) {
+    fail(name, ": candidate mismatch.\nGot: ",
+         paste(got$candidate, collapse = ", "),
+         "\nExpected: ", paste(expected$candidate, collapse = ", "))
+  }
+  for (col in cols) {
+    if (!all(col %in% names(got))) fail(name, ": missing rerun column ", col)
+    if (!all(col %in% names(expected))) fail(name, ": missing expected column ", col)
+    g <- round(as.numeric(got[[col]]), digits)
+    e <- round(as.numeric(expected[[col]]), digits)
+    if (!identical(g, e)) {
+      fail(name, ": mismatch in rerun column '", col, "'.\nGot: ",
+           paste(g, collapse = ", "),
+           "\nExpected: ", paste(e, collapse = ", "))
+    }
+  }
+  msg("[ok] ", name, ": rerun matches shipped metrics for shared columns.")
+}
+
+run_pcr <- function(args_vec, outdir) {
+  unlink(outdir, recursive = TRUE, force = TRUE)
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  status <- system2("Rscript", c(file.path(repo_dir, "scripts", "run_pcr.R"), args_vec, paste0("--outdir=", outdir)))
+  if (!identical(status, 0L)) fail("PCR rerun failed for outdir ", outdir)
+  read.csv(file.path(outdir, "summary_pcr_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+# README vs shipped CSVs
+table1 <- extract_table_after_heading("Example 1: Empirical dataset with five competing chronograms (Terapontoidei)")
+csv1 <- read.csv(file.path(repo_dir, "examples", "terapontoid", "summary_terap_empirical_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+assert_table_matches(
+  "Example 1",
+  table1,
+  csv1,
+  mapping = c(
+    "burst loss" = "burst_loss",
+    "pulse preservation (burst)" = "pulse_burst_selector_error",
+    "pulse preservation (overall)" = "pulse_default_selector_error",
+    "gap burden" = "fossil_gap_burden",
+    "rate plausibility" = "rate_irregularity",
+    "overall mean rank (pulse = 1/3)" = "rank_mean_3families"
+  ),
+  digits = c(
+    "burst loss" = 4,
+    "pulse preservation (burst)" = 4,
+    "pulse preservation (overall)" = 4,
+    "gap burden" = 4,
+    "rate plausibility" = 4,
+    "overall mean rank (pulse = 1/3)" = 2
+  )
+)
+
+table2 <- extract_table_after_heading("Example 2: Empirical dataset with two competing chronograms (Syngnatharia)")
+csv2 <- read.csv(file.path(repo_dir, "examples", "syngnatharia", "postfit_metrics", "syngnatharia_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+assert_table_matches(
+  "Example 2",
+  table2,
+  csv2,
+  mapping = c(
+    "burst loss" = "burst_loss",
+    "pulse preservation (burst)" = "pulse_burst_selector_error",
+    "pulse preservation (overall)" = "pulse_default_selector_error",
+    "mean relative gap" = "mean_relative_gap",
+    "rate plausibility" = "rate_irregularity",
+    "uncertainty width (mean HPD width, Ma)" = "uncertainty_mean_width_ma",
+    "core overall mean rank (pulse = 1/3)" = "rank_mean_3families"
+  ),
+  digits = c(
+    "burst loss" = 4,
+    "pulse preservation (burst)" = 4,
+    "pulse preservation (overall)" = 4,
+    "mean relative gap" = 4,
+    "rate plausibility" = 4,
+    "uncertainty width (mean HPD width, Ma)" = 2,
+    "core overall mean rank (pulse = 1/3)" = 2
+  )
+)
+
+table3 <- extract_table_after_heading("Example 3: Unpublished vertebrate dataset (derived outputs only)")
+csv3 <- read.csv(file.path(repo_dir, "examples", "unpublished_vertebrate", "postfit_metrics", "summary_unpublished_vertebrate_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+csv3$candidate <- ifelse(csv3$candidate == "treepl_best-smooth-100", "treePL (smooth = 100)", csv3$candidate)
+assert_table_matches(
+  "Example 3",
+  table3,
+  csv3,
+  mapping = c(
+    "burst loss" = "burst_loss",
+    "pulse preservation (burst)" = "pulse_burst_selector_error",
+    "pulse preservation (overall)" = "pulse_default_selector_error",
+    "mean relative gap" = "mean_relative_gap",
+    "rate plausibility" = "rate_irregularity",
+    "core overall mean rank (pulse = 1/3)" = "rank_mean_core"
+  ),
+  digits = c(
+    "burst loss" = 4,
+    "pulse preservation (burst)" = 4,
+    "pulse preservation (overall)" = 4,
+    "mean relative gap" = 4,
+    "rate plausibility" = 4,
+    "core overall mean rank (pulse = 1/3)" = 2
+  )
+)
+
+# Rerun public examples
+rerun1 <- run_pcr(
+  c(
+    "--ref-tree=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree",
+    "--candidates-csv=examples/terapontoid/candidates.csv",
+    "--calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv"
+  ),
+  outdir = file.path(tempdir(), "pcr_validate_terap")
+)
+expected1 <- transform(
+  csv1,
+  mean_relative_gap = fossil_gap_burden
+)
+compare_frames(
+  "Example 1",
+  rerun1,
+  expected1,
+  cols = c(
+    "pulse_default_selector_error",
+    "burst_loss",
+    "pulse_burst_selector_error",
+    "rate_irregularity",
+    "mean_relative_gap"
+  )
+)
+
+rerun2 <- run_pcr(
+  c(
+    "--ref-tree=examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre",
+    "--candidates-csv=examples/syngnatharia/candidates.csv",
+    "--calibrations-csv=examples/syngnatharia/calibrations_by_candidate.csv",
+    "--uncertainty-csv=examples/syngnatharia/uncertainty_summary_long.csv"
+  ),
+  outdir = file.path(tempdir(), "pcr_validate_syng")
+)
+compare_frames(
+  "Example 2",
+  rerun2,
+  csv2,
+  cols = c(
+    "pulse_default_selector_error",
+    "burst_loss",
+    "pulse_burst_selector_error",
+    "rate_irregularity",
+    "mean_relative_gap",
+    "uncertainty_mean_width_ma"
+  )
+)
+
+msg("[ok] Example 3: README table matches derived CSV (rerun intentionally skipped; raw inputs are withheld).")
+msg("")
+msg("All bundled example validations passed.")

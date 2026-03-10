@@ -126,6 +126,12 @@ Rscript scripts/run_pcr.R \
   --outdir=out/syngnatharia
 ```
 
+To validate the bundled examples and the displayed README tables, run:
+
+```bash
+Rscript scripts/validate_examples.R
+```
+
 ## Example 1: Empirical dataset with five competing chronograms (Terapontoidei)
 
 ### Optional upstream fit context
