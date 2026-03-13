@@ -230,7 +230,7 @@ This figure shows the pulse layer directly on alternative `chronos` trees (estim
 
 `gap burden` is not computed in this example because the trees were dated using congruified / secondary calibration ages rather than primary calibration evidence. In that setting, a gap score would just measure how closely each method reproduced inherited ages rather than providing an independent biological diagnostic.
 
-The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half.
+The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half. The last column reports that mean-rank value itself (`rank_mean_core`), not the separate ordinal finish position (`rank_mean_core_rank`).
 
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | rate irregularity | overall mean rank (pulse = 1/2) |
 | --- | ---: | ---: | ---: | ---: | ---: |
