@@ -6,7 +6,7 @@ In simple terms, the core idea is that divergence-time estimation is hard: the r
 
 It is method-agnostic. The candidates can come from `BEAST`, `MCMCTree`, `MrBayes`, `chronos`, `treePL`, `RelTime`, or any other dating workflow.
 
-PCR starts from finished chronograms. It does not perform clock-model fitting. If your upstream workflow produced competing trees via explicit model fitting, you can report that fit context alongside PCR.
+PCR starts from finished chronograms. If you need to generate a set of chronograms from three alternative methods (`chronos`, `treePL`, `RelTime`) using an unconstrained phylogram and a calibration set, you can do that here: [Dating Grid Guide](README_Dating_Grid.md). In this repo, `scripts/run_dating_grid.R` can run `chronos` (all four clock models across a lambda grid), `treePL` (smoothing grid), and `RelTime` from one shared calibration source, using either a pairwise calibration CSV or a reference backbone time tree for congruification before PCR scores the resulting candidates.
 
 ## What it evaluates
 
