@@ -19,6 +19,23 @@ The script is designed for one specific use case:
 
 The main point is calibration consistency. The script first resolves one shared calibration table, maps pairwise calibrations onto MRCA nodes on the target phylogram, merges duplicate-node rows by interval intersection, drops empty intersections, and then passes that same resolved node-bound set to all three methods.
 
+## Method Provenance
+
+The three method paths in this repo are tied directly to the core method papers:
+
+- `chronos`: [Paradis 2013, Molecular dating of phylogenies by likelihood methods: A comparison of models and a new information criterion](https://www.sciencedirect.com/science/article/abs/pii/S1055790313000651)
+- `treePL`: [Smith and O'Meara 2012, treePL: divergence time estimation using penalized likelihood for large phylogenies](https://academic.oup.com/bioinformatics/article/28/20/2689/203074)
+- `RelTime`: [Tamura et al. 2012, Estimating divergence times in large molecular phylogenies](https://pubmed.ncbi.nlm.nih.gov/23129628/) and [Tamura, Tao, and Kumar 2018, Theoretical Foundation of the RelTime Method for Estimating Divergence Times from Variable Evolutionary Rates](https://pubmed.ncbi.nlm.nih.gov/29893954/)
+- `RelTime` confidence intervals: [Tao, Tamura, Mello, and Kumar 2020, Reliable confidence intervals for RelTime estimates of evolutionary divergence times](https://academic.oup.com/mbe/article/37/1/280/5602325)
+
+Operationally, all three methods are exposed here through one R-driven workflow:
+
+- `chronos` is run directly through `ape::chronos`
+- `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
+- `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
+
+That means this repo is not just storing finished chronograms. It can also generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
+
 ## Inputs
 
 You must provide:
