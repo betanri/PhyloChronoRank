@@ -154,7 +154,7 @@ assert_table_matches(
   )
 )
 
-table2 <- extract_table_after_heading("Example 2: Empirical dataset with five competing chronograms (Terapontoidei)")
+table2 <- extract_table_after_heading("Example 2: Empirical dataset with six competing chronograms (Terapontoidei)")
 csv2 <- read.csv(file.path(repo_dir, "examples", "terapontoid", "summary_terap_empirical_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
 assert_table_matches(
   "Example 2",

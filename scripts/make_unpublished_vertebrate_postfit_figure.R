@@ -16,16 +16,17 @@ label_map <- c(
   chronos_correlated='Chronos correlated',
   chronos_relaxed='Chronos relaxed',
   chronos_discrete='Chronos discrete',
-  `treepl_best-smooth-100`='treePL (smooth=100)'
+  `treepl_best-smooth-100`='treePL (smooth=100)',
+  RelTime='RelTime'
 )
 labels <- unname(label_map[d$candidate])
-cols <- c('#1b9e77','#2c7fb8','#7570b3','#d95f0e','#6baed6')[match(d$candidate, c('chronos_clock','chronos_correlated','chronos_relaxed','chronos_discrete','treepl_best-smooth-100'))]
-png(outfile, width = 2600, height = 1500, res = 170)
+cols <- c('#1b9e77','#2c7fb8','#7570b3','#d95f0e','#6baed6','#d7301f')[match(d$candidate, c('chronos_clock','chronos_correlated','chronos_relaxed','chronos_discrete','treepl_best-smooth-100','RelTime'))]
+png(outfile, width = 3000, height = 1500, res = 170)
 layout(matrix(1:6, nrow = 2, byrow = TRUE))
 par(mar = c(10, 5, 4, 1), oma = c(2.5, 0.2, 2.3, 0.2))
 plot_panel <- function(vals, ttl, ylab) {
   bp <- barplot(vals, names.arg = labels, col = cols, las = 2, ylab = ylab, main = ttl,
-                ylim = c(0, max(vals, na.rm = TRUE) * 1.22), cex.names = 0.9)
+                ylim = c(0, max(vals, na.rm = TRUE) * 1.22), cex.names = 0.88)
   text(bp, vals, labels = sprintf('%.3f', vals), pos = 3, cex = 0.85)
   mtext('Lower is better', side = 1, line = 7.3, cex = 0.9)
 }

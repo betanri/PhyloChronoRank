@@ -26,19 +26,20 @@ label_map <- c(
   chronos_clock = 'Clock',
   chronos_correlated = 'Correlated',
   treePL = 'treePL',
-  chronos_relaxed = 'Relaxed'
+  chronos_relaxed = 'Relaxed',
+  RelTime = 'RelTime'
 )
 labels <- unname(label_map[ord])
-cols <- c('#1b9e77', '#2c7fb8', '#d95f0e', '#6baed6', '#7570b3')
-cols <- cols[match(ord, c('chronos_discrete', 'chronos_clock', 'chronos_correlated', 'treePL', 'chronos_relaxed'))]
+cols <- c('#1b9e77', '#2c7fb8', '#d95f0e', '#6baed6', '#7570b3', '#d7301f')
+cols <- cols[match(ord, c('chronos_discrete', 'chronos_clock', 'chronos_correlated', 'treePL', 'chronos_relaxed', 'RelTime'))]
 
-png(file.path(out_fig, 'postfit_metric_family_values.png'), width = 2500, height = 1500, res = 170)
+png(file.path(out_fig, 'postfit_metric_family_values.png'), width = 2800, height = 1500, res = 170)
 layout(matrix(c(1, 2, 3, 4, 5, 5), nrow = 2, byrow = TRUE))
 par(mar = c(8, 5, 4, 1), oma = c(2.4, 0.2, 2.2, 0.2))
 plot_panel <- function(vals, ttl, ylab, note) {
   bp <- barplot(vals, names.arg = labels, col = cols, las = 2,
                 ylab = ylab, main = ttl,
-                ylim = c(0, max(vals, na.rm = TRUE) * 1.22))
+                ylim = c(0, max(vals, na.rm = TRUE) * 1.22), cex.names = 0.95)
   text(bp, vals, labels = sprintf('%.3f', vals), pos = 3, cex = 0.85)
   mtext(note, side = 1, line = 6.4, cex = 0.9)
 }
@@ -51,12 +52,12 @@ par(mar = c(8, 5, 4, 1))
 bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
               ylab = 'Mean rank across 2 families',
               main = 'Core overall rank (family-balanced; pulse = 1/2)',
-              ylim = c(0, max(d$rank_mean_core, na.rm = TRUE) * 1.25))
+              ylim = c(0, max(d$rank_mean_core, na.rm = TRUE) * 1.25), cex.names = 0.95)
 text(bp, d$rank_mean_core,
      labels = paste0(sprintf('%.2f', d$rank_mean_core), ' (rank ', d$rank_mean_core_rank, ')'),
      pos = 3, cex = 0.85)
 mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
-mtext('Terapontoid example: post-fit evaluation metrics across chronos models and treePL', side = 3, outer = TRUE, line = 0.5, cex = 1.6, font = 2)
+mtext('Terapontoid example: post-fit evaluation metrics across chronos models, treePL, and RelTime', side = 3, outer = TRUE, line = 0.5, cex = 1.55, font = 2)
 mtext('Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Gap burden is not computed because these trees were dated with congruified / secondary calibrations.', side = 1, outer = TRUE, line = 0.5, cex = 0.95)
 dev.off()
 message('Done. Wrote: ', normalizePath(file.path(out_fig, 'postfit_metric_family_values.png'), winslash = '/'))
