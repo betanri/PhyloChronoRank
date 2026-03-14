@@ -17,6 +17,13 @@ The script is designed for one specific use case:
 - `treePL` across a smoothing grid
 - `RelTime` with the same merged node bounds used for the other methods
 
+For `treePL`, the default repo path is the recommended two-step run:
+
+- a `prime` pass first
+- then the real optimized run using the optimizer hints reported by the prime pass
+- with `thorough` enabled by default
+- and with no explicit `opt` override unless you pass `--treepl-opt=...`
+
 The main point is calibration consistency. The script first resolves one shared calibration table, maps pairwise calibrations onto MRCA nodes on the target phylogram, merges duplicate-node rows by interval intersection, drops empty intersections, and then passes that same resolved node-bound set to all three methods.
 
 ## Method Provenance
@@ -33,6 +40,8 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
+
+In other words, the shipped `treePL` path here is not a minimal one-shot wrapper. It runs the recommended `prime + thorough` workflow from R, then validates the dated output tree before adding it to `candidates.csv`.
 
 That means this repo is not just storing finished chronograms. It can also generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
 
@@ -115,6 +124,8 @@ Rscript scripts/run_dating_grid.R \
 --treepl-bin=/absolute/path/to/treePL
 --treepl-numsites=1000
 --treepl-threads=1
+--treepl-thorough=TRUE
+--treepl-prime=TRUE
 --reltime-sites=1000
 --root-age=123.4
 --out-prefix=my_dataset
@@ -219,6 +230,7 @@ The script looks for `treePL` in this order:
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
+- `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `RelTime` CI files are produced, but those widths can become numerically unstable when hard bounds create very short internal branches
 - `chronos` failures and `treePL` failures are retained in the run summary even when they do not appear in `candidates.csv`
 
