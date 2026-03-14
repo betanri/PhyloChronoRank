@@ -1,7 +1,6 @@
 # PhyloChronoRank (PCR)
 
-`PhyloChronoRank (PCR)` has two entry tabs.
-`PhyloChronoRank (PCR)` includes tools to "amplify" the signal in phylograms into alternative chronograms, then score those chronograms under a common set of diagnostics.
+`PhyloChronoRank (PCR)` includes tools to "amplify" the signal in phylograms into alternative chronograms, then score those chronograms under a common set of diagnostics. It has two entry tabs:
 
 ## [1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS](1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md)
 
