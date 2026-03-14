@@ -102,12 +102,12 @@ At minimum, it expects:
 - one reference phylogram
 - one candidate manifest with `candidate,tree_file`
 
-It can also take:
+Optional:
 
-- a calibration table with `taxonA,taxonB,age_min,age_max` and an optional `candidate` column when calibration applicability differs by method
-- an uncertainty table with `candidate` plus comparable interval-width summaries when you want to report the optional precision layer
+- `--calibrations-csv` when you want PCR to score the calibration-fit / gap layer
+- `--uncertainty-csv` when you want to report the optional precision layer from a separate interval-width table
 
-If you do not provide `--uncertainty-csv`, PCR will try to extract interval widths directly from annotated Newick trees. When multiple or unusual metadata fields exist, a separate uncertainty CSV is still the safer option.
+If you do not provide `--uncertainty-csv`, PCR will still try to extract interval widths directly from annotated Newick trees.
 
 Example commands:
 
