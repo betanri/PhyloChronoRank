@@ -111,7 +111,7 @@ draw_arrows <- function(tr, keyset) {
   for (i in seq_along(nodes)) {
     nd <- nodes[i]
     xt <- lp$xx[nd]
-    yt <- lp$yy[nd - n]
+    yt <- lp$yy[nd]
     x0 <- max(lp$x.lim[1] + 0.05, xt - 0.11)
     y0 <- yt + ifelse(i == 1, -dy, dy)
     arrows(x0, y0, xt - 0.004, yt, length = 0.09, col = "#e31a1c", lwd = 2.7)
@@ -136,8 +136,8 @@ draw_tree_panel <- function() {
 
   plot.new()
   legend("center",
-         legend = c("Best two by composite: discrete, clock",
-                    "Worst two by composite: relaxed, correlated",
+         legend = c(paste0("Best two by composite: ", paste(best2, collapse = ", ")),
+                    paste0("Worst two by composite: ", paste(worst2, collapse = ", ")),
                     "Manual annotation ready (no auto arrows/dots)."),
          bty = "n", cex = 1.75, text.font = 2)
 

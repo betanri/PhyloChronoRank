@@ -6,11 +6,34 @@ pcr_rank_low <- function(x) {
   out
 }
 
+pcr_safe_get_mrca <- function(tr, tips) {
+  if (!all(tips %in% tr$tip.label)) return(NA_integer_)
+  node <- ape::getMRCA(tr, tips)
+  if (is.null(node) || !length(node) || !is.finite(node)) return(NA_integer_)
+  as.integer(node)
+}
+
+pcr_mean_if_any <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  mean(x)
+}
+
+pcr_median_if_any <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  stats::median(x)
+}
+
 pcr_metric_node_heights_norm <- function(tr) {
   n <- ape::Ntip(tr)
   d <- ape::node.depth.edgelength(tr)
   maxd <- max(d[seq_len(n)])
-  h <- 1 - (d / maxd)
+  if (!is.finite(maxd) || maxd <= 0) {
+    h <- rep(0, length(d))
+  } else {
+    h <- 1 - (d / maxd)
+  }
   names(h) <- as.character(seq_along(h))
   h
 }
@@ -84,6 +107,41 @@ pcr_build_pulse_panel <- function(ref, min_tips = 8L, min_events = 4L) {
   panel
 }
 
+pcr_empty_pulse_detail <- function() {
+  data.frame(
+    ref_node = integer(0),
+    n_tips = integer(0),
+    n_events = integer(0),
+    emd = numeric(0),
+    burst_ref = numeric(0),
+    burst_est = numeric(0),
+    burst_loss = numeric(0),
+    centroid_shift = numeric(0),
+    weight = numeric(0),
+    stringsAsFactors = FALSE
+  )
+}
+
+pcr_empty_pulse_summary <- function(panel_size, global_emd = NA_real_,
+                                    global_burst_loss = NA_real_,
+                                    global_error = NA_real_) {
+  data.frame(
+    matched_clades = 0L,
+    panel_clades = panel_size,
+    coverage = 0,
+    mean_emd = NA_real_,
+    mean_burst_loss = NA_real_,
+    mean_centroid_shift = NA_real_,
+    local_error = NA_real_,
+    global_emd = global_emd,
+    global_burst_loss = global_burst_loss,
+    global_error = global_error,
+    selector_error = NA_real_,
+    selector_score = NA_real_,
+    stringsAsFactors = FALSE
+  )
+}
+
 pcr_score_pulse_panel <- function(ref, tr, panel,
                                   w_emd = 0.35,
                                   w_burst_loss = 0.55,
@@ -100,7 +158,7 @@ pcr_score_pulse_panel <- function(ref, tr, panel,
   detail_rows <- list()
   for (k in seq_along(panel)) {
     cl <- panel[[k]]
-    node_c <- ape::getMRCA(tr, cl$tips)
+    node_c <- pcr_safe_get_mrca(tr, cl$tips)
     if (!is.finite(node_c)) next
     sub_c <- try(ape::extract.clade(tr, node_c), silent = TRUE)
     if (inherits(sub_c, 'try-error') || !inherits(sub_c, 'phylo')) next
@@ -131,16 +189,21 @@ pcr_score_pulse_panel <- function(ref, tr, panel,
       stringsAsFactors = FALSE
     )
   }
-  if (w_sum <= 0 || matched == 0L) return(list(summary = NULL, detail = NULL))
-  mean_emd <- emd_sum / w_sum
-  mean_burst_loss <- burst_loss_sum / w_sum
-  mean_centroid <- centroid_sum / w_sum
-  pulse_error <- (w_emd * mean_emd) + (w_burst_loss * mean_burst_loss) + (w_centroid * mean_centroid)
   global_est <- pcr_metric_event_times_relative(tr)
   global_emd <- pcr_metric_wasserstein_1d(global_ref, global_est)
   global_burst_est <- pcr_metric_burstiness_from_events(global_est)
   global_burst_loss <- max(0, (global_burst_ref - global_burst_est) / (global_burst_ref + 1e-12))
   global_error <- (0.35 * global_emd) + (0.65 * global_burst_loss)
+  if (w_sum <= 0 || matched == 0L) {
+    return(list(
+      summary = pcr_empty_pulse_summary(length(panel), global_emd, global_burst_loss, global_error),
+      detail = pcr_empty_pulse_detail()
+    ))
+  }
+  mean_emd <- emd_sum / w_sum
+  mean_burst_loss <- burst_loss_sum / w_sum
+  mean_centroid <- centroid_sum / w_sum
+  pulse_error <- (w_emd * mean_emd) + (w_burst_loss * mean_burst_loss) + (w_centroid * mean_centroid)
   coverage <- matched / length(panel)
   selector_error <- ((1 - w_global) * pulse_error) + (w_global * global_error) + (coverage_penalty * (1 - coverage))
   selector_score <- 1 / (1 + selector_error)
@@ -233,14 +296,20 @@ pcr_rate_metrics <- function(ref_tree, dated_tree) {
 pcr_gap_metrics <- function(dated_tree, calibrations, tol = 1e-4) {
   age_by_node <- pcr_metric_node_ages(dated_tree)
   detail <- calibrations
-  detail$tree_mrca <- mapply(function(a, b) ape::getMRCA(dated_tree, c(a, b)), detail$taxonA, detail$taxonB)
+  detail$tree_mrca <- vapply(
+    seq_len(nrow(detail)),
+    function(i) pcr_safe_get_mrca(dated_tree, c(detail$taxonA[i], detail$taxonB[i])),
+    integer(1)
+  )
   detail$node_age <- as.numeric(age_by_node[as.character(detail$tree_mrca)])
   detail$ghost_gap_ma_raw <- detail$node_age - detail$age_min
   detail$ghost_gap_ma_raw[abs(detail$ghost_gap_ma_raw) < tol] <- 0
   is_point <- is.finite(detail$age_max) & abs(detail$age_max - detail$age_min) < tol
   detail$gap_mode_row <- ifelse(is_point, 'point', 'window')
   detail$ghost_gap_ma <- ifelse(is_point, abs(detail$ghost_gap_ma_raw), pmax(0, detail$ghost_gap_ma_raw))
-  detail$ghost_relmin <- detail$ghost_gap_ma / detail$age_min
+  detail$ghost_relmin <- ifelse(is.finite(detail$age_min) & detail$age_min > 0,
+                                detail$ghost_gap_ma / detail$age_min,
+                                NA_real_)
   detail$window_width <- detail$age_max - detail$age_min
   detail$window_position <- ifelse(detail$window_width > 0, (detail$node_age - detail$age_min) / detail$window_width, NA_real_)
   detail$min_violation_ma <- pmax(0, detail$age_min - detail$node_age - tol)
@@ -253,12 +322,12 @@ pcr_gap_metrics <- function(dated_tree, calibrations, tol = 1e-4) {
     fossil_n_calibrations = nrow(detail),
     fossil_n_missing_node_age = sum(!is.finite(detail$node_age)),
     ghost_sum_ma = sum(detail$ghost_gap_ma, na.rm = TRUE),
-    ghost_mean_ma = mean(detail$ghost_gap_ma, na.rm = TRUE),
-    ghost_median_ma = stats::median(detail$ghost_gap_ma, na.rm = TRUE),
-    mean_relative_gap = mean(detail$ghost_relmin, na.rm = TRUE),
-    relative_gap_median = stats::median(detail$ghost_relmin, na.rm = TRUE),
-    window_position_mean = mean(detail$window_position, na.rm = TRUE),
-    window_position_median = stats::median(detail$window_position, na.rm = TRUE),
+    ghost_mean_ma = pcr_mean_if_any(detail$ghost_gap_ma),
+    ghost_median_ma = pcr_median_if_any(detail$ghost_gap_ma),
+    mean_relative_gap = pcr_mean_if_any(detail$ghost_relmin),
+    relative_gap_median = pcr_median_if_any(detail$ghost_relmin),
+    window_position_mean = pcr_mean_if_any(detail$window_position),
+    window_position_median = pcr_median_if_any(detail$window_position),
     min_violation_count = sum(detail$min_violation_ma > 0, na.rm = TRUE),
     min_violation_sum_ma = sum(detail$min_violation_ma, na.rm = TRUE),
     max_violation_count = sum(detail$max_violation_ma > 0, na.rm = TRUE),

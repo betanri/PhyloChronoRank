@@ -16,9 +16,9 @@ if (!file.exists(infile)) stop('Missing input file: ', infile)
 d <- read.csv(infile, stringsAsFactors = FALSE)
 ord <- d$candidate[order(d$rank_mean_3families_rank, d$rank_mean_3families)]
 d <- d[match(ord, d$candidate), ]
-labels <- c('RelTime', 'MCMCTree')
-labels <- labels[match(ord, c('RelTime', 'MCMCTree'))]
-cols <- c('#1b9e77', '#2c7fb8')
+labels <- ord
+cols <- c(RelTime = '#1b9e77', MCMCTree = '#2c7fb8')
+cols <- unname(cols[ord])
 
 gap_label <- 'Mean relative gap'
 uncertainty_label <- 'Uncertainty width (mean HPD width, Ma)'

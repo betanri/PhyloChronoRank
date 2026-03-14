@@ -32,6 +32,18 @@ if (!nzchar(vgp_dir_raw)) {
 }
 vgp_dir <- normalizePath(vgp_dir_raw, winslash = "/", mustWork = TRUE)
 
+append_candidate_row <- function(cand, candidate_name, tree_file) {
+  if (!all(c("candidate", "tree_file") %in% names(cand))) {
+    stop("Candidate table must contain candidate and tree_file columns.")
+  }
+  out <- cand[cand$candidate != candidate_name, , drop = FALSE]
+  new_row <- out[0, , drop = FALSE]
+  new_row[1, ] <- NA
+  new_row$candidate <- candidate_name
+  new_row$tree_file <- tree_file
+  rbind(out, new_row)
+}
+
 write_terap_outputs <- function() {
   ex_dir <- file.path(base_dir, "examples", "terapontoid")
   ref_tree <- read.tree(file.path(ex_dir, "Terapontoid_ML_MAIN_phylogram_used.tree"))
@@ -52,8 +64,7 @@ write_terap_outputs <- function() {
     tree_file = basename(tree_file),
     stringsAsFactors = FALSE
   )
-  cand <- cand[cand$candidate != "RelTime", , drop = FALSE]
-  cand <- rbind(cand, rel_row)
+  cand <- append_candidate_row(cand, rel_row$candidate, rel_row$tree_file)
   write.csv(cand, cand_file, row.names = FALSE, quote = FALSE)
 
   outdir <- tempfile(pattern = "pcr_terap_reltime_")
@@ -90,8 +101,7 @@ write_vgp_outputs <- function() {
   write.csv(rel$bounds, rel_bounds_tmp, row.names = FALSE)
 
   cand <- read.csv(cand_file, stringsAsFactors = FALSE)
-  cand <- cand[cand$candidate != "RelTime", , drop = FALSE]
-  cand <- rbind(cand, data.frame(candidate = "RelTime", tree_file = rel_tree_tmp, stringsAsFactors = FALSE))
+  cand <- append_candidate_row(cand, "RelTime", rel_tree_tmp)
   cand_tmp <- tempfile(pattern = "vgp_candidates_", fileext = ".csv")
   write.csv(cand, cand_tmp, row.names = FALSE, quote = FALSE)
 

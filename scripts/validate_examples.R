@@ -11,8 +11,9 @@ fail <- function(...) {
 
 trim <- function(x) trimws(x, which = "both")
 
-script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]), winslash = "/", mustWork = FALSE))
-if (!nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
+file_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+script_dir <- if (length(file_arg)) dirname(normalizePath(sub("^--file=", "", file_arg[1]), winslash = "/", mustWork = FALSE)) else NA_character_
+if (is.na(script_dir) || !nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
 repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 
 readme_path <- file.path(repo_dir, "2_PCR_POSTFIT_METRICS", "README.md")

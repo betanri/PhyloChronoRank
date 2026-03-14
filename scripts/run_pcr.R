@@ -14,16 +14,37 @@ if (length(miss)) {
   stop('Missing required args: ', paste(miss, collapse = ', '))
 }
 if (!requireNamespace('ape', quietly = TRUE)) stop('Package ape is required.')
-script_dir <- dirname(normalizePath(sub('^--file=', '', grep('^--file=', commandArgs(trailingOnly = FALSE), value = TRUE)[1]), winslash = '/', mustWork = FALSE))
-if (!nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
+file_arg <- grep('^--file=', commandArgs(trailingOnly = FALSE), value = TRUE)
+script_dir <- if (length(file_arg)) dirname(normalizePath(sub('^--file=', '', file_arg[1]), winslash = '/', mustWork = FALSE)) else NA_character_
+if (is.na(script_dir) || !nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
 source(file.path(script_dir, 'pcr_helpers.R'))
+
+pcr_read_tree_or_stop <- function(path, label) {
+  tr <- try(ape::read.tree(path), silent = TRUE)
+  if (inherits(tr, 'try-error') || !inherits(tr, 'phylo')) {
+    stop('Failed to read ', label, ' tree: ', path)
+  }
+  tr
+}
+
+pcr_get_metric <- function(df, col) {
+  if (is.null(df) || !nrow(df) || !(col %in% names(df))) return(NA_real_)
+  df[[col]][1]
+}
+
+pcr_best_candidate_label <- function(values, candidates, prefix, fallback) {
+  ok <- is.finite(values)
+  if (!any(ok)) return(fallback)
+  idx <- which.min(values[ok])[1]
+  paste0(prefix, candidates[ok][idx])
+}
 
 candidates_csv <- normalizePath(kv[['candidates-csv']], winslash = '/', mustWork = TRUE)
 candidates_base <- dirname(candidates_csv)
 outdir <- kv[['outdir']]
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 outdir <- normalizePath(outdir, winslash = '/', mustWork = TRUE)
-ref_tree <- ape::read.tree(normalizePath(kv[['ref-tree']], winslash = '/', mustWork = TRUE))
+ref_tree <- pcr_read_tree_or_stop(normalizePath(kv[['ref-tree']], winslash = '/', mustWork = TRUE), 'reference')
 min_tips <- if ('min-tips' %in% names(kv)) as.integer(kv[['min-tips']]) else 8L
 min_events <- if ('min-events' %in% names(kv)) as.integer(kv[['min-events']]) else 4L
 panel <- pcr_build_pulse_panel(ref_tree, min_tips = min_tips, min_events = min_events)
@@ -49,15 +70,15 @@ if ('uncertainty-csv' %in% names(kv)) {
 
 rows <- list(); pulse_default_detail <- list(); pulse_burst_detail <- list(); gap_detail <- list(); rate_detail <- list()
 for (i in seq_len(nrow(cand))) {
-  tr <- ape::read.tree(cand$tree_path[i])
+  tr <- pcr_read_tree_or_stop(cand$tree_path[i], paste0('candidate ', cand$candidate[i]))
   p_overall <- pcr_score_pulse_panel(ref_tree, tr, panel, w_emd = 0.35, w_burst_loss = 0.55, w_centroid = 0.10)
   p_burst <- pcr_score_pulse_panel(ref_tree, tr, panel, w_emd = 0.20, w_burst_loss = 0.75, w_centroid = 0.05)
   rp <- pcr_rate_metrics(ref_tree, tr)
   row <- data.frame(candidate = cand$candidate[i], tree_file = cand$tree_file[i], stringsAsFactors = FALSE)
-  row$pulse_default_selector_error <- p_overall$summary$selector_error
-  row$burst_loss <- p_overall$summary$mean_burst_loss
-  row$pulse_burst_selector_error <- p_burst$summary$selector_error
-  row$rate_irregularity <- rp$summary$rate_irregularity
+  row$pulse_default_selector_error <- pcr_get_metric(p_overall$summary, 'selector_error')
+  row$burst_loss <- pcr_get_metric(p_overall$summary, 'mean_burst_loss')
+  row$pulse_burst_selector_error <- pcr_get_metric(p_burst$summary, 'selector_error')
+  row$rate_irregularity <- pcr_get_metric(rp$summary, 'rate_irregularity')
   row$gap_mode <- NA_character_
   row$mean_relative_gap <- NA_real_
   row$ghost_mean_ma <- NA_real_
@@ -93,9 +114,21 @@ for (i in seq_len(nrow(cand))) {
     }
   }
   rows[[length(rows)+1L]] <- row
-  pd <- p_overall$detail; pd$candidate <- cand$candidate[i]; pulse_default_detail[[length(pulse_default_detail)+1L]] <- pd
-  pb <- p_burst$detail; pb$candidate <- cand$candidate[i]; pulse_burst_detail[[length(pulse_burst_detail)+1L]] <- pb
-  rd <- rp$detail; rd$candidate <- cand$candidate[i]; rate_detail[[length(rate_detail)+1L]] <- rd
+  if (is.data.frame(p_overall$detail) && nrow(p_overall$detail)) {
+    pd <- p_overall$detail
+    pd$candidate <- cand$candidate[i]
+    pulse_default_detail[[length(pulse_default_detail)+1L]] <- pd
+  }
+  if (is.data.frame(p_burst$detail) && nrow(p_burst$detail)) {
+    pb <- p_burst$detail
+    pb$candidate <- cand$candidate[i]
+    pulse_burst_detail[[length(pulse_burst_detail)+1L]] <- pb
+  }
+  if (is.data.frame(rp$detail) && nrow(rp$detail)) {
+    rd <- rp$detail
+    rd$candidate <- cand$candidate[i]
+    rate_detail[[length(rate_detail)+1L]] <- rd
+  }
 }
 summary_df <- do.call(rbind, rows)
 summary_df$rank_pulse_overall <- pcr_rank_low(summary_df$pulse_default_selector_error)
@@ -123,13 +156,13 @@ lines <- c(
   paste0('Candidates: ', nrow(summary_df)),
   paste0('Pulse panel clades: ', length(panel), ' (min_tips=', min_tips, ', min_events=', min_events, ')'),
   '',
-  paste0('Best pulse preservation (overall): ', summary_df$candidate[which.min(summary_df$pulse_default_selector_error)]),
-  paste0('Best burst loss: ', summary_df$candidate[which.min(summary_df$burst_loss)]),
-  paste0('Best pulse preservation (burst): ', summary_df$candidate[which.min(summary_df$pulse_burst_selector_error)]),
-  if (all(!is.na(summary_df$mean_relative_gap))) paste0('Best mean relative gap: ', summary_df$candidate[which.min(summary_df$mean_relative_gap)]) else 'Mean relative gap: not scored',
-  paste0('Best rate irregularity: ', summary_df$candidate[which.min(summary_df$rate_irregularity)]),
-  if ('rank_uncertainty_mean_width' %in% names(summary_df)) paste0('Most precise by uncertainty width: ', summary_df$candidate[which.min(summary_df$uncertainty_mean_width_ma)]) else 'Uncertainty width: not scored',
-  paste0('Core overall winner: ', summary_df$candidate[which.min(summary_df$rank_mean_core)])
+  pcr_best_candidate_label(summary_df$pulse_default_selector_error, summary_df$candidate, 'Best pulse preservation (overall): ', 'Pulse preservation (overall): not scored'),
+  pcr_best_candidate_label(summary_df$burst_loss, summary_df$candidate, 'Best burst loss: ', 'Burst loss: not scored'),
+  pcr_best_candidate_label(summary_df$pulse_burst_selector_error, summary_df$candidate, 'Best pulse preservation (burst): ', 'Pulse preservation (burst): not scored'),
+  pcr_best_candidate_label(summary_df$mean_relative_gap, summary_df$candidate, 'Best mean relative gap: ', 'Mean relative gap: not scored'),
+  pcr_best_candidate_label(summary_df$rate_irregularity, summary_df$candidate, 'Best rate irregularity: ', 'Rate irregularity: not scored'),
+  if ('rank_uncertainty_mean_width' %in% names(summary_df)) pcr_best_candidate_label(summary_df$uncertainty_mean_width_ma, summary_df$candidate, 'Most precise by uncertainty width: ', 'Uncertainty width: not scored') else 'Uncertainty width: not scored',
+  pcr_best_candidate_label(summary_df$rank_mean_core, summary_df$candidate, 'Core overall winner: ', 'Core overall winner: not scored')
 )
 writeLines(lines, file.path(outdir, 'interpretation.txt'))
 message('Wrote PCR outputs to: ', outdir)
