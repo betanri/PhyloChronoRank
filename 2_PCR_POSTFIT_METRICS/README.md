@@ -213,7 +213,7 @@ That separation is deliberate. The RelTime literature does not support a simple 
 
 ### Optional upstream fit context
 
-PCR itself does not do model fitting, but this example comes from a workflow where upstream fit statistics were available. Those upstream results and the post-fit results still point to the same two `chronos` models. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood. Under the core PCR comparison, `clock` is the strongest balanced `chronos` tree and `discrete` is the close runner-up.
+This tab does not do model fitting; that workflow lives in tab 1. In this example, the upstream fit statistics and the post-fit results still point to the same two `chronos` models. `clock` has the best `PHIIC` in the fit summary. `discrete` has the best penalized log-likelihood. Under the core PCR comparison, `clock` is the strongest balanced `chronos` tree and `discrete` is the close runner-up.
 
 ### Quick takeaway
 
