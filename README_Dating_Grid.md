@@ -45,6 +45,19 @@ In other words, the shipped `treePL` path here is not a minimal one-shot wrapper
 
 That means this repo is not just storing finished chronograms. It can also generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
 
+## Three Layers
+
+This workflow is easiest to read if you keep three layers separate:
+
+- dating / fit layer
+  - `run_dating_grid.R` generates dated trees and method-specific run summaries
+- tuning layer
+  - lambda, smoothing, and `nb.rate.cat` grids are there to expose sensitivity, not to guarantee that one single setting must always be declared the winner by fit alone
+- post-fit layer
+  - PCR, run afterward with `scripts/run_pcr.R`, scores the finished candidate chronograms on a common biological diagnostic set
+
+That separation matters. A tree can look best by a fit criterion inside one method family and still lose the broader PCR comparison after all methods are placed on the same post-fit scale.
+
 ## Inputs
 
 You must provide:
@@ -93,6 +106,19 @@ In that mode the script:
 - converts the congruified pairwise calibrations into one shared pairwise table
 - maps them onto MRCA nodes on the target tree
 - merges duplicate-node bounds exactly once before method-specific runs
+
+## Large Trees And Subset Tuning
+
+The older chronos-only pipeline documented a large-tree subset strategy: tune on a smaller calibration-preserving subset, then rerun the selected settings on the full tree.
+
+`run_dating_grid.R` does not currently implement that subset workflow automatically. If you need it, the practical pattern is:
+
+- build a reduced tree that preserves all calibration taxa
+- keep deep or tempo-extreme parts of the tree rather than using a purely random subset
+- tune `chronos` lambda values and `treePL` smoothing values on that subset
+- rerun the selected settings on the full phylogram with the same shared calibration file
+
+For modest tree sizes, the direct full-tree grid is usually simpler. For very large trees, subset tuning can be the difference between a usable screening pass and an impractically slow one.
 
 ## Basic Usage
 
@@ -190,6 +216,22 @@ Method-specific outputs:
 - `reltime/<prefix>_RelTime_bounds_used.csv`
 - `reltime/<prefix>_RelTime_run.csv`
 
+## What To Open First
+
+If you are reviewing a new run, the most useful order is:
+
+1. `<prefix>_run_metadata.txt`
+2. `<prefix>_all_runs_summary.csv`
+3. `chronos/<prefix>_chronos_runs.csv`
+4. `treepl/<prefix>_treepl_runs.csv`
+5. `candidates.csv`
+
+That tells you:
+
+- which calibrations survived the shared merge step
+- which runs actually succeeded
+- which candidate trees were promoted into the PCR-ready set
+
 ## Feeding The Results Into PCR
 
 Once the dating grid finishes, run PCR on the generated candidates:
@@ -203,6 +245,39 @@ Rscript scripts/run_pcr.R \
 ```
 
 If you are working from primary fossil calibrations, that shared calibration CSV can be used directly in PCR’s gap layer. If your dates were generated from congruified or secondary ages, treat that gap layer as calibration slack rather than as independent fossil-fit evidence.
+
+## How To Choose Among Grid Results
+
+The script writes the full grid. It does not enforce one global selector for you.
+
+The practical review pattern is:
+
+- compare fit within a method family first
+  - for `chronos`, inspect `chronos/<prefix>_chronos_runs.csv`
+  - for `treePL`, inspect `treepl/<prefix>_treepl_runs.csv`
+- if neighboring settings are near-tied or biologically different, keep more than one candidate rather than pretending the fit surface is sharper than it is
+- then run PCR on the retained candidate set and compare methods on the same post-fit scale
+
+In other words:
+
+- use the dating grid to expose sensitivity
+- use PCR to arbitrate among the finished candidate chronograms
+- if fit and post-fit disagree, report both instead of collapsing them into one claim
+
+## How To Read Disagreements
+
+Disagreement across layers is normal and often biologically informative rather than a sign that one step failed.
+
+Common patterns are:
+
+- one setting looks best by fit, but a neighboring setting looks better by PCR
+  - that usually means the likelihood-style fit surface is shallow relative to the biological shape differences PCR is detecting
+- one method family dominates fit inside its own grid, but loses to another method family in PCR
+  - that means the method-specific optimization target and the post-fit biological diagnostics are rewarding different properties
+- a candidate satisfies calibrations tightly, but looks poor by pulse preservation or rate regularity
+  - that is a real tradeoff worth stating explicitly
+
+The practical rule is simple: do not force those layers into one synthetic winner if they are telling different stories. Report the fit preference, report the PCR preference, and explain the biological consequence of the difference.
 
 ## Requirements
 
@@ -235,6 +310,19 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `RelTime` CI files are produced, but those widths can become numerically unstable when hard bounds create very short internal branches
 - `chronos` failures and `treePL` failures are retained in the run summary even when they do not appear in `candidates.csv`
+
+## Common Issues
+
+- no `treePL` binary found
+  - pass `--treepl-bin=/PATH/TO/treePL`, set `TREEPL_BIN`, or use the documented fallback location
+- no successful dated trees written
+  - inspect `<prefix>_all_runs_summary.csv` and the method-specific log files first
+- dropped calibration bounds
+  - check `<prefix>_calibration_bounds_dropped.csv`; these are duplicate-node conflicts that collapsed to empty intersections
+- `chronos` starting-date failures
+  - increase `--chronos-retries`, simplify the grid, or use subset tuning for very large trees
+- suspicious congruification results
+  - inspect `<prefix>_calibration_pairs_mapped.csv` and verify taxon overlap and reference-tree quality before blaming the dating method itself
 
 ## Help
 
