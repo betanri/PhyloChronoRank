@@ -15,8 +15,8 @@ script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", command
 if (!nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
 repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 
-readme_path <- file.path(repo_dir, "README.md")
-if (!file.exists(readme_path)) fail("README.md not found at repo root.")
+readme_path <- file.path(repo_dir, "2_PCR_POSTFIT_METRICS", "README.md")
+if (!file.exists(readme_path)) fail("2_PCR_POSTFIT_METRICS/README.md not found.")
 readme_lines <- readLines(readme_path, warn = FALSE)
 
 normalize_candidate <- function(x) {
@@ -203,7 +203,8 @@ assert_table_matches(
     "mean relative gap" = 4,
     "rate irregularity" = 4,
     "core overall mean rank (pulse = 1/3)" = 2
-  )
+  ),
+  candidate_transform = function(x) sub("^treepl_best-smooth-[^,]+$", "treePL", x)
 )
 
 # Rerun public examples

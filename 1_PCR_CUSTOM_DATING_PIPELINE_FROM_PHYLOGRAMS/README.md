@@ -1,4 +1,4 @@
-# Dating Grid Guide
+# PCR Custom Dating Pipeline From Phylograms
 
 This page documents `scripts/run_dating_grid.R`, the repo-local helper for generating candidate chronograms before running PCR.
 
