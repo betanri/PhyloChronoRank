@@ -224,7 +224,7 @@ The script looks for `treePL` in this order:
 - `treePL` on `PATH`
 - `../treePL` relative to the repo root
 
-So if you want the repo fallback to work without passing `--treepl-bin` or setting `TREEPL_BIN`, place the executable one directory above the repo root and name the file exactly `treePL`. In this checkout, that fallback path is `/Users/ricardobetancur/Desktop/Proxy_Misplaced/treePL`.
+So if you want the repo fallback to work without passing `--treepl-bin` or setting `TREEPL_BIN`, place the executable one directory above the repo root and name the file exactly `treePL`. In placeholder form, that fallback looks like `/PATH/TO/PARENT_FOLDER/treePL`.
 
 ## Important Behavior
 

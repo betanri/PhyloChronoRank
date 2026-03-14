@@ -22,11 +22,15 @@ if (!nzchar(script_dir) || !dir.exists(script_dir)) script_dir <- getwd()
 base_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 source(file.path(script_dir, "reltime_helpers.R"))
 
-vgp_dir <- if ("vgp-dir" %in% names(kv)) {
-  normalizePath(kv[["vgp-dir"]], winslash = "/", mustWork = TRUE)
+vgp_dir_raw <- if ("vgp-dir" %in% names(kv)) {
+  kv[["vgp-dir"]]
 } else {
-  normalizePath("/Users/ricardobetancur/Desktop/Proxy_Misplaced/chronos/VGP", winslash = "/", mustWork = TRUE)
+  Sys.getenv("VGP_DIR", unset = "")
 }
+if (!nzchar(vgp_dir_raw)) {
+  stop("Pass --vgp-dir=/PATH/TO/VGP_FOLDER or set VGP_DIR=/PATH/TO/VGP_FOLDER.")
+}
+vgp_dir <- normalizePath(vgp_dir_raw, winslash = "/", mustWork = TRUE)
 
 write_terap_outputs <- function() {
   ex_dir <- file.path(base_dir, "examples", "terapontoid")
