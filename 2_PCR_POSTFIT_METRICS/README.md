@@ -188,7 +188,8 @@ That separation is deliberate. The RelTime literature does not support a simple 
 4. Report the tradeoff explicitly: here the core chronogram-behavior layer favors `RelTime`, while the calibration-plus-precision side favors `MCMCTree`.
 5. The original visual choice to favor `RelTime` is supported quantitatively by the current core post-fit layer.
 
-### Files behind this example
+<details>
+<summary><strong>Files behind this example</strong></summary>
 
 - `examples/syngnatharia/candidates.csv`
 - `examples/syngnatharia/calibrations_by_candidate.csv`
@@ -205,6 +206,8 @@ That separation is deliberate. The RelTime literature does not support a simple 
 - `figures/syngnatharia_postfit_metric_family_values.png`
 - `scripts/run_pcr.R`
 - `scripts/make_syngnatharia_postfit_figures.R`
+
+</details>
 
 ## Example 2: Empirical dataset with six competing chronograms (Terapontoidei)
 
@@ -269,7 +272,8 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 4. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
 5. In this example, `RelTime` behaves like a pulse specialist, while `treePL` acts as a mid-ranking rate-friendlier alternative rather than a leading tree.
 
-### Files behind this example
+<details>
+<summary><strong>Files behind this example</strong></summary>
 
 - `examples/terapontoid/summary_terap_empirical_model_fits.csv`
 - `examples/terapontoid/summary_terap_empirical_postfit_metrics.csv`
@@ -285,6 +289,8 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 - `scripts/build_reltime_examples.R`
 - `scripts/make_terapontoid_postfit_figures.R`
 - `scripts/make_terapontoid_pulse_tree_panel.R`
+
+</details>
 
 ## Example 3: Unpublished vertebrate dataset (derived outputs only)
 
@@ -352,7 +358,8 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 4. If you report multiple candidate chronograms, the main contrast is `treePL` as the balanced winner, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap alternative.
 5. No optional `uncertainty width` layer is reported here.
 
-### Files behind this example
+<details>
+<summary><strong>Files behind this example</strong></summary>
 
 - `examples/unpublished_vertebrate/postfit_metrics/summary_unpublished_vertebrate_postfit_metrics.csv`
 - `figures/unpublished_vertebrate_tree_panel.png`
@@ -361,7 +368,10 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 - `scripts/build_reltime_examples.R`
 - `scripts/make_unpublished_vertebrate_postfit_figure.R`
 
-## Scope notes
+</details>
+
+<details>
+<summary><strong>Scope notes</strong></summary>
 
 - The pulse-family weights are user-chosen defaults. A small fixed robustness check across five perturbation sets is included in `examples/weight_sensitivity/`; neither the pulse-family winner nor the core PCR winner changed in either bundled example. A broader sensitivity analysis across additional datasets has not yet been done.
 - The pulse family treats the source phylogram as the reference for branching rhythm. That is useful when the question is whether a dated tree preserves the tempo structure visible in the starting phylogram, but it should not be read as proof that the phylogram itself is the true diversification history.
@@ -371,3 +381,5 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
 - An optional `uncertainty width` layer is demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.
+
+</details>
