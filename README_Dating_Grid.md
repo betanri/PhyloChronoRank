@@ -157,9 +157,9 @@ Rscript scripts/run_dating_grid.R \
 --out-prefix=my_dataset
 ```
 
-## Terap Example
+## Terapontoidei Example
 
-Using the bundled Terap phylogram and calibration CSV:
+Using the bundled Terapontoidei phylogram and calibration CSV:
 
 ```bash
 Rscript scripts/run_dating_grid.R \
