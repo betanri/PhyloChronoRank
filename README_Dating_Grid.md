@@ -109,9 +109,9 @@ In that mode the script:
 
 ## Large Trees And Subset Tuning
 
-The older chronos-only pipeline documented a large-tree subset strategy: tune on a smaller calibration-preserving subset, then rerun the selected settings on the full tree.
+A large-tree subset strategy can be useful: tune on a smaller calibration-preserving subset, then rerun the selected settings on the full tree.
 
-`run_dating_grid.R` does not currently implement that subset workflow automatically. If you need it, the practical pattern is:
+`run_dating_grid.R` does not automate that subset workflow. If you need it, the practical pattern is:
 
 - build a reduced tree that preserves all calibration taxa
 - keep deep or tempo-extreme parts of the tree rather than using a purely random subset
