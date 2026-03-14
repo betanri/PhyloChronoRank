@@ -22,6 +22,7 @@ usage <- function() {
       "[--chronos-lambdas=0.01,0.1,1,10,100]",
       "[--treepl-smoothing=0.01,0.1,1,10,100]",
       "[--chronos-discrete-k=5]",
+      "[--chronos-attempt-timeout=90]",
       "[--treepl-bin=/path/to/treePL]",
       "[--root-age=123.4]",
       "[--calibration-tag=NAME]",
@@ -47,10 +48,18 @@ usage <- function() {
     "  --chronos-models        Clock models. Default: clock,correlated,relaxed,discrete.\n",
     "  --chronos-discrete-k    nb.rate.cat grid for the discrete model. Default: 5.\n",
     "  --chronos-retries       Retries per chronos setting. Default: 2.\n",
+    "  --chronos-attempt-timeout Maximum elapsed seconds allowed per chronos attempt. Default: 0 (no timeout).\n",
     "  --treepl-smoothing      Smoothing grid. Default: 0.01,0.1,1,10,100.\n",
     "  --treepl-bin            treePL executable. Default: TREEPL_BIN env, PATH treePL, then ../treePL.\n",
     "  --treepl-numsites       numsites value written to treePL configs. Default: 1000.\n",
     "  --treepl-threads        OMP_NUM_THREADS for treePL. Default: 1.\n",
+    "  --treepl-thorough       Use thorough optimization in treePL (strongly recommended). Default: TRUE.\n",
+    "  --treepl-prime          Prime treePL optimizer before full run. Default: TRUE.\n",
+    "  --treepl-opt            treePL optimization algorithm (1=LM, 2=stochastic, 4=auto). Default: not set.\n",
+    "  --treepl-plsimaniter    Simulated-annealing iterations for treePL. Default: not set (treePL default).\n",
+    "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
+    "  --chronos-iter-max      Maximum iterations for chronos optimizer. Default: 10000 (ape default).\n",
+    "  --chronos-tol           Convergence tolerance for chronos. Default: 1e-8 (ape default).\n",
     "  --reltime-sites         Alignment length used for RelTime CI widths. Default: 1000.\n",
     "  --help                  Print this message.\n",
     sep = ""
@@ -80,6 +89,14 @@ if (!requireNamespace("ape", quietly = TRUE)) {
   stop("Package ape is required.")
 }
 suppressPackageStartupMessages(library(ape))
+
+if ("reltime" %in% tolower(trimws(strsplit(
+    if ("methods" %in% names(kv)) kv[["methods"]] else "chronos,treepl,reltime",
+    ",", fixed = TRUE)[[1]]))) {
+  if (!requireNamespace("quadprog", quietly = TRUE)) {
+    stop("Package quadprog is required for the RelTime method (QP projection onto calibration bounds).")
+  }
+}
 
 script_file_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 if (length(script_file_arg)) {
@@ -423,11 +440,16 @@ map_pairwise_calibrations_to_nodes <- function(phy, pair_df) {
 }
 
 build_chronos_calib_from_node_bounds <- function(phy, node_bounds) {
+  ## Cap Inf age_max to a safe finite value so older ape versions don't choke.
+  ## 10x the largest finite age bound is large enough to be effectively unconstrained.
+  age_max <- node_bounds$age_max
+  cap <- 10 * max(c(node_bounds$age_min, age_max[is.finite(age_max)]), na.rm = TRUE)
+  age_max[!is.finite(age_max)] <- cap
   ape::makeChronosCalib(
     phy,
     node = node_bounds$node,
     age.min = node_bounds$age_min,
-    age.max = node_bounds$age_max
+    age.max = age_max
   )
 }
 
@@ -439,44 +461,152 @@ fit_score_chronos <- function(tr) {
   Inf
 }
 
-run_chronos_one <- function(phy, calib, model, lambda, nb_rate_cat = NA_integer_, retries = 2L) {
+write_chronos_helper_script <- function(path) {
+  lines <- c(
+    "args <- commandArgs(trailingOnly = TRUE)",
+    "params <- readRDS(args[1])",
+    "out_file <- args[2]",
+    "suppressPackageStartupMessages(library(ape))",
+    "`%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a",
+    "if (!is.null(params$seed) && is.finite(params$seed)) set.seed(as.integer(params$seed))",
+    "ctrl <- ape::chronos.control()",
+    "ctrl$iter.max <- as.integer(params$iter_max)",
+    "ctrl$eval.max <- as.integer(params$iter_max)",
+    "ctrl$tol <- as.numeric(params$tol)",
+    "if (identical(params$model, 'discrete') && is.finite(params$nb_rate_cat)) {",
+    "  ctrl$nb.rate.cat <- as.integer(params$nb_rate_cat)",
+    "}",
+    "tr <- try(",
+    "  ape::chronos(",
+    "    params$phy,",
+    "    lambda = params$lambda,",
+    "    model = params$model,",
+    "    calibration = params$calib,",
+    "    quiet = TRUE,",
+    "    control = ctrl",
+    "  ),",
+    "  silent = TRUE",
+    ")",
+    "if (inherits(tr, 'try-error')) {",
+    "  res <- list(ok = FALSE, error = conditionMessage(attr(tr, 'condition') %||% simpleError(as.character(tr))))",
+    "} else if (!inherits(tr, 'phylo') || is.null(tr$edge.length) || any(!is.finite(tr$edge.length)) || any(tr$edge.length < 0)) {",
+    "  res <- list(ok = FALSE, error = 'chronos returned an invalid tree.')",
+    "} else {",
+    "  ph <- attr(tr, 'PHIIC')",
+    "  phiic <- if (is.list(ph) && is.finite(ph$PHIIC)) ph$PHIIC else NA_real_",
+    "  ploglik <- attr(tr, 'ploglik') %||% NA_real_",
+    "  fit_score <- if (is.finite(phiic)) phiic else if (is.finite(ploglik)) -ploglik else Inf",
+    "  res <- list(ok = TRUE, tree = tr, phiic = phiic, ploglik = ploglik, fit_score = fit_score)",
+    "}",
+    "saveRDS(res, out_file)"
+  )
+  writeLines(lines, path)
+}
+
+run_chronos_subprocess <- function(phy, calib, model, lambda, nb_rate_cat, iter_max, tol, timeout, attempt) {
+  helper_file <- tempfile(pattern = "chronos_attempt_", fileext = ".R")
+  input_file <- tempfile(pattern = "chronos_attempt_", fileext = ".rds")
+  output_file <- tempfile(pattern = "chronos_attempt_", fileext = ".rds")
+  on.exit(unlink(c(helper_file, input_file, output_file), force = TRUE), add = TRUE)
+
+  write_chronos_helper_script(helper_file)
+  saveRDS(list(
+    phy = phy,
+    calib = calib,
+    model = model,
+    lambda = lambda,
+    nb_rate_cat = nb_rate_cat,
+    iter_max = iter_max,
+    tol = tol,
+    seed = as.integer((as.numeric(Sys.time()) * 1e6 + Sys.getpid() + attempt) %% .Machine$integer.max)
+  ), input_file)
+
+  timeout_bin <- Sys.which("timeout")
+  if (!nzchar(timeout_bin)) timeout_bin <- Sys.which("gtimeout")
+  if (!nzchar(timeout_bin)) {
+    stop("A timeout-enabled chronos attempt was requested, but no timeout binary was found.")
+  }
+
+  args <- c(as.character(ceiling(timeout)), "Rscript", helper_file, input_file, output_file)
+  suppressWarnings(system2(timeout_bin, args = args, stdout = TRUE, stderr = TRUE))
+
+  if (file.exists(output_file)) {
+    return(readRDS(output_file))
+  }
+
+  list(ok = FALSE, error = paste0("chronos attempt timed out after ", ceiling(timeout), " seconds."))
+}
+
+run_chronos_one <- function(phy, calib, model, lambda, nb_rate_cat = NA_integer_,
+                            retries = 2L, iter_max = 10000L, tol = 1e-8,
+                            attempt_timeout = 0) {
   best <- NULL
   last_error <- NA_character_
   retries <- max(1L, as.integer(retries))
+  timeout <- suppressWarnings(as.numeric(attempt_timeout))
+  if (!is.finite(timeout) || timeout <= 0) timeout <- 0
 
   for (attempt in seq_len(retries)) {
     ctrl <- ape::chronos.control()
+    ctrl$iter.max <- as.integer(iter_max)
+    ctrl$eval.max <- as.integer(iter_max)
+    ctrl$tol <- as.numeric(tol)
     if (identical(model, "discrete") && is.finite(nb_rate_cat)) {
       ctrl$nb.rate.cat <- as.integer(nb_rate_cat)
     }
-    tr <- try(
-      ape::chronos(
-        phy,
-        lambda = lambda,
+    if (timeout > 0) {
+      subres <- run_chronos_subprocess(
+        phy = phy,
+        calib = calib,
         model = model,
-        calibration = calib,
-        quiet = TRUE,
-        control = ctrl
-      ),
-      silent = TRUE
-    )
-    if (inherits(tr, "try-error")) {
-      last_error <- conditionMessage(attr(tr, "condition") %||% simpleError(as.character(tr)))
-      next
-    }
-    if (!inherits(tr, "phylo") || is.null(tr$edge.length) ||
-        any(!is.finite(tr$edge.length)) || any(tr$edge.length <= 0)) {
-      last_error <- "chronos returned an invalid tree."
-      next
-    }
+        lambda = lambda,
+        nb_rate_cat = nb_rate_cat,
+        iter_max = iter_max,
+        tol = tol,
+        timeout = timeout,
+        attempt = attempt
+      )
+      if (!isTRUE(subres$ok)) {
+        last_error <- subres$error %||% paste0("chronos attempt ", attempt, " failed.")
+        next
+      }
+      res <- list(
+        tree = subres$tree,
+        phiic = subres$phiic,
+        ploglik = subres$ploglik,
+        fit_score = subres$fit_score,
+        attempt = attempt
+      )
+    } else {
+      tr <- try(
+        ape::chronos(
+          phy,
+          lambda = lambda,
+          model = model,
+          calibration = calib,
+          quiet = TRUE,
+          control = ctrl
+        ),
+        silent = TRUE
+      )
+      if (inherits(tr, "try-error")) {
+        last_error <- conditionMessage(attr(tr, "condition") %||% simpleError(as.character(tr)))
+        next
+      }
+      if (!inherits(tr, "phylo") || is.null(tr$edge.length) ||
+          any(!is.finite(tr$edge.length)) || any(tr$edge.length < 0)) {
+        last_error <- "chronos returned an invalid tree."
+        next
+      }
 
-    res <- list(
-      tree = tr,
-      phiic = if (is.list(attr(tr, "PHIIC"))) attr(tr, "PHIIC")$PHIIC else NA_real_,
-      ploglik = attr(tr, "ploglik") %||% NA_real_,
-      fit_score = fit_score_chronos(tr),
-      attempt = attempt
-    )
+      res <- list(
+        tree = tr,
+        phiic = if (is.list(attr(tr, "PHIIC"))) attr(tr, "PHIIC")$PHIIC else NA_real_,
+        ploglik = attr(tr, "ploglik") %||% NA_real_,
+        fit_score = fit_score_chronos(tr),
+        attempt = attempt
+      )
+    }
     if (is.null(best) || res$fit_score < best$fit_score) best <- res
   }
 
@@ -517,13 +647,31 @@ resolve_treepl_bin <- function(user_bin, repo_dir) {
   ""
 }
 
-write_treepl_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsites, node_bounds) {
+write_treepl_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsites,
+                             node_bounds, thorough = TRUE, prime = TRUE,
+                             opt = NULL, plsimaniter = NULL, pliter = NULL,
+                             extra_lines = NULL) {
   lines <- c(
     paste0("treefile = ", tree_path),
     paste0("outfile = ", out_tree_path),
     paste0("numsites = ", as.integer(numsites)),
     paste0("smooth = ", fmt_num(smooth))
   )
+  ## Optimization settings (Smith & O'Meara 2012 strongly recommend thorough + prime)
+  if (isTRUE(thorough)) lines <- c(lines, "thorough")
+  if (isTRUE(prime))    lines <- c(lines, "prime")
+  if (!is.null(opt) && nzchar(opt))
+    lines <- c(lines, paste0("opt = ", as.integer(opt)))
+  if (!is.null(plsimaniter) && nzchar(plsimaniter))
+    lines <- c(lines, paste0("plsimaniter = ", as.integer(plsimaniter)))
+  if (!is.null(pliter) && nzchar(pliter))
+    lines <- c(lines, paste0("pliter = ", as.integer(pliter)))
+  if (length(extra_lines)) {
+    extra_lines <- trimws(as.character(extra_lines))
+    extra_lines <- extra_lines[nzchar(extra_lines)]
+    lines <- c(lines, extra_lines)
+  }
+  ## Calibration constraints
   for (i in seq_len(nrow(node_bounds))) {
     tag <- paste0("N", node_bounds$node[i])
     lines <- c(
@@ -538,16 +686,28 @@ write_treepl_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsite
   writeLines(lines, cfg_path)
 }
 
+parse_treepl_prime_lines <- function(log_path) {
+  if (!file.exists(log_path)) return(character(0))
+  txt <- readLines(log_path, warn = FALSE)
+  marker <- grep("PLACE THE LINES BELOW IN THE CONFIGURATION FILE", txt, fixed = TRUE)
+  if (!length(marker)) return(character(0))
+  out <- trimws(txt[(marker[1L] + 1L):length(txt)])
+  out <- out[
+    grepl("^(opt(ad|cvad)?\\s*=|moredetail(ad|cvad)?\\b)", out) &
+      !grepl("^[-]+$", out)
+  ]
+  unique(out[nzchar(out)])
+}
+
 run_treepl_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
   if (file.exists(log_path)) unlink(log_path)
-  cmd <- sprintf(
-    "OMP_NUM_THREADS=%d %s %s > %s 2>&1",
-    as.integer(omp_threads),
-    shQuote(treepl_bin),
-    shQuote(cfg_path),
-    shQuote(log_path)
-  )
-  suppressWarnings(system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE))
+  suppressWarnings(system2(
+    treepl_bin,
+    args = cfg_path,
+    stdout = log_path,
+    stderr = log_path,
+    env = paste0("OMP_NUM_THREADS=", as.integer(omp_threads))
+  ))
 }
 
 methods <- tolower(parse_chr_grid(kv[["methods"]] %||% "chronos,treepl,reltime", "--methods"))
@@ -565,12 +725,23 @@ if (length(bad_models)) stop("Unsupported chronos model(s): ", paste(bad_models,
 chronos_discrete_k <- parse_int_grid(kv[["chronos-discrete-k"]] %||% "5", "--chronos-discrete-k")
 chronos_retries <- as.integer(kv[["chronos-retries"]] %||% "2")
 if (!is.finite(chronos_retries) || chronos_retries < 1L) stop("--chronos-retries must be >= 1.")
+chronos_attempt_timeout <- as.numeric(kv[["chronos-attempt-timeout"]] %||% "0")
+if (!is.finite(chronos_attempt_timeout) || chronos_attempt_timeout < 0) {
+  stop("--chronos-attempt-timeout must be >= 0.")
+}
+chronos_iter_max <- as.integer(kv[["chronos-iter-max"]] %||% "10000")
+chronos_tol <- as.numeric(kv[["chronos-tol"]] %||% "1e-8")
 
 treepl_smoothing <- parse_num_grid(kv[["treepl-smoothing"]] %||% "0.01,0.1,1,10,100", "--treepl-smoothing")
 treepl_numsites <- as.integer(kv[["treepl-numsites"]] %||% "1000")
 treepl_threads <- as.integer(kv[["treepl-threads"]] %||% "1")
 if (!is.finite(treepl_numsites) || treepl_numsites < 1L) stop("--treepl-numsites must be >= 1.")
 if (!is.finite(treepl_threads) || treepl_threads < 1L) stop("--treepl-threads must be >= 1.")
+treepl_thorough <- !identical(tolower(kv[["treepl-thorough"]] %||% "TRUE"), "false")
+treepl_prime <- !identical(tolower(kv[["treepl-prime"]] %||% "TRUE"), "false")
+treepl_opt <- kv[["treepl-opt"]] %||% NULL
+treepl_plsimaniter <- kv[["treepl-plsimaniter"]] %||% NULL
+treepl_pliter <- kv[["treepl-pliter"]] %||% NULL
 
 reltime_sites <- as.integer(kv[["reltime-sites"]] %||% "1000")
 if (!is.finite(reltime_sites) || reltime_sites < 1L) stop("--reltime-sites must be >= 1.")
@@ -683,7 +854,10 @@ if ("chronos" %in% methods) {
           model = mdl,
           lambda = lam,
           nb_rate_cat = kcat,
-          retries = chronos_retries
+          retries = chronos_retries,
+          iter_max = chronos_iter_max,
+          tol = chronos_tol,
+          attempt_timeout = chronos_attempt_timeout
         )
         if (identical(run$status, "OK")) {
           ape::write.tree(run$tree, file = out_tree)
@@ -737,17 +911,41 @@ if ("treepl" %in% methods) {
     cfg_path <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", candidate, ".cfg"))
     out_tree <- file.path(outdir, "treepl", "trees", paste0(prefix, "_", candidate, ".tre"))
     log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".log"))
+    prime_cfg_path <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", candidate, ".prime.cfg"))
+    prime_log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".prime.log"))
     if (file.exists(out_tree)) unlink(out_tree)
-    write_treepl_cfg(cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds)
+    if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
+
+    prime_lines <- character(0)
+    if (isTRUE(treepl_prime)) {
+      write_treepl_cfg(
+        prime_cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
+        thorough = treepl_thorough, prime = TRUE,
+        opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter
+      )
+      run_treepl_one(treepl_bin, prime_cfg_path, prime_log_path, omp_threads = treepl_threads)
+      prime_lines <- parse_treepl_prime_lines(prime_log_path)
+      if (file.exists(out_tree)) unlink(out_tree)
+      if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
+    }
+
+    write_treepl_cfg(
+      cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
+      thorough = treepl_thorough, prime = FALSE,
+      opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
+      extra_lines = prime_lines
+    )
     exit_code <- run_treepl_one(treepl_bin, cfg_path, log_path, omp_threads = treepl_threads)
 
     status <- "FAILED"
     err <- tail_text(log_path)
-    if (identical(exit_code, 0L) && file.exists(out_tree)) {
+    ## treePL can exit non-zero (e.g. convergence warnings) yet still write
+    ## a valid output tree.  Check the tree file regardless of exit code.
+    if (file.exists(out_tree)) {
       tr <- try(ape::read.tree(out_tree), silent = TRUE)
       if (!inherits(tr, "try-error") && inherits(tr, "phylo") &&
-          !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length > 0)) {
-        status <- "OK"
+          !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length >= 0)) {
+        status <- if (identical(exit_code, 0L)) "OK" else "OK_NONZERO_EXIT"
         err <- NA_character_
         candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
           candidate = candidate,
@@ -766,7 +964,7 @@ if ("treepl" %in% methods) {
       smooth = smooth,
       status = status,
       exit_code = exit_code,
-      tree_file = if (identical(status, "OK")) out_tree else "",
+      tree_file = if (grepl("^OK", status)) out_tree else "",
       cfg_file = cfg_path,
       log_file = log_path,
       error = err %||% NA_character_,
@@ -777,7 +975,7 @@ if ("treepl" %in% methods) {
   treepl_df <- do.call(rbind, treepl_rows)
   write.csv(treepl_df, file.path(outdir, "treepl", paste0(prefix, "_treepl_runs.csv")), row.names = FALSE)
   all_rows[[length(all_rows) + 1L]] <- treepl_df
-  msg("treePL finished: ", sum(treepl_df$status == "OK"), "/", nrow(treepl_df), " successful.")
+  msg("treePL finished: ", sum(grepl("^OK", treepl_df$status)), "/", nrow(treepl_df), " successful.")
 }
 
 if ("reltime" %in% methods) {

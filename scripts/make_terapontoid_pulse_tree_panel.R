@@ -9,20 +9,20 @@ if (length(file_arg)) {
 }
 base_dir <- normalizePath(file.path(script_dir, '..'), winslash = '/', mustWork = TRUE)
 out_fig <- file.path(base_dir, "figures")
-out_csv <- normalizePath(file.path(base_dir, "..", "2_CHRONOS_CUSTOM_DATING_TREE_PIPELINE", "EXAMPLE_FILES", "OUTPUT_DEMO"),
-                         winslash = "/", mustWork = TRUE)
+example_dir <- normalizePath(file.path(base_dir, "examples", "terapontoid"),
+                             winslash = "/", mustWork = TRUE)
 
-tempo <- read.csv(file.path(out_csv, "summary_terap_empirical_model_fits.csv"), stringsAsFactors = FALSE)
+tempo <- read.csv(file.path(example_dir, "summary_terap_empirical_model_fits.csv"), stringsAsFactors = FALSE)
 tempo <- tempo[order(tempo$tempo_composite, tempo$tempo_mae_all), ]
 best2 <- tempo$model[1:2]
 worst2 <- tempo$model[(nrow(tempo)-1):nrow(tempo)]
 
 read_tree <- function(model) {
-  p <- file.path(out_csv, sprintf("Terapontoid_ML_MAIN_chronos_dated_model%s.tre", model))
+  p <- file.path(example_dir, sprintf("Terapontoid_ML_MAIN_chronos_dated_model%s.tre", model))
   read.tree(p)
 }
 
-phy <- read.tree(file.path(out_csv, "Terapontoid_ML_MAIN_phylogram_used.tree"))
+phy <- read.tree(file.path(example_dir, "Terapontoid_ML_MAIN_phylogram_used.tree"))
 mods <- list(
   discrete = read_tree("discrete"),
   clock = read_tree("clock"),
@@ -193,4 +193,4 @@ legend("top", inset = c(0, -0.02), horiz = TRUE,
        fill = c("#6baed6", "#fb6a4a"), bty = "n", cex = 1.1)
 dev.off()
 
-write.csv(tempo, file.path(out_csv, "summary_terap_empirical_model_fits_ranked.csv"), row.names = FALSE)
+write.csv(tempo, file.path(example_dir, "summary_terap_empirical_model_fits_ranked.csv"), row.names = FALSE)

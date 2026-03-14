@@ -48,6 +48,7 @@
 ##     v(H[p]) = sum_c  (n_c/n_p)^2 * (v_b[c] + v(H[c]))
 ##
 ##   CI = T[n] +/- 1.96 * sqrt(v(T[n])), truncated at calibration bounds.
+##   Output is reported for internal nodes only; tip ages are fixed at 0.
 ##############################################################
 
 # ---- helper: build children lookup ----------------------------------------
@@ -278,7 +279,8 @@ run_reltime <- function(phy, root_age, internal_cal = NULL) {
 #'                     (used to truncate CI lower bounds).
 #' @param cal_max      Named numeric: maximum age bound per calibration node.
 #' @return             data.frame with columns: node, age, ci_lo, ci_hi, se
-#'                     for internal nodes only.
+#'                     for internal nodes only; tips are omitted because their
+#'                     age is fixed at 0 by convention.
 reltime_ci <- function(phy, node_age, n_sites = 1000L,
                        root_var = 0, cal_min = NULL, cal_max = NULL) {
   n_tip     <- Ntip(phy)
@@ -316,9 +318,11 @@ reltime_ci <- function(phy, node_age, n_sites = 1000L,
         ci_hi[nd] <- min(ci_hi[nd], cal_max[[nm]])
     }
   }
-  # root is fixed
-  ci_lo[root_node] <- node_age[root_node]
-  ci_hi[root_node] <- node_age[root_node]
+  # Keep the root fixed only when there is no root-age uncertainty.
+  if (!is.finite(root_var) || root_var <= 0) {
+    ci_lo[root_node] <- node_age[root_node]
+    ci_hi[root_node] <- node_age[root_node]
+  }
 
   int_nodes <- seq.int(n_tip + 1L, n_tip + n_node)
   data.frame(
@@ -333,14 +337,15 @@ reltime_ci <- function(phy, node_age, n_sites = 1000L,
 #' Run RelTime and compute CIs in one call
 #'
 #' @param phy          Rooted phylogram.
-#' @param root_age     Exact root calibration age.
+#' @param root_age     Root calibration age (exact if root_window is NULL).
 #' @param internal_cal Optional data.frame(node, min_age) for Benchmark C.
 #' @param n_sites      Alignment length for CI variance (default 1000).
 #' @param root_window  Optional c(min, max) for root uncertainty. If provided,
 #'                     root_age is set to midpoint and root variance is derived
 #'                     from window width.
-#' @return             List with $tree (dated phylo), $ci (data.frame),
-#'                     $rates (per-branch implied rates), $RV_R (rate variance).
+#' @return             List with $tree (dated phylo), $ci (internal-node CI
+#'                     data.frame), $rates (per-branch implied rates),
+#'                     $RV_R (rate variance).
 run_reltime_with_ci <- function(phy, root_age, internal_cal = NULL,
                                 n_sites = 1000L, root_window = NULL) {
   n_tip     <- Ntip(phy)
@@ -373,8 +378,14 @@ run_reltime_with_ci <- function(phy, root_age, internal_cal = NULL,
 
   # Build calibration bound lookups for CI truncation
   cal_min <- cal_max <- NULL
-  cal_min[[as.character(root_node)]] <- root_age
-  cal_max[[as.character(root_node)]] <- root_age
+  if (!is.null(root_window) && length(root_window) == 2L && all(is.finite(root_window))) {
+    root_window <- sort(root_window)
+    cal_min[[as.character(root_node)]] <- root_window[1L]
+    cal_max[[as.character(root_node)]] <- root_window[2L]
+  } else {
+    cal_min[[as.character(root_node)]] <- root_age
+    cal_max[[as.character(root_node)]] <- root_age
+  }
   if (!is.null(internal_cal) && nrow(internal_cal) > 0L) {
     for (i in seq_len(nrow(internal_cal))) {
       key <- as.character(internal_cal$node[i])
@@ -405,8 +416,10 @@ run_reltime_with_ci <- function(phy, root_age, internal_cal = NULL,
       if (is.finite(nd)) ci_hi[nd] <- min(ci_hi[nd], cal_max[[nm]])
     }
   }
-  ci_lo[root_node] <- node_age[root_node]
-  ci_hi[root_node] <- node_age[root_node]
+  if (!is.finite(root_var) || root_var <= 0) {
+    ci_lo[root_node] <- node_age[root_node]
+    ci_hi[root_node] <- node_age[root_node]
+  }
 
   # Build dated tree
   dated <- phy

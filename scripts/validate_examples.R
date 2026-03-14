@@ -22,7 +22,13 @@ readme_lines <- readLines(readme_path, warn = FALSE)
 normalize_candidate <- function(x) {
   x <- gsub("`", "", x, fixed = TRUE)
   x <- trim(x)
-  x <- sub("^treePL \\(smooth *= *100\\)$", "treepl_best-smooth-100", x)
+  treepl_match <- regexec("^treePL \\(smooth *= *([^)]+)\\)$", x)
+  treepl_parts <- regmatches(x, treepl_match)
+  has_treepl <- lengths(treepl_parts) == 2L
+  if (any(has_treepl)) {
+    smooth_vals <- vapply(treepl_parts[has_treepl], `[`, character(1), 2L)
+    x[has_treepl] <- paste0("treepl_best-smooth-", smooth_vals)
+  }
   x
 }
 
@@ -178,7 +184,6 @@ assert_table_matches(
 
 table3 <- extract_table_after_heading("Example 3: Unpublished vertebrate dataset (derived outputs only)")
 csv3 <- read.csv(file.path(repo_dir, "examples", "unpublished_vertebrate", "postfit_metrics", "summary_unpublished_vertebrate_postfit_metrics.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-csv3$candidate <- ifelse(csv3$candidate == "treepl_best-smooth-100", "treePL (smooth = 100)", csv3$candidate)
 assert_table_matches(
   "Example 3",
   table3,

@@ -1,7 +1,7 @@
 "candidate","tree_file","pulse_default_selector_error","burst_loss","pulse_burst_selector_error","rate_irregularity","gap_mode","mean_relative_gap","ghost_mean_ma","ghost_median_ma","min_violation_count","min_violation_sum_ma","max_violation_count","max_violation_sum_ma","rank_pulse_overall","rank_burst_loss","rank_pulse_burst","rank_pulse_family_mean","rank_pulse_family","rank_mean_relative_gap","rank_rate_irregularity","core_n_families_ranked","rank_mean_core","rank_mean_core_rank"
-"chronos_discrete","Terapontoid_ML_MAIN_chronos_dated_modeldiscrete.tre",0.160337215903896,0.134555576459941,0.146221671457616,2.59815731187183,NA,NA,NA,NA,NA,NA,NA,NA,2,3,2,2.33333333333333,2,NA,2,2,2,1
-"chronos_clock","Terapontoid_ML_MAIN_chronos_dated_modelclock.tre",0.160469741112739,0.134784538488326,0.146380729357479,2.5860551088971,NA,NA,NA,NA,NA,NA,NA,NA,3,4,3,3.33333333333333,3,NA,1,2,2,1
-"chronos_correlated","Terapontoid_ML_MAIN_chronos_dated_modelcorrelated.tre",0.172202391180201,0.115781721123169,0.147769183363101,3.45655339283343,NA,NA,NA,NA,NA,NA,NA,NA,4,2,4,3.33333333333333,3,NA,3,2,3,3
-"chronos_relaxed","Terapontoid_ML_MAIN_chronos_dated_modelrelaxed.tre",0.194923242490654,0.138203784078348,0.168370680371313,4.55353338186172,NA,NA,NA,NA,NA,NA,NA,NA,6,5,6,5.66666666666667,6,NA,5,2,5.5,6
-"treePL","Terapontoid_ML_MAIN_treePL_congruify.tre",0.172936504455981,0.154985150731166,0.160374912278906,3.4631278738243,NA,NA,NA,NA,NA,NA,NA,NA,5,6,5,5.33333333333333,5,NA,4,2,4.5,5
-"RelTime","Terapontoid_ML_MAIN_RelTime_full_bounds.tre",0.150074831155983,0.114527405741533,0.132800559242561,6.60655673410533,NA,NA,NA,NA,NA,NA,NA,NA,1,1,1,1,1,NA,6,2,3.5,4
+"chronos_discrete","Terapontoid_ML_MAIN_chronos_dated_modeldiscrete.tre",0.160459510845201,0.134867511217231,0.146401149662806,2.59458706806579,NA,NA,NA,NA,NA,NA,NA,NA,3,3,3,3,3,NA,2,2,2.5,2
+"chronos_clock","Terapontoid_ML_MAIN_chronos_dated_modelclock.tre",0.160439246917414,0.134842087550551,0.14638064053924,2.58968894324582,NA,NA,NA,NA,NA,NA,NA,NA,2,2,2,2,2,NA,1,2,1.5,1
+"chronos_correlated","Terapontoid_ML_MAIN_chronos_dated_modelcorrelated.tre",0.213977193754422,0.279697051877487,0.22753551653614,4.6401179321326,NA,NA,NA,NA,NA,NA,NA,NA,5,5,5,5,5,NA,5,2,5,5
+"chronos_relaxed","Terapontoid_ML_MAIN_chronos_dated_modelrelaxed.tre",0.213977196275065,0.279697056944003,0.227535519743724,4.64009038186944,NA,NA,NA,NA,NA,NA,NA,NA,6,6,6,6,6,NA,4,2,5,5
+"treePL","Terapontoid_ML_MAIN_treePL_congruify.tre",0.199473570576825,0.249212288212553,0.208325505804183,3.12936645363149,NA,NA,NA,NA,NA,NA,NA,NA,4,4,4,4,4,NA,3,2,3.5,3
+"RelTime","Terapontoid_ML_MAIN_RelTime_full_bounds.tre",0.150074831155983,0.114527405741533,0.132800559242561,6.60655673410533,NA,NA,NA,NA,NA,NA,NA,NA,1,1,1,1,1,NA,6,2,3.5,3

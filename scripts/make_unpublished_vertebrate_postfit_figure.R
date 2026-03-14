@@ -11,16 +11,26 @@ infile <- file.path(base_dir, 'examples', 'unpublished_vertebrate', 'postfit_met
 outfile <- file.path(base_dir, 'figures', 'unpublished_vertebrate_postfit_metric_family_values.png')
 d <- read.csv(infile, stringsAsFactors = FALSE)
 d <- d[order(d$rank_mean_core_rank, d$rank_mean_core), ]
-label_map <- c(
-  chronos_clock='Chronos clock',
-  chronos_correlated='Chronos correlated',
-  chronos_relaxed='Chronos relaxed',
-  chronos_discrete='Chronos discrete',
-  `treepl_best-smooth-100`='treePL (smooth=100)',
-  RelTime='RelTime'
+labels <- ifelse(
+  grepl('^treepl_best-smooth-', d$candidate),
+  paste0('treePL (smooth=', sub('^treepl_best-smooth-', '', d$candidate), ')'),
+  unname(c(
+    chronos_clock='Chronos clock',
+    chronos_correlated='Chronos correlated',
+    chronos_relaxed='Chronos relaxed',
+    chronos_discrete='Chronos discrete',
+    RelTime='RelTime'
+  )[d$candidate])
 )
-labels <- unname(label_map[d$candidate])
-cols <- c('#1b9e77','#2c7fb8','#7570b3','#d95f0e','#6baed6','#d7301f')[match(d$candidate, c('chronos_clock','chronos_correlated','chronos_relaxed','chronos_discrete','treepl_best-smooth-100','RelTime'))]
+color_key <- ifelse(grepl('^treepl_best-smooth-', d$candidate), 'treePL', d$candidate)
+cols <- unname(c(
+  chronos_clock = '#1b9e77',
+  chronos_correlated = '#2c7fb8',
+  chronos_relaxed = '#7570b3',
+  chronos_discrete = '#d95f0e',
+  treePL = '#6baed6',
+  RelTime = '#d7301f'
+)[color_key])
 png(outfile, width = 3000, height = 1500, res = 170)
 layout(matrix(1:6, nrow = 2, byrow = TRUE))
 par(mar = c(10, 5, 4, 1), oma = c(2.5, 0.2, 2.3, 0.2))
