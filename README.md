@@ -1,6 +1,7 @@
 # PhyloChronoRank (PCR)
 
 `PhyloChronoRank (PCR)` has two entry tabs.
+It "amplifies" the signal already present in finished time trees by scoring them under a common set of diagnostics.
 
 ## [1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS](1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md)
 
