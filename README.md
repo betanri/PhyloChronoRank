@@ -290,7 +290,7 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 
 ### Quick takeaway
 
-- `treePL (smooth = 100)` is the current core PCR winner in this refreshed comparison
+- `treePL` is the current core PCR winner in this refreshed comparison
 - `chronos_clock` is the runner-up under the family-balanced core rank
 - `RelTime` dominates the pulse and gap layers but is the worst tree on `rate irregularity`
 - `chronos_correlated`, `chronos_relaxed`, and the retained discrete tree all remain much worse on pulse, gap, and rate
@@ -321,7 +321,7 @@ The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `r
 
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate irregularity | core overall mean rank (pulse = 1/3) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `treePL (smooth = 100)` | `0.1550` | `0.2098` | `0.2216` | `0.2409` | `1.4521` | `2.00` |
+| `treePL` | `0.1550` | `0.2098` | `0.2216` | `0.2409` | `1.4521` | `2.00` |
 | `chronos_clock` | `0.1607` | `0.2106` | `0.2233` | `0.1239` | `1.5929` | `2.33` |
 | `RelTime` | `0.0449` | `0.1164` | `0.1539` | `0.0072` | `6.3142` | `2.67` |
 | `chronos_correlated` | `0.3312` | `0.3066` | `0.2824` | `0.3816` | `3.6494` | `4.00` |
@@ -336,17 +336,17 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 
 ### Interpretation for this example
 
-- `treePL (smooth = 100)` is the current core PCR winner in this refreshed comparison
+- `treePL` is the current core PCR winner in this refreshed comparison
 - `chronos_clock` is now the balanced runner-up
 - `RelTime` is the strongest tree on all three pulse summaries and also has the smallest `mean relative gap`
-- `treePL (smooth = 100)` now has the cleanest `rate irregularity` in the set while staying close to `chronos_clock` on the pulse layer
+- `treePL` now has the cleanest `rate irregularity` in the set while staying close to `chronos_clock` on the pulse layer
 - the retained `chronos_discrete` tree remains a weak candidate, and the refreshed `chronos_correlated` and `chronos_relaxed` trees are no better
 - `chronos_correlated` and `chronos_relaxed` both score poorly across the full post-fit layer, especially on `rate irregularity` and `mean relative gap`
 - in this dataset, the refreshed post-fit layer currently supports `treePL` as the best balanced tree, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap specialist
 
 ### Practical decision rule
 
-1. If you want one core PCR winner in the current refreshed comparison, choose `treePL (smooth = 100)`.
+1. If you want one core PCR winner in the current refreshed comparison, choose `treePL`.
 2. If you want the closest alternative under a balanced three-family view, choose `chronos_clock`.
 3. If your priority is preserving branching tempo and staying closest to the calibration minima, consider `RelTime`, but report its poor `rate irregularity` explicitly.
 4. If you report multiple candidate chronograms, the main contrast is now `treePL` as the balanced winner, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap alternative.
