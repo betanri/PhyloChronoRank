@@ -42,7 +42,7 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
-- `ChronosCI` is a repo-local delta-method CI path for finished `chronos` trees, and `TreePL-CI` is the parallel repo-local CI path for finished `treePL` trees; both adapt the same Tao et al. variance framework used for the RelTime CI derivation, but `treePL` itself is still used here as a point-estimation method rather than as a native CI method
+- `ChronosCI` is a repo-local delta-method CI path for finished `chronos` trees, and `TreePL-CI` is the parallel repo-local CI path for finished `treePL` trees; both adapt the same Tao et al. variance framework used for the RelTime CI derivation. `TreePL-CI` is computed by the repo after `treePL` writes the dated point tree; it is not a native `treePL` output.
 
 In other words, the shipped `treePL` path here is not a minimal one-shot wrapper. It runs the recommended `prime + thorough` workflow from R, then validates the dated output tree before adding it to `candidates.csv`.
 
@@ -316,7 +316,7 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
-- `ChronosCI` summaries for `chronos` trees, plus the matching `TreePL-CI` summaries for `treePL` trees, are written with the repo-local helper in `scripts/chronos_ci_helpers.R`
+- `ChronosCI` summaries for `chronos` trees, plus the matching repo-computed `TreePL-CI` summaries for `treePL` trees, are written with the repo-local helper in `scripts/chronos_ci_helpers.R`
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
 - `RelTime` CI files can still become numerically unstable when hard bounds create very short internal branches
