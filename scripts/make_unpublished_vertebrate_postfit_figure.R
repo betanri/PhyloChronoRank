@@ -40,9 +40,20 @@ if (has_uncertainty) {
 }
 par(mar = c(10, 5, 4, 1), oma = c(2.5, 0.2, 2.3, 0.2))
 plot_panel <- function(vals, ttl, ylab) {
-  bp <- barplot(vals, names.arg = labels, col = cols, las = 2, ylab = ylab, main = ttl,
-                ylim = c(0, max(vals, na.rm = TRUE) * 1.22), cex.names = 0.88)
-  text(bp, vals, labels = sprintf('%.3f', vals), pos = 3, cex = 0.85)
+  vals_num <- as.numeric(vals)
+  vals_plot <- vals_num
+  vals_plot[!is.finite(vals_plot)] <- 0
+  ylim_max <- max(vals_num[is.finite(vals_num)], na.rm = TRUE)
+  if (!is.finite(ylim_max) || ylim_max <= 0) ylim_max <- 1
+  bp <- barplot(vals_plot, names.arg = labels, col = cols, las = 2, ylab = ylab, main = ttl,
+                ylim = c(0, ylim_max * 1.22), cex.names = 0.88)
+  ok <- is.finite(vals_num)
+  if (any(ok)) {
+    text(bp[ok], vals_num[ok], labels = sprintf('%.3f', vals_num[ok]), pos = 3, cex = 0.85)
+  }
+  if (any(!ok)) {
+    text(bp[!ok], 0, labels = 'not scored', pos = 3, cex = 0.78, xpd = TRUE)
+  }
   mtext('Lower is better', side = 1, line = 7.3, cex = 0.9)
 }
 plot_panel(d$burst_loss, 'Burst loss', 'Burst loss')
@@ -62,7 +73,7 @@ mtext('Lower is better', side = 1, line = 7.0, cex = 0.9)
 mtext('Unpublished vertebrate example: post-fit evaluation metrics across selected chronograms', side = 3, outer = TRUE, line = 0.5, cex = 1.5, font = 2)
 mtext(
   if (has_uncertainty) {
-    'Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3). Uncertainty width is shown separately as an optional precision layer.'
+    'Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3). Uncertainty width is shown separately as an optional precision layer; blank bars mean not scored.'
   } else {
     'Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3).'
   },

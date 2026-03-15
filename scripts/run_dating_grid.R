@@ -26,6 +26,9 @@ usage <- function() {
       "[--treepl-bin=/path/to/treePL]",
       "[--root-age=123.4]",
       "[--ci-sites=1000]",
+      "[--chronos-ci-type=parametric]",
+      "[--chronos-ci-reps=100]",
+      "[--chronos-pml-rds=FIT.rds]",
       "[--calibration-tag=NAME]",
       sep = " "
     ),
@@ -61,7 +64,10 @@ usage <- function() {
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
     "  --chronos-iter-max      Maximum iterations for chronos optimizer. Default: 10000 (ape default).\n",
     "  --chronos-tol           Convergence tolerance for chronos. Default: 1e-8 (ape default).\n",
-    "  --ci-sites              Alignment length used for ChronosCI, TreePL-CI, and RelTime CI summaries. Default: 1000.\n",
+    "  --ci-sites              Alignment length used for optional uncertainty summaries. Default: 1000.\n",
+    "  --chronos-ci-type       chronos bootstrap type: nonparametric, semiparametric, or parametric. Default: parametric.\n",
+    "  --chronos-ci-reps       chronos bootstrap replicates. Default: 100.\n",
+    "  --chronos-pml-rds       Optional RDS containing a phangorn pml.output for nonparametric/semiparametric chronos bootstrap.\n",
     "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
     "  --help                  Print this message.\n",
     sep = ""
@@ -190,6 +196,24 @@ build_ci_inputs <- function(phy, node_bounds) {
     cal_max = cal_max,
     calib_bundle = list(chronos_calib = calib_df)
   )
+}
+
+make_unscored_uncertainty_row <- function(candidate, source = "not_scored") {
+  ci_width_summary(
+    candidate,
+    data.frame(ci_lo = numeric(), ci_hi = numeric(), stringsAsFactors = FALSE),
+    source = source
+  )
+}
+
+load_chronos_pml_output <- function(path) {
+  if (!nzchar(path)) return(NULL)
+  obj <- readRDS(normalizePath(path, winslash = "/", mustWork = TRUE))
+  if (is.list(obj) && !is.null(obj$pml_output)) obj <- obj$pml_output
+  if (!is.list(obj) || is.null(obj$tree)) {
+    stop("--chronos-pml-rds must contain a phangorn pml.output object or a list with $pml_output.")
+  }
+  obj
 }
 
 is_nexus_file <- function(path, max_lines = 50L) {
@@ -776,6 +800,17 @@ treepl_pliter <- kv[["treepl-pliter"]] %||% NULL
 
 ci_sites <- as.integer(kv[["ci-sites"]] %||% kv[["reltime-sites"]] %||% "1000")
 if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
+chronos_ci_type <- kv[["chronos-ci-type"]] %||% "parametric"
+chronos_ci_reps <- as.integer(kv[["chronos-ci-reps"]] %||% "100")
+if (!is.finite(chronos_ci_reps) || chronos_ci_reps < 1L) stop("--chronos-ci-reps must be >= 1.")
+chronos_pml_output <- load_chronos_pml_output(kv[["chronos-pml-rds"]] %||% "")
+if (!nzchar(chronos_ci_type)) stop("--chronos-ci-type must be non-empty.")
+if (!(chronos_ci_type %in% c("nonparametric", "semiparametric", "parametric"))) {
+  stop("--chronos-ci-type must be one of nonparametric, semiparametric, parametric.")
+}
+if (chronos_ci_type %in% c("nonparametric", "semiparametric") && is.null(chronos_pml_output)) {
+  stop("--chronos-pml-rds is required for --chronos-ci-type=", chronos_ci_type, ".")
+}
 
 phy_file <- normalizePath(kv[["phylogram"]], winslash = "/", mustWork = TRUE)
 phy_tree_name <- kv[["phylogram-tree-name"]] %||% ""
@@ -901,10 +936,12 @@ if ("chronos" %in% methods) {
             chronos_ci(
               phy,
               run$tree,
+              pml_output = chronos_pml_output,
+              calibration = chronos_calib,
+              B = chronos_ci_reps,
+              type = chronos_ci_type,
               n_sites = ci_sites,
-              root_var = ci_inputs$root_var,
-              cal_min = ci_inputs$cal_min,
-              cal_max = ci_inputs$cal_max
+              quiet = TRUE
             ),
             silent = TRUE
           )
@@ -913,10 +950,14 @@ if ("chronos" %in% methods) {
             uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
               candidate,
               ci_res,
-              source = "ChronosCI"
+              source = "chronos-bootstrap"
             )
           } else {
             out_ci <- ""
+            uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(
+              candidate,
+              source = "not_scored"
+            )
           }
           candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
             candidate = candidate,
@@ -1008,21 +1049,10 @@ if ("treepl" %in% methods) {
           !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length >= 0)) {
         status <- if (identical(exit_code, 0L)) "OK" else "OK_NONZERO_EXIT"
         err <- NA_character_
-        out_ci <- file.path(outdir, "treepl", "ci", paste0(prefix, "_", candidate, "_ci.csv"))
-        ci_res <- try(
-          treepl_ci(phy, tr, ci_inputs$calib_bundle, n_sites = ci_sites),
-          silent = TRUE
+        uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(
+          candidate,
+          source = "not_scored"
         )
-        if (!inherits(ci_res, "try-error")) {
-          write.csv(ci_res, out_ci, row.names = FALSE)
-          uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
-            candidate,
-            ci_res,
-            source = "TreePL-CI"
-          )
-        } else {
-          out_ci <- ""
-        }
         candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
           candidate = candidate,
           tree_file = out_tree,
@@ -1041,8 +1071,8 @@ if ("treepl" %in% methods) {
       status = status,
       exit_code = exit_code,
       tree_file = if (grepl("^OK", status)) out_tree else "",
-      ci_file = if (grepl("^OK", status)) out_ci else "",
-      n_sites = if (grepl("^OK", status) && nzchar(out_ci)) ci_sites else NA_integer_,
+      ci_file = "",
+      n_sites = NA_integer_,
       cfg_file = cfg_path,
       log_file = log_path,
       error = err %||% NA_character_,
@@ -1152,6 +1182,9 @@ meta_lines <- c(
   paste0("Calibration source: ", if (has_csv) "csv" else "congruify"),
   if (has_csv) paste0("Calibration CSV: ", normalizePath(kv[["calibrations-csv"]], winslash = "/", mustWork = TRUE)) else paste0("Reference time tree: ", normalizePath(kv[["reference-time-tree"]], winslash = "/", mustWork = TRUE)),
   if (is.finite(root_age)) paste0("Root age appended: ", fmt_num(root_age)) else "Root age appended: none",
+  paste0("chronos bootstrap type: ", chronos_ci_type),
+  paste0("chronos bootstrap replicates: ", chronos_ci_reps),
+  paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
   paste0("Calibration pairs input: ", nrow(pair_df)),
   paste0("Calibration pairs mapped: ", nrow(pair_map$mapped)),
   paste0("Calibration bounds retained: ", nrow(node_bounds)),

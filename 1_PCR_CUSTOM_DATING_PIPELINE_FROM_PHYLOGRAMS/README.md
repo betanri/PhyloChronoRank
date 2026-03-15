@@ -8,7 +8,7 @@ The script is designed for one specific use case:
 - define one shared calibration source
 - run the same effective calibration set through `chronos`, `treePL`, and `RelTime`
 - collect all successful dated trees into one `candidates.csv` that can be passed directly into `scripts/run_pcr.R`
-- write a shared optional uncertainty summary from method-specific CI outputs when those intervals are computed
+- write a shared optional uncertainty summary from `chronos` bootstrap and `RelTime` CI outputs when those intervals are computed, while marking other candidates as `not scored`
 
 ## What It Runs
 
@@ -17,7 +17,7 @@ The script is designed for one specific use case:
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` across a smoothing grid
 - `RelTime` with the same merged node bounds used for the other methods
-- repo-local delta-method confidence intervals for the successful `chronos`, `treePL`, and `RelTime` trees
+- `chronos` bootstrap confidence intervals through the vendored Paradis/Brown/Claramunt/Schliep helper and `RelTime` confidence intervals through the repo-local RelTime helper
 
 For `treePL`, the default repo path is the recommended two-step run:
 
@@ -42,7 +42,9 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
-- `ChronosCI` is a repo-local delta-method CI path for finished `chronos` trees, and `TreePL-CI` is the parallel repo-local CI path for finished `treePL` trees; both adapt the same Tao et al. variance framework used for the RelTime CI derivation. `TreePL-CI` is computed by the repo after `treePL` writes the dated point tree; it is not a native `treePL` output.
+- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
+- `treePL` is treated here as a point-dating method; no repo-generated `treePL` CI is written
+- `RelTime` confidence intervals come from the repo-local Tao-style helper in `scripts/reltime_helpers.R`
 
 In other words, the shipped `treePL` path here is not a minimal one-shot wrapper. It runs the recommended `prime + thorough` workflow from R, then validates the dated output tree before adding it to `candidates.csv`.
 
@@ -214,7 +216,6 @@ Method-specific outputs:
 - `treepl/configs/*.cfg`
 - `treepl/logs/*.log`
 - `treepl/trees/*.tre`
-- `treepl/ci/*.csv`
 - `treepl/<prefix>_treepl_runs.csv`
 - `reltime/<prefix>_RelTime.tre`
 - `reltime/<prefix>_RelTime_ci.csv`
@@ -316,7 +317,8 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
-- `ChronosCI` summaries for `chronos` trees, plus the matching repo-computed `TreePL-CI` summaries for `treePL` trees, are written with the repo-local helper in `scripts/chronos_ci_helpers.R`
+- `chronos` uncertainty summaries are written with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`
+- `treePL` candidates are carried forward as point trees; if you want a `treePL` uncertainty layer, supply it externally later through PCR's `--uncertainty-csv`
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
 - `RelTime` CI files can still become numerically unstable when hard bounds create very short internal branches

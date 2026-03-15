@@ -42,10 +42,21 @@ if (has_uncertainty) {
 }
 par(mar = c(8, 5, 4, 1), oma = c(2.4, 0.2, 2.2, 0.2))
 plot_panel <- function(vals, ttl, ylab, note) {
-  bp <- barplot(vals, names.arg = labels, col = cols, las = 2,
+  vals_num <- as.numeric(vals)
+  vals_plot <- vals_num
+  vals_plot[!is.finite(vals_plot)] <- 0
+  ylim_max <- max(vals_num[is.finite(vals_num)], na.rm = TRUE)
+  if (!is.finite(ylim_max) || ylim_max <= 0) ylim_max <- 1
+  bp <- barplot(vals_plot, names.arg = labels, col = cols, las = 2,
                 ylab = ylab, main = ttl,
-                ylim = c(0, max(vals, na.rm = TRUE) * 1.22), cex.names = 0.95)
-  text(bp, vals, labels = sprintf('%.3f', vals), pos = 3, cex = 0.85)
+                ylim = c(0, ylim_max * 1.22), cex.names = 0.95)
+  ok <- is.finite(vals_num)
+  if (any(ok)) {
+    text(bp[ok], vals_num[ok], labels = sprintf('%.3f', vals_num[ok]), pos = 3, cex = 0.85)
+  }
+  if (any(!ok)) {
+    text(bp[!ok], 0, labels = 'not scored', pos = 3, cex = 0.78, xpd = TRUE)
+  }
   mtext(note, side = 1, line = 6.4, cex = 0.9)
 }
 plot_panel(d$burst_loss, 'Burst loss', 'Burst loss', 'Lower is better')
@@ -68,7 +79,7 @@ mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
 mtext('Terapontoid example: post-fit evaluation metrics across chronos models, treePL, and RelTime', side = 3, outer = TRUE, line = 0.5, cex = 1.55, font = 2)
 mtext(
   if (has_uncertainty) {
-    'Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Uncertainty width is shown separately as an optional precision layer. Gap burden is not computed because these trees were dated with congruified / secondary calibrations.'
+    'Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Uncertainty width is shown separately as an optional precision layer; blank bars mean not scored. Gap burden is not computed because these trees were dated with congruified / secondary calibrations.'
   } else {
     'Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Gap burden is not computed because these trees were dated with congruified / secondary calibrations.'
   },

@@ -62,6 +62,14 @@ build_ci_inputs_local <- function(phy, calibration_df) {
   )
 }
 
+make_unscored_uncertainty_row <- function(candidate, source = "not_scored") {
+  ci_width_summary(
+    candidate,
+    data.frame(ci_lo = numeric(), ci_hi = numeric(), stringsAsFactors = FALSE),
+    source = source
+  )
+}
+
 append_candidate_row <- function(cand, candidate_name, tree_file) {
   if (!all(c("candidate", "tree_file") %in% names(cand))) {
     stop("Candidate table must contain candidate and tree_file columns.")
@@ -82,12 +90,52 @@ sanitize_tree_file_column <- function(path) {
   write.csv(df, path, row.names = FALSE)
 }
 
+load_terap_chronos_settings <- function() {
+  fit_path <- file.path(base_dir, "examples", "terapontoid", "summary_terap_empirical_model_fits.csv")
+  fit_df <- read.csv(fit_path, stringsAsFactors = FALSE)
+  fit_df$tree_key <- basename(fit_df$dated_tree_file)
+  split(
+    data.frame(
+      model = fit_df$model,
+      lambda = as.numeric(fit_df$best_phiic_lambda),
+      nb_rate_cat = as.numeric(fit_df$best_phiic_nb_rate_cat),
+      stringsAsFactors = FALSE
+    ),
+    fit_df$tree_key
+  )
+}
+
+load_vgp_chronos_settings <- function(vgp_dir) {
+  fit_path <- file.path(vgp_dir, "chronos_empirical_out_full_per_model", "summary_fulltree_per_model_selected.csv")
+  fit_df <- read.csv(fit_path, stringsAsFactors = FALSE)
+  fit_df$tree_key <- basename(fit_df$out_tree)
+  split(
+    data.frame(
+      model = fit_df$model,
+      lambda = as.numeric(fit_df$lambda),
+      nb_rate_cat = as.numeric(fit_df$nb_rate_cat),
+      stringsAsFactors = FALSE
+    ),
+    fit_df$tree_key
+  )
+}
+
+get_chronos_settings <- function(settings_map, tree_path) {
+  tree_key <- basename(tree_path)
+  hit <- settings_map[[tree_key]]
+  if (is.null(hit) || !nrow(hit)) {
+    stop("No chronos settings found for tree: ", tree_key)
+  }
+  hit[1, , drop = FALSE]
+}
+
 write_terap_outputs <- function() {
   ex_dir <- file.path(base_dir, "examples", "terapontoid")
   ref_tree <- read.tree(file.path(ex_dir, "Terapontoid_ML_MAIN_phylogram_used.tree"))
   cal_df <- read.csv(file.path(ex_dir, "Terapontoid_ML_MAIN_calibrations_used.csv"), stringsAsFactors = FALSE)
   ci_inputs <- build_ci_inputs_local(ref_tree, cal_df)
   cand <- read.csv(file.path(ex_dir, "candidates.csv"), stringsAsFactors = FALSE)
+  chronos_settings <- load_terap_chronos_settings()
 
   uncertainty_rows <- list()
   for (i in seq_len(nrow(cand))) {
@@ -97,25 +145,40 @@ write_terap_outputs <- function() {
       ci_path <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds_ci.csv")
       ci_df <- read.csv(ci_path, stringsAsFactors = FALSE)
       source_tag <- "RelTime-CI"
-    } else {
+    } else if (startsWith(candidate, "chronos_")) {
       tr <- read.tree(tree_path)
+      meta <- get_chronos_settings(chronos_settings, tree_path)
       ci_path <- sub("\\.tre$", "_ci.csv", tree_path)
-      if (candidate == "treePL") {
-        ci_df <- treepl_ci(ref_tree, tr, ci_inputs$calib_bundle, n_sites = 1000L)
-        source_tag <- "TreePL-CI"
-      } else {
-        ci_df <- chronos_ci(
+      ci_try <- try(
+        chronos_ci(
           ref_tree, tr,
+          calibration = ci_inputs$calib_bundle$chronos_calib,
+          B = as.integer(kv[["chronos-ci-reps"]] %||% "100"),
+          type = kv[["chronos-ci-type"]] %||% "parametric",
           n_sites = 1000L,
-          root_var = ci_inputs$root_var,
-          cal_min = ci_inputs$cal_min,
-          cal_max = ci_inputs$cal_max
-        )
-        source_tag <- "ChronosCI"
+          model = meta$model[1],
+          lambda = meta$lambda[1],
+          nb_rate_cat = meta$nb_rate_cat[1],
+          quiet = TRUE
+        ),
+        silent = TRUE
+      )
+      source_tag <- "chronos-bootstrap"
+      if (inherits(ci_try, "try-error")) {
+        ci_df <- data.frame(ci_lo = numeric(), ci_hi = numeric())
+      } else {
+        ci_df <- ci_try
+        write.csv(ci_df, ci_path, row.names = FALSE)
       }
-      write.csv(ci_df, ci_path, row.names = FALSE)
+    } else {
+      ci_df <- data.frame(ci_lo = numeric(), ci_hi = numeric())
+      source_tag <- "not_scored"
     }
-    uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(candidate, ci_df, source = source_tag)
+    if (!nrow(ci_df)) {
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(candidate, source = source_tag)
+    } else {
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(candidate, ci_df, source = source_tag)
+    }
   }
 
   uncertainty_file <- file.path(ex_dir, "uncertainty_summary_long.csv")
@@ -160,6 +223,7 @@ write_vgp_outputs <- function() {
     cand <- read.csv(cand_file, stringsAsFactors = FALSE)
     cand <- append_candidate_row(cand, "RelTime", rel_tree_file)
   }
+  chronos_settings <- load_vgp_chronos_settings(vgp_dir)
 
   uncertainty_rows <- list()
   for (i in seq_len(nrow(cand))) {
@@ -170,23 +234,39 @@ write_vgp_outputs <- function() {
       if (!file.exists(rel_ci_path)) rel_ci_path <- rel_ci_file
       ci_df <- read.csv(rel_ci_path, stringsAsFactors = FALSE)
       source_tag <- "RelTime-CI"
-    } else {
+    } else if (startsWith(candidate, "chronos_")) {
       tr <- read.tree(tree_path)
-      if (grepl("^treepl", candidate, ignore.case = TRUE)) {
-        ci_df <- treepl_ci(ref_tree, tr, ci_inputs$calib_bundle, n_sites = 1000L)
-        source_tag <- "TreePL-CI"
-      } else {
-        ci_df <- chronos_ci(
+      meta <- get_chronos_settings(chronos_settings, tree_path)
+      ci_try <- try(
+        chronos_ci(
           ref_tree, tr,
+          calibration = ci_inputs$calib_bundle$chronos_calib,
+          B = as.integer(kv[["chronos-ci-reps"]] %||% "100"),
+          type = kv[["chronos-ci-type"]] %||% "parametric",
           n_sites = 1000L,
-          root_var = ci_inputs$root_var,
-          cal_min = ci_inputs$cal_min,
-          cal_max = ci_inputs$cal_max
-        )
-        source_tag <- "ChronosCI"
+          model = meta$model[1],
+          lambda = meta$lambda[1],
+          nb_rate_cat = meta$nb_rate_cat[1],
+          quiet = TRUE
+        ),
+        silent = TRUE
+      )
+      if (inherits(ci_try, "try-error")) {
+        ci_df <- data.frame(ci_lo = numeric(), ci_hi = numeric())
+        source_tag <- "not_scored"
+      } else {
+        ci_df <- ci_try
+        source_tag <- "chronos-bootstrap"
       }
+    } else {
+      ci_df <- data.frame(ci_lo = numeric(), ci_hi = numeric())
+      source_tag <- "not_scored"
     }
-    uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(candidate, ci_df, source = source_tag)
+    if (!nrow(ci_df)) {
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(candidate, source = source_tag)
+    } else {
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(candidate, ci_df, source = source_tag)
+    }
   }
 
   out_uncertainty_file <- file.path(

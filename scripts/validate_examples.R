@@ -76,7 +76,18 @@ extract_table_after_heading <- function(example_heading, table_heading = "### Ra
 
 fmt_num <- function(x, digits) sprintf(paste0("%.", digits, "f"), as.numeric(x))
 
-assert_table_matches <- function(name, table_df, csv_df, mapping, digits, candidate_transform = identity) {
+fmt_table_value <- function(x, digits, na_label = "NA") {
+  x_num <- suppressWarnings(as.numeric(x))
+  out <- character(length(x_num))
+  ok <- is.finite(x_num)
+  out[ok] <- sprintf(paste0("%.", digits, "f"), x_num[ok])
+  out[!ok] <- na_label
+  out
+}
+
+assert_table_matches <- function(name, table_df, csv_df, mapping, digits,
+                                 candidate_transform = identity,
+                                 na_labels = NULL) {
   table_df$candidate <- normalize_candidate(table_df$candidate)
   csv_df$candidate <- normalize_candidate(candidate_transform(csv_df$candidate))
   table_df <- table_df[order(table_df$candidate), , drop = FALSE]
@@ -92,7 +103,8 @@ assert_table_matches <- function(name, table_df, csv_df, mapping, digits, candid
     csv_col <- mapping[[col_label]]
     digs <- digits[[col_label]]
     left <- table_df[[col_label]]
-    right <- fmt_num(csv_df[[csv_col]], digs)
+    na_label <- if (!is.null(na_labels) && col_label %in% names(na_labels)) na_labels[[col_label]] else "NA"
+    right <- fmt_table_value(csv_df[[csv_col]], digs, na_label = na_label)
     if (!identical(left, right)) {
       fail(name, ": mismatch in column '", col_label, "'.\nREADME: ",
            paste(left, collapse = ", "),
@@ -182,6 +194,9 @@ assert_table_matches(
     "rate irregularity" = 4,
     "uncertainty width (mean CI width, Ma)" = 2,
     "overall mean rank (pulse = 1/2)" = 2
+  ),
+  na_labels = c(
+    "uncertainty width (mean CI width, Ma)" = "not scored"
   )
 )
 
@@ -209,7 +224,10 @@ assert_table_matches(
     "uncertainty width (mean CI width, Ma)" = 2,
     "core overall mean rank (pulse = 1/3)" = 2
   ),
-  candidate_transform = function(x) sub("^treepl_best-smooth-[^,]+$", "treePL", x)
+  candidate_transform = function(x) sub("^treepl_best-smooth-[^,]+$", "treePL", x),
+  na_labels = c(
+    "uncertainty width (mean CI width, Ma)" = "not scored"
+  )
 )
 
 # Rerun public examples
