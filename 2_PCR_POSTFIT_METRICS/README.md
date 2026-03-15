@@ -6,7 +6,7 @@ In simple terms, the core idea is that divergence-time estimation is hard: the r
 
 It is method-agnostic. The candidates can come from `BEAST`, `MCMCTree`, `MrBayes`, `chronos`, `treePL`, `RelTime`, or any other dating workflow.
 
-PCR starts from finished chronograms. If you need to generate a set of chronograms from three alternative methods (`chronos`, `treePL`, `RelTime`) using an unconstrained phylogram and a calibration set, you can do that here: [PCR Custom Dating Pipeline From Phylograms](../1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md). In this repo, `scripts/run_dating_grid.R` can run `chronos` (all four clock models across a lambda grid), `treePL` (smoothing grid), and `RelTime` from one shared calibration source, using either a pairwise calibration CSV or a reference backbone time tree for congruification before PCR scores the resulting candidates.
+PCR starts from finished chronograms. If you need to generate a set of chronograms from three alternative methods (`chronos`, `treePL`, `RelTime`) using an unconstrained phylogram and a calibration set, you can do that here: [PCR Custom Dating Pipeline From Phylograms](../1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md). In this repo, `scripts/run_dating_grid.R` can run `chronos` (all four clock models across a lambda grid), `treePL` (smoothing grid), and `RelTime` from one shared calibration source, and it can also write optional CI-based uncertainty summaries before PCR scores the resulting candidates.
 
 ## What it evaluates
 
@@ -18,7 +18,7 @@ PCR starts from finished chronograms. If you need to generate a set of chronogra
 
 - `rate irregularity`: for each branch, divides the phylogram branch length (substitutions) by the chronogram branch duration (time) to get an implied evolutionary rate. The score rises when those implied rates are too dispersed, jump sharply from parent to child branch, produce too many outlier branches, or lose the positive autocorrelation expected among closely related lineages. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
-- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In this documentation, this optional layer is shown only for the Syngnatharia example, but PCR can also summarize interval widths directly from annotated Newick trees when common embedded HPD/CI metadata are present.
+- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In the bundled examples, this layer is shown from extracted HPD widths in Syngnatharia and from repo-local delta-method CI summaries in Terapontoidei and the vertebrate example.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
@@ -222,6 +222,7 @@ This tab does not do model fitting; that workflow lives in tab 1. In this exampl
 - `chronos_discrete` is the close runner-up
 - `RelTime` is the strongest pulse-preservation candidate, but it pays a large `rate irregularity` penalty
 - `chronos_clock` is the best tree for `rate irregularity`
+- the optional uncertainty layer favors the two leading `chronos` trees, with `chronos_discrete` slightly narrower than `chronos_clock`
 - `treePL` is a middle-tier candidate rather than a leading tree in this example
 
 In this bundled six-tree comparison, the selected `treePL` candidate uses `smooth = 0.01`; it is labeled simply `treePL` below because only one `treePL` tree is carried forward into the example.
@@ -236,24 +237,24 @@ This figure shows the pulse layer directly on alternative `chronos` trees (estim
 
 `gap burden` is not computed in this example because the trees were dated using congruified / secondary calibration ages rather than primary calibration evidence. In that setting, a gap score would just measure how closely each method reproduced inherited ages rather than providing an independent biological diagnostic.
 
-The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half. The last column reports that mean-rank value itself (`rank_mean_core`), not the separate ordinal finish position (`rank_mean_core_rank`).
+The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half. The optional uncertainty-width layer is reported separately as a precision check and is not folded into the core rank. The last column reports that mean-rank value itself (`rank_mean_core`), not the separate ordinal finish position (`rank_mean_core_rank`).
 
-| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | rate irregularity | overall mean rank (pulse = 1/2) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `chronos_clock` | `0.1348` | `0.1464` | `0.1604` | `2.5897` | `1.50` |
-| `chronos_discrete` | `0.1349` | `0.1464` | `0.1605` | `2.5946` | `2.50` |
-| `treePL` | `0.2492` | `0.2083` | `0.1995` | `3.1294` | `3.50` |
-| `RelTime` | `0.1145` | `0.1328` | `0.1501` | `6.6066` | `3.50` |
-| `chronos_relaxed` | `0.2797` | `0.2275` | `0.2140` | `4.6401` | `5.00` |
-| `chronos_correlated` | `0.2797` | `0.2275` | `0.2140` | `4.6401` | `5.00` |
+| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | rate irregularity | uncertainty width (mean CI width, Ma) | overall mean rank (pulse = 1/2) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_clock` | `0.1348` | `0.1464` | `0.1604` | `2.5897` | `12.10` | `1.50` |
+| `chronos_discrete` | `0.1349` | `0.1464` | `0.1605` | `2.5946` | `12.10` | `2.50` |
+| `treePL` | `0.2492` | `0.2083` | `0.1995` | `3.1294` | `48.43` | `3.50` |
+| `RelTime` | `0.1145` | `0.1328` | `0.1501` | `6.6066` | `77607.96` | `3.50` |
+| `chronos_relaxed` | `0.2797` | `0.2275` | `0.2140` | `4.6401` | `193.94` | `5.00` |
+| `chronos_correlated` | `0.2797` | `0.2275` | `0.2140` | `4.6401` | `193.94` | `5.00` |
 
-In short: `RelTime` minimizes all three pulse summaries, `chronos_clock` leads `rate irregularity`, and `chronos_clock` has a clean edge over `chronos_discrete` in the two-family core rank. `treePL` lands in the same mean-rank tier as `RelTime`, but for the opposite reason: better rate behavior with much weaker pulse preservation.
+In short: `RelTime` minimizes all three pulse summaries, `chronos_clock` leads `rate irregularity`, and `chronos_clock` has a clean edge over `chronos_discrete` in the two-family core rank. `treePL` lands in the same mean-rank tier as `RelTime`, but for the opposite reason: better rate behavior with much weaker pulse preservation. On the optional precision layer, the two leading `chronos` trees are effectively tied, `treePL` is broader, the non-clock `chronos` trees are much broader, and `RelTime` becomes extremely broad under the full-bound CI calculation.
 
 ### Figure B: Post-fit comparison across metric families
 
 ![Post-fit evaluation metric families](../figures/postfit_metric_family_values.png)
 
-Figure B uses the same family-balanced rule as the table. Even though three pulse panels are shown, they do not count as three separate halves. They are averaged into one pulse-family contribution, and that pulse family contributes one-half of the overall rank. `gap burden` is intentionally absent here because the calibration ages are secondary / congruified rather than primary evidence.
+Figure B uses the same family-balanced rule as the table. Even though three pulse panels are shown, they do not count as three separate halves. They are averaged into one pulse-family contribution, and that pulse family contributes one-half of the overall rank. `gap burden` is intentionally absent here because the calibration ages are secondary / congruified rather than primary evidence. `Uncertainty width` is shown separately as an optional precision layer.
 
 ### Interpretation for this example
 
@@ -261,32 +262,42 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 - `chronos_discrete` is the runner-up
 - `RelTime` is the strongest tree on all three pulse summaries
 - `chronos_clock` is the best tree on `rate irregularity`
+- `chronos_discrete` has the narrowest mean CI width, with `chronos_clock` effectively tied just behind it
 - `treePL` beats both non-clock `chronos` trees on the core comparison, but it still trails `chronos_clock` and `chronos_discrete`
+- `RelTime` has by far the broadest CI widths in this example, so it loses the optional precision layer decisively
 - `chronos_correlated` and `chronos_relaxed` are the weakest candidates in the set under the post-fit layer
 
 ### Practical decision rule
 
 1. If you want the strongest pulse-preservation candidate, choose `RelTime`.
 2. If you want the smoothest implied rate behavior, choose `chronos_clock`.
-3. If you want one concise core-PCR statement, report `chronos_clock` as the winner under the two-family comparison, with `chronos_discrete` as the close runner-up.
-4. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
-5. In this example, `RelTime` behaves like a pulse specialist, while `treePL` acts as a mid-ranking rate-friendlier alternative rather than a leading tree.
+3. If you want the narrowest interval estimates, the two leading `chronos` trees are the clear precision leaders, with `chronos_discrete` slightly narrower than `chronos_clock`.
+4. If you want one concise core-PCR statement, report `chronos_clock` as the winner under the two-family comparison, with `chronos_discrete` as the close runner-up.
+5. If an upstream fit-based selector and PCR point to different trees, report both explicitly rather than collapsing them into one claim.
+6. In this example, `RelTime` behaves like a pulse specialist, while `treePL` acts as a mid-ranking rate-friendlier alternative rather than a leading tree.
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
 - `examples/terapontoid/summary_terap_empirical_model_fits.csv`
 - `examples/terapontoid/summary_terap_empirical_postfit_metrics.csv`
+- `examples/terapontoid/uncertainty_summary_long.csv`
 - `examples/terapontoid/candidates.csv`
 - `examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv` (upstream congruified calibration ages used in dating; not scored in the core PCR rank)
 - the six trees in `examples/terapontoid/`, including `Terapontoid_ML_MAIN_treePL_congruify.tre` and `Terapontoid_ML_MAIN_RelTime_full_bounds.tre`
+- `examples/terapontoid/Terapontoid_ML_MAIN_chronos_dated_modelclock_ci.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_chronos_dated_modeldiscrete_ci.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_chronos_dated_modelcorrelated_ci.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_chronos_dated_modelrelaxed_ci.csv`
+- `examples/terapontoid/Terapontoid_ML_MAIN_treePL_congruify_ci.csv`
 - `examples/terapontoid/Terapontoid_ML_MAIN_RelTime_bounds_used.csv`
 - `examples/terapontoid/Terapontoid_ML_MAIN_RelTime_full_bounds_ci.csv`
 - `figures/branching_tempo_tree_panel_clean_v3.png`
 - `figures/postfit_metric_family_values.png`
 - `scripts/run_pcr.R`
+- `scripts/chronos_ci_helpers.R`
 - `scripts/reltime_helpers.R`
-- `scripts/build_reltime_examples.R`
+- `scripts/build_uncertainty_examples.R`
 - `scripts/make_terapontoid_postfit_figures.R`
 - `scripts/make_terapontoid_pulse_tree_panel.R`
 
@@ -299,6 +310,7 @@ Figure B uses the same family-balanced rule as the table. Even though three puls
 - `treePL` is the core PCR winner in this comparison
 - `chronos_clock` is the runner-up under the family-balanced core rank
 - `RelTime` dominates the pulse and gap layers but is the worst tree on `rate irregularity`
+- `treePL` also has the narrowest CI widths, with `chronos_clock` close behind
 - `chronos_correlated`, `chronos_relaxed`, and `chronos_discrete` are all much worse on pulse, gap, and rate
 - the raw trees and calibration table are not distributed here because this dataset is unpublished
 
@@ -323,22 +335,22 @@ This panel compares the reference phylogram and the five originally selected chr
 
 ### Ranked post-fit results (lower is better)
 
-The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score.
+The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. The optional uncertainty-width layer is reported separately as a precision check and is not folded into the core rank.
 
-| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate irregularity | core overall mean rank (pulse = 1/3) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `treePL` | `0.1550` | `0.2098` | `0.2216` | `0.2409` | `1.4521` | `2.00` |
-| `chronos_clock` | `0.1607` | `0.2106` | `0.2233` | `0.1239` | `1.5929` | `2.33` |
-| `RelTime` | `0.0449` | `0.1164` | `0.1539` | `0.0072` | `6.3142` | `2.67` |
-| `chronos_correlated` | `0.3312` | `0.3066` | `0.2824` | `0.3816` | `3.6494` | `4.00` |
-| `chronos_discrete` | `0.3468` | `0.3172` | `0.2909` | `0.4129` | `3.5759` | `5.00` |
-| `chronos_relaxed` | `0.3332` | `0.3120` | `0.2869` | `0.3831` | `3.7477` | `5.00` |
+| candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate irregularity | uncertainty width (mean CI width, Ma) | core overall mean rank (pulse = 1/3) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `treePL` | `0.1550` | `0.2098` | `0.2216` | `0.2409` | `1.4521` | `24.24` | `2.00` |
+| `chronos_clock` | `0.1607` | `0.2106` | `0.2233` | `0.1239` | `1.5929` | `25.24` | `2.33` |
+| `RelTime` | `0.0449` | `0.1164` | `0.1539` | `0.0072` | `6.3142` | `190682.44` | `2.67` |
+| `chronos_correlated` | `0.3312` | `0.3066` | `0.2824` | `0.3816` | `3.6494` | `79.11` | `4.00` |
+| `chronos_discrete` | `0.3468` | `0.3172` | `0.2909` | `0.4129` | `3.5759` | `79.27` | `5.00` |
+| `chronos_relaxed` | `0.3332` | `0.3120` | `0.2869` | `0.3831` | `3.7477` | `82.06` | `5.00` |
 
 ### Figure B: Post-fit comparison across metric families
 
 ![Unpublished vertebrate post-fit metric families](../figures/unpublished_vertebrate_postfit_metric_family_values.png)
 
-Figure B uses the same family-balanced rule as the table. The three pulse panels are shown separately for transparency, but together they count as one pulse family.
+Figure B uses the same family-balanced rule as the table. The three pulse panels are shown separately for transparency, but together they count as one pulse family. `Uncertainty width` is shown separately as an optional precision layer.
 
 ### Interpretation for this example
 
@@ -346,8 +358,10 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 - `chronos_clock` is the balanced runner-up
 - `RelTime` is the strongest tree on all three pulse summaries and also has the smallest `mean relative gap`
 - `treePL` has the cleanest `rate irregularity` in the set while staying close to `chronos_clock` on the pulse layer
+- `treePL` also has the narrowest mean CI width, with `chronos_clock` close behind
 - `chronos_discrete` is a weak candidate, and `chronos_correlated` and `chronos_relaxed` are no better
 - `chronos_correlated` and `chronos_relaxed` both score poorly across the full post-fit layer, especially on `rate irregularity` and `mean relative gap`
+- `RelTime` is the pulse-plus-gap specialist, but its CI widths are extremely broad under the full-bound precision layer
 - in this dataset, the post-fit layer supports `treePL` as the best balanced tree, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap specialist
 
 ### Practical decision rule
@@ -355,17 +369,19 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 1. If you want one core PCR winner in this comparison, choose `treePL`.
 2. If you want the closest alternative under a balanced three-family view, choose `chronos_clock`.
 3. If your priority is preserving branching tempo and staying closest to the calibration minima, consider `RelTime`, but report its poor `rate irregularity` explicitly.
-4. If you report multiple candidate chronograms, the main contrast is `treePL` as the balanced winner, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap alternative.
-5. No optional `uncertainty width` layer is reported here.
+4. If your priority is narrower interval estimates, `treePL` leads the optional uncertainty layer, with `chronos_clock` as the close precision runner-up.
+5. If you report multiple candidate chronograms, the main contrast is `treePL` as the balanced winner, `chronos_clock` as the close alternative, and `RelTime` as the pulse-plus-gap alternative.
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
 - `examples/unpublished_vertebrate/postfit_metrics/summary_unpublished_vertebrate_postfit_metrics.csv`
+- `examples/unpublished_vertebrate/postfit_metrics/uncertainty_summary_long.csv`
 - `figures/unpublished_vertebrate_tree_panel.png`
 - `figures/unpublished_vertebrate_postfit_metric_family_values.png`
+- `scripts/chronos_ci_helpers.R`
 - `scripts/reltime_helpers.R`
-- `scripts/build_reltime_examples.R`
+- `scripts/build_uncertainty_examples.R`
 - `scripts/make_unpublished_vertebrate_postfit_figure.R`
 
 </details>
@@ -380,6 +396,6 @@ Figure B uses the same family-balanced rule as the table. The three pulse panels
 - `gap burden` should be treated as a core family only when the calibration ages are primary evidence. With secondary or congruified ages, the same calculation becomes circular calibration slack and is better reported separately or omitted from the core rank.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- An optional `uncertainty width` layer is demonstrated only for the Syngnatharia example, where comparable interval-width data were extracted from the published figure. It speaks to precision, not accuracy, and is reported separately from the core PCR rank.
+- The optional `uncertainty width` layer is reported separately from the core PCR rank. In the bundled examples it comes from extracted HPD widths in Syngnatharia and from repo-local delta-method CI summaries in Terapontoidei and the vertebrate example. It speaks to precision, not accuracy.
 
 </details>

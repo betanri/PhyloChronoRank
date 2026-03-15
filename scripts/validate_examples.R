@@ -172,6 +172,7 @@ assert_table_matches(
     "pulse preservation (burst)" = "pulse_burst_selector_error",
     "pulse preservation (overall)" = "pulse_default_selector_error",
     "rate irregularity" = "rate_irregularity",
+    "uncertainty width (mean CI width, Ma)" = "uncertainty_mean_width_ma",
     "overall mean rank (pulse = 1/2)" = "rank_mean_core"
   ),
   digits = c(
@@ -179,6 +180,7 @@ assert_table_matches(
     "pulse preservation (burst)" = 4,
     "pulse preservation (overall)" = 4,
     "rate irregularity" = 4,
+    "uncertainty width (mean CI width, Ma)" = 2,
     "overall mean rank (pulse = 1/2)" = 2
   )
 )
@@ -195,6 +197,7 @@ assert_table_matches(
     "pulse preservation (overall)" = "pulse_default_selector_error",
     "mean relative gap" = "mean_relative_gap",
     "rate irregularity" = "rate_irregularity",
+    "uncertainty width (mean CI width, Ma)" = "uncertainty_mean_width_ma",
     "core overall mean rank (pulse = 1/3)" = "rank_mean_core"
   ),
   digits = c(
@@ -203,6 +206,7 @@ assert_table_matches(
     "pulse preservation (overall)" = 4,
     "mean relative gap" = 4,
     "rate irregularity" = 4,
+    "uncertainty width (mean CI width, Ma)" = 2,
     "core overall mean rank (pulse = 1/3)" = 2
   ),
   candidate_transform = function(x) sub("^treepl_best-smooth-[^,]+$", "treePL", x)
@@ -235,7 +239,8 @@ compare_frames(
 rerun2 <- run_pcr(
   c(
     paste0("--ref-tree=", file.path(repo_dir, "examples", "terapontoid", "Terapontoid_ML_MAIN_phylogram_used.tree")),
-    paste0("--candidates-csv=", file.path(repo_dir, "examples", "terapontoid", "candidates.csv"))
+    paste0("--candidates-csv=", file.path(repo_dir, "examples", "terapontoid", "candidates.csv")),
+    paste0("--uncertainty-csv=", file.path(repo_dir, "examples", "terapontoid", "uncertainty_summary_long.csv"))
   ),
   outdir = file.path(tempdir(), "pcr_validate_terap")
 )
@@ -248,6 +253,7 @@ compare_frames(
     "burst_loss",
     "pulse_burst_selector_error",
     "rate_irregularity",
+    "uncertainty_mean_width_ma",
     "rank_mean_core"
   )
 )

@@ -8,6 +8,7 @@ The script is designed for one specific use case:
 - define one shared calibration source
 - run the same effective calibration set through `chronos`, `treePL`, and `RelTime`
 - collect all successful dated trees into one `candidates.csv` that can be passed directly into `scripts/run_pcr.R`
+- write a shared optional uncertainty summary from method-specific CI outputs when those intervals are computed
 
 ## What It Runs
 
@@ -16,6 +17,7 @@ The script is designed for one specific use case:
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` across a smoothing grid
 - `RelTime` with the same merged node bounds used for the other methods
+- repo-local delta-method confidence intervals for the successful `chronos`, `treePL`, and `RelTime` trees
 
 For `treePL`, the default repo path is the recommended two-step run:
 
@@ -40,6 +42,7 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
+- `ChronosCI` and the parallel `treePL` CI path are repo-local delta-method adaptations of the Tao et al. variance framework, applied after dating to the finished penalized-likelihood trees
 
 In other words, the shipped `treePL` path here is not a minimal one-shot wrapper. It runs the recommended `prime + thorough` workflow from R, then validates the dated output tree before adding it to `candidates.csv`.
 
@@ -152,7 +155,7 @@ Rscript scripts/run_dating_grid.R \
 --treepl-threads=1
 --treepl-thorough=TRUE
 --treepl-prime=TRUE
---reltime-sites=1000
+--ci-sites=1000
 --root-age=123.4
 --out-prefix=my_dataset
 ```
@@ -206,15 +209,18 @@ The script writes:
 Method-specific outputs:
 
 - `chronos/trees/*.tre`
+- `chronos/ci/*.csv`
 - `chronos/<prefix>_chronos_runs.csv`
 - `treepl/configs/*.cfg`
 - `treepl/logs/*.log`
 - `treepl/trees/*.tre`
+- `treepl/ci/*.csv`
 - `treepl/<prefix>_treepl_runs.csv`
 - `reltime/<prefix>_RelTime.tre`
 - `reltime/<prefix>_RelTime_ci.csv`
 - `reltime/<prefix>_RelTime_bounds_used.csv`
 - `reltime/<prefix>_RelTime_run.csv`
+- `uncertainty_summary_long.csv`
 
 ## What To Open First
 
@@ -224,12 +230,14 @@ If you are reviewing a new run, the most useful order is:
 2. `<prefix>_all_runs_summary.csv`
 3. `chronos/<prefix>_chronos_runs.csv`
 4. `treepl/<prefix>_treepl_runs.csv`
-5. `candidates.csv`
+5. `uncertainty_summary_long.csv`
+6. `candidates.csv`
 
 That tells you:
 
 - which calibrations survived the shared merge step
 - which runs actually succeeded
+- which CI summaries were written for the successful dated trees
 - which candidate trees were promoted into the PCR-ready set
 
 ## Feeding The Results Into PCR
@@ -241,10 +249,11 @@ Rscript scripts/run_pcr.R \
   --ref-tree=PATH/TO/phylogram.tre \
   --candidates-csv=PATH/TO/dating_out/candidates.csv \
   --calibrations-csv=PATH/TO/dating_out/<prefix>_calibration_pairs_used.csv \
+  --uncertainty-csv=PATH/TO/dating_out/uncertainty_summary_long.csv \
   --outdir=PATH/TO/pcr_out
 ```
 
-If you are working from primary fossil calibrations, that shared calibration CSV can be used directly in PCR’s gap layer. If your dates were generated from congruified or secondary ages, treat that gap layer as calibration slack rather than as independent fossil-fit evidence.
+If you are working from primary fossil calibrations, that shared calibration CSV can be used directly in PCR’s gap layer. If your dates were generated from congruified or secondary ages, treat that gap layer as calibration slack rather than as independent fossil-fit evidence. The uncertainty summary is optional; pass it only when you want PCR to report the separate precision layer.
 
 ## How To Choose Among Grid Results
 
@@ -307,8 +316,10 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
+- `ChronosCI` and `treePL` CI summaries are written with the repo-local helper in `scripts/chronos_ci_helpers.R`
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
-- `RelTime` CI files are produced, but those widths can become numerically unstable when hard bounds create very short internal branches
+- `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
+- `RelTime` CI files can still become numerically unstable when hard bounds create very short internal branches
 - `chronos` failures and `treePL` failures are retained in the run summary even when they do not appear in `candidates.csv`
 
 ## Common Issues

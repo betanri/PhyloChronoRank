@@ -34,7 +34,12 @@ cols <- c('#1b9e77', '#2c7fb8', '#d95f0e', '#6baed6', '#7570b3', '#d7301f')
 cols <- cols[match(ord, c('chronos_discrete', 'chronos_clock', 'chronos_correlated', 'treePL', 'chronos_relaxed', 'RelTime'))]
 
 png(file.path(out_fig, 'postfit_metric_family_values.png'), width = 2800, height = 1500, res = 170)
-layout(matrix(c(1, 2, 3, 4, 5, 5), nrow = 2, byrow = TRUE))
+has_uncertainty <- 'uncertainty_mean_width_ma' %in% names(d) && any(is.finite(d$uncertainty_mean_width_ma))
+if (has_uncertainty) {
+  layout(matrix(1:6, nrow = 2, byrow = TRUE))
+} else {
+  layout(matrix(c(1, 2, 3, 4, 5, 5), nrow = 2, byrow = TRUE))
+}
 par(mar = c(8, 5, 4, 1), oma = c(2.4, 0.2, 2.2, 0.2))
 plot_panel <- function(vals, ttl, ylab, note) {
   bp <- barplot(vals, names.arg = labels, col = cols, las = 2,
@@ -47,6 +52,9 @@ plot_panel(d$burst_loss, 'Burst loss', 'Burst loss', 'Lower is better')
 plot_panel(d$pulse_burst_selector_error, 'Pulse preservation (burst)', 'Selector error', 'Lower is better')
 plot_panel(d$pulse_default_selector_error, 'Pulse preservation (overall)', 'Selector error', 'Lower is better')
 plot_panel(d$rate_irregularity, 'Rate irregularity', 'Rate irregularity', 'Lower is better')
+if (has_uncertainty) {
+  plot_panel(d$uncertainty_mean_width_ma, 'Uncertainty width', 'Mean CI width (Ma)', 'Lower is more precise')
+}
 
 par(mar = c(8, 5, 4, 1))
 bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
@@ -58,6 +66,13 @@ text(bp, d$rank_mean_core,
      pos = 3, cex = 0.85)
 mtext('Lower is better', side = 1, line = 6.0, cex = 0.9)
 mtext('Terapontoid example: post-fit evaluation metrics across chronos models, treePL, and RelTime', side = 3, outer = TRUE, line = 0.5, cex = 1.55, font = 2)
-mtext('Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Gap burden is not computed because these trees were dated with congruified / secondary calibrations.', side = 1, outer = TRUE, line = 0.5, cex = 0.95)
+mtext(
+  if (has_uncertainty) {
+    'Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Uncertainty width is shown separately as an optional precision layer. Gap burden is not computed because these trees were dated with congruified / secondary calibrations.'
+  } else {
+    'Core PCR rank is family-balanced here: the 3 pulse panels count together as one pulse family (1/2), alongside rate irregularity (1/2). Gap burden is not computed because these trees were dated with congruified / secondary calibrations.'
+  },
+  side = 1, outer = TRUE, line = 0.5, cex = 0.95
+)
 dev.off()
 message('Done. Wrote: ', normalizePath(file.path(out_fig, 'postfit_metric_family_values.png'), winslash = '/'))

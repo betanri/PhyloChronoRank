@@ -25,6 +25,7 @@ usage <- function() {
       "[--chronos-attempt-timeout=90]",
       "[--treepl-bin=/path/to/treePL]",
       "[--root-age=123.4]",
+      "[--ci-sites=1000]",
       "[--calibration-tag=NAME]",
       sep = " "
     ),
@@ -60,7 +61,8 @@ usage <- function() {
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
     "  --chronos-iter-max      Maximum iterations for chronos optimizer. Default: 10000 (ape default).\n",
     "  --chronos-tol           Convergence tolerance for chronos. Default: 1e-8 (ape default).\n",
-    "  --reltime-sites         Alignment length used for RelTime CI widths. Default: 1000.\n",
+    "  --ci-sites              Alignment length used for delta-method CI widths across ChronosCI, treePL, and RelTime. Default: 1000.\n",
+    "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
     "  --help                  Print this message.\n",
     sep = ""
   )
@@ -106,6 +108,7 @@ if (length(script_file_arg)) {
 }
 repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 source(file.path(script_dir, "reltime_helpers.R"))
+source(file.path(script_dir, "chronos_ci_helpers.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
 
@@ -159,6 +162,34 @@ bind_rows_fill <- function(lst) {
     df[, cols, drop = FALSE]
   })
   do.call(rbind, padded)
+}
+
+build_ci_inputs <- function(phy, node_bounds) {
+  root_node <- Ntip(phy) + 1L
+  calib_df <- data.frame(
+    node = node_bounds$node,
+    age.min = node_bounds$age_min,
+    age.max = node_bounds$age_max,
+    stringsAsFactors = FALSE
+  )
+  cal_min <- as.list(stats::setNames(calib_df$age.min, calib_df$node))
+  cal_max <- as.list(stats::setNames(calib_df$age.max, calib_df$node))
+
+  root_var <- 0
+  root_row <- calib_df[calib_df$node == root_node, , drop = FALSE]
+  if (nrow(root_row) &&
+      is.finite(root_row$age.min[1L]) &&
+      is.finite(root_row$age.max[1L]) &&
+      abs(root_row$age.max[1L] - root_row$age.min[1L]) > 1e-10) {
+    root_var <- ((root_row$age.max[1L] - root_row$age.min[1L]) / (2 * 1.96))^2
+  }
+
+  list(
+    root_var = root_var,
+    cal_min = cal_min,
+    cal_max = cal_max,
+    calib_bundle = list(chronos_calib = calib_df)
+  )
 }
 
 is_nexus_file <- function(path, max_lines = 50L) {
@@ -743,8 +774,8 @@ treepl_opt <- kv[["treepl-opt"]] %||% NULL
 treepl_plsimaniter <- kv[["treepl-plsimaniter"]] %||% NULL
 treepl_pliter <- kv[["treepl-pliter"]] %||% NULL
 
-reltime_sites <- as.integer(kv[["reltime-sites"]] %||% "1000")
-if (!is.finite(reltime_sites) || reltime_sites < 1L) stop("--reltime-sites must be >= 1.")
+ci_sites <- as.integer(kv[["ci-sites"]] %||% kv[["reltime-sites"]] %||% "1000")
+if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
 
 phy_file <- normalizePath(kv[["phylogram"]], winslash = "/", mustWork = TRUE)
 phy_tree_name <- kv[["phylogram-tree-name"]] %||% ""
@@ -769,7 +800,9 @@ msg <- function(...) {
 }
 
 dir.create(file.path(outdir, "chronos", "trees"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(outdir, "chronos", "ci"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(outdir, "treepl", "trees"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(outdir, "treepl", "ci"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(outdir, "treepl", "configs"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(outdir, "treepl", "logs"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(outdir, "reltime"), recursive = TRUE, showWarnings = FALSE)
@@ -831,6 +864,8 @@ if (nrow(pair_map$dropped_inconsistent)) {
 
 candidate_rows <- list()
 all_rows <- list()
+uncertainty_rows <- list()
+ci_inputs <- build_ci_inputs(phy, node_bounds)
 
 if ("chronos" %in% methods) {
   msg("Running chronos grid...")
@@ -861,6 +896,28 @@ if ("chronos" %in% methods) {
         )
         if (identical(run$status, "OK")) {
           ape::write.tree(run$tree, file = out_tree)
+          out_ci <- file.path(outdir, "chronos", "ci", paste0(prefix, "_", candidate, "_ci.csv"))
+          ci_res <- try(
+            chronos_ci(
+              phy,
+              run$tree,
+              n_sites = ci_sites,
+              root_var = ci_inputs$root_var,
+              cal_min = ci_inputs$cal_min,
+              cal_max = ci_inputs$cal_max
+            ),
+            silent = TRUE
+          )
+          if (!inherits(ci_res, "try-error")) {
+            write.csv(ci_res, out_ci, row.names = FALSE)
+            uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+              candidate,
+              ci_res,
+              source = "chronosci_delta_method"
+            )
+          } else {
+            out_ci <- ""
+          }
           candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
             candidate = candidate,
             tree_file = out_tree,
@@ -868,6 +925,7 @@ if ("chronos" %in% methods) {
           )
         } else {
           out_tree <- ""
+          out_ci <- ""
         }
         row_i <- row_i + 1L
         chronos_rows[[row_i]] <- data.frame(
@@ -882,6 +940,8 @@ if ("chronos" %in% methods) {
           fit_score = run$fit_score,
           attempts_used = run$attempt,
           tree_file = out_tree,
+          ci_file = out_ci,
+          n_sites = if (nzchar(out_ci)) ci_sites else NA_integer_,
           error = run$error %||% NA_character_,
           stringsAsFactors = FALSE
         )
@@ -939,6 +999,7 @@ if ("treepl" %in% methods) {
 
     status <- "FAILED"
     err <- tail_text(log_path)
+    out_ci <- ""
     ## treePL can exit non-zero (e.g. convergence warnings) yet still write
     ## a valid output tree.  Check the tree file regardless of exit code.
     if (file.exists(out_tree)) {
@@ -947,6 +1008,21 @@ if ("treepl" %in% methods) {
           !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length >= 0)) {
         status <- if (identical(exit_code, 0L)) "OK" else "OK_NONZERO_EXIT"
         err <- NA_character_
+        out_ci <- file.path(outdir, "treepl", "ci", paste0(prefix, "_", candidate, "_ci.csv"))
+        ci_res <- try(
+          treepl_ci(phy, tr, ci_inputs$calib_bundle, n_sites = ci_sites),
+          silent = TRUE
+        )
+        if (!inherits(ci_res, "try-error")) {
+          write.csv(ci_res, out_ci, row.names = FALSE)
+          uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+            candidate,
+            ci_res,
+            source = "treepl_delta_method"
+          )
+        } else {
+          out_ci <- ""
+        }
         candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
           candidate = candidate,
           tree_file = out_tree,
@@ -965,6 +1041,8 @@ if ("treepl" %in% methods) {
       status = status,
       exit_code = exit_code,
       tree_file = if (grepl("^OK", status)) out_tree else "",
+      ci_file = if (grepl("^OK", status)) out_ci else "",
+      n_sites = if (grepl("^OK", status) && nzchar(out_ci)) ci_sites else NA_integer_,
       cfg_file = cfg_path,
       log_file = log_path,
       error = err %||% NA_character_,
@@ -991,7 +1069,7 @@ if ("reltime" %in% methods) {
       phy = phy,
       calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
       root_age = if (is.finite(root_age)) root_age else NULL,
-      n_sites = reltime_sites
+      n_sites = ci_sites
     ),
     silent = TRUE
   )
@@ -1011,9 +1089,14 @@ if ("reltime" %in% methods) {
       tree_file = rel_tree_file,
       ci_file = rel_ci_file,
       bounds_file = rel_bounds_file,
-      n_sites = reltime_sites,
+      n_sites = ci_sites,
       error = NA_character_,
       stringsAsFactors = FALSE
+    )
+    uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+      rel_candidate,
+      rel_run$ci,
+      source = "reltime_delta_method"
     )
     candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
       candidate = rel_candidate,
@@ -1033,7 +1116,7 @@ if ("reltime" %in% methods) {
       tree_file = "",
       ci_file = "",
       bounds_file = "",
-      n_sites = reltime_sites,
+      n_sites = ci_sites,
       error = conditionMessage(attr(rel_run, "condition")),
       stringsAsFactors = FALSE
     )
@@ -1047,6 +1130,12 @@ if ("reltime" %in% methods) {
 all_df <- bind_rows_fill(all_rows)
 all_runs_csv <- file.path(outdir, paste0(prefix, "_all_runs_summary.csv"))
 write.csv(all_df, all_runs_csv, row.names = FALSE)
+
+uncertainty_df <- bind_rows_fill(uncertainty_rows)
+uncertainty_csv <- file.path(outdir, "uncertainty_summary_long.csv")
+if (nrow(uncertainty_df)) {
+  write.csv(uncertainty_df, uncertainty_csv, row.names = FALSE)
+}
 
 candidates_df <- if (length(candidate_rows)) do.call(rbind, candidate_rows) else data.frame(candidate = character(0), tree_file = character(0), stringsAsFactors = FALSE)
 if (nrow(candidates_df)) {
@@ -1069,7 +1158,8 @@ meta_lines <- c(
   paste0("Calibration bounds dropped as inconsistent: ", nrow(pair_map$dropped_inconsistent)),
   paste0("Successful candidates written: ", nrow(candidates_df)),
   paste0("Combined runs summary: ", all_runs_csv),
-  paste0("Candidates CSV: ", candidates_csv)
+  paste0("Candidates CSV: ", candidates_csv),
+  paste0("Uncertainty summary CSV: ", if (nrow(uncertainty_df)) uncertainty_csv else "none")
 )
 writeLines(meta_lines, file.path(outdir, paste0(prefix, "_run_metadata.txt")))
 

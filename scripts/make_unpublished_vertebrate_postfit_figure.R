@@ -31,8 +31,13 @@ cols <- unname(c(
   treePL = '#6baed6',
   RelTime = '#d7301f'
 )[color_key])
+has_uncertainty <- 'uncertainty_mean_width_ma' %in% names(d) && any(is.finite(d$uncertainty_mean_width_ma))
 png(outfile, width = 3000, height = 1500, res = 170)
-layout(matrix(1:6, nrow = 2, byrow = TRUE))
+if (has_uncertainty) {
+  layout(matrix(c(1, 2, 3, 4, 5, 6, 7, 7), nrow = 2, byrow = TRUE))
+} else {
+  layout(matrix(1:6, nrow = 2, byrow = TRUE))
+}
 par(mar = c(10, 5, 4, 1), oma = c(2.5, 0.2, 2.3, 0.2))
 plot_panel <- function(vals, ttl, ylab) {
   bp <- barplot(vals, names.arg = labels, col = cols, las = 2, ylab = ylab, main = ttl,
@@ -45,6 +50,9 @@ plot_panel(d$pulse_burst_selector_error, 'Pulse preservation (burst)', 'Selector
 plot_panel(d$pulse_default_selector_error, 'Pulse preservation (overall)', 'Selector error')
 plot_panel(d$mean_relative_gap, 'Mean relative gap', 'Mean relative gap')
 plot_panel(d$rate_irregularity, 'Rate irregularity', 'Rate irregularity')
+if (has_uncertainty) {
+  plot_panel(d$uncertainty_mean_width_ma, 'Uncertainty width', 'Mean CI width (Ma)')
+}
 bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
               ylab = 'Mean rank across 3 families',
               main = 'Core overall rank (family-balanced; pulse = 1/3)',
@@ -52,6 +60,13 @@ bp <- barplot(d$rank_mean_core, names.arg = labels, col = cols, las = 2,
 text(bp, d$rank_mean_core, labels = paste0(sprintf('%.2f', d$rank_mean_core), ' (rank ', d$rank_mean_core_rank, ')'), pos = 3, cex = 0.82)
 mtext('Lower is better', side = 1, line = 7.0, cex = 0.9)
 mtext('Unpublished vertebrate example: post-fit evaluation metrics across selected chronograms', side = 3, outer = TRUE, line = 0.5, cex = 1.5, font = 2)
-mtext('Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3).', side = 1, outer = TRUE, line = 0.7, cex = 1.0)
+mtext(
+  if (has_uncertainty) {
+    'Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3). Uncertainty width is shown separately as an optional precision layer.'
+  } else {
+    'Core PCR rank is family-balanced: the 3 pulse panels count together as one pulse family (1/3), alongside mean relative gap (1/3) and rate irregularity (1/3).'
+  },
+  side = 1, outer = TRUE, line = 0.7, cex = 1.0
+)
 dev.off()
 message('Wrote: ', normalizePath(outfile, winslash = '/'))
