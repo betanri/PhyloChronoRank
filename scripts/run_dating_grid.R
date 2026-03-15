@@ -61,7 +61,7 @@ usage <- function() {
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
     "  --chronos-iter-max      Maximum iterations for chronos optimizer. Default: 10000 (ape default).\n",
     "  --chronos-tol           Convergence tolerance for chronos. Default: 1e-8 (ape default).\n",
-    "  --ci-sites              Alignment length used for repo-local delta-method CI summaries on finished chronos, treePL, and RelTime trees. Default: 1000.\n",
+    "  --ci-sites              Alignment length used for ChronosCI, TreePL-CI, and RelTime CI summaries. Default: 1000.\n",
     "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
     "  --help                  Print this message.\n",
     sep = ""
@@ -913,7 +913,7 @@ if ("chronos" %in% methods) {
             uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
               candidate,
               ci_res,
-              source = "chronosci_delta_method"
+              source = "ChronosCI"
             )
           } else {
             out_ci <- ""
@@ -1018,7 +1018,7 @@ if ("treepl" %in% methods) {
           uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
             candidate,
             ci_res,
-            source = "treepl_delta_method"
+            source = "TreePL-CI"
           )
         } else {
           out_ci <- ""
@@ -1096,7 +1096,7 @@ if ("reltime" %in% methods) {
     uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
       rel_candidate,
       rel_run$ci,
-      source = "reltime_delta_method"
+      source = "RelTime-CI"
     )
     candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
       candidate = rel_candidate,

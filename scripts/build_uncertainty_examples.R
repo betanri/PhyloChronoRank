@@ -96,13 +96,13 @@ write_terap_outputs <- function() {
     if (candidate == "RelTime") {
       ci_path <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds_ci.csv")
       ci_df <- read.csv(ci_path, stringsAsFactors = FALSE)
-      source_tag <- "reltime_delta_method"
+      source_tag <- "RelTime-CI"
     } else {
       tr <- read.tree(tree_path)
       ci_path <- sub("\\.tre$", "_ci.csv", tree_path)
       if (candidate == "treePL") {
         ci_df <- treepl_ci(ref_tree, tr, ci_inputs$calib_bundle, n_sites = 1000L)
-        source_tag <- "treepl_delta_method"
+        source_tag <- "TreePL-CI"
       } else {
         ci_df <- chronos_ci(
           ref_tree, tr,
@@ -111,7 +111,7 @@ write_terap_outputs <- function() {
           cal_min = ci_inputs$cal_min,
           cal_max = ci_inputs$cal_max
         )
-        source_tag <- "chronosci_delta_method"
+        source_tag <- "ChronosCI"
       }
       write.csv(ci_df, ci_path, row.names = FALSE)
     }
@@ -169,12 +169,12 @@ write_vgp_outputs <- function() {
       rel_ci_path <- kv[["vertebrate-reltime-ci"]] %||% sub("\\.tre$", "_ci.csv", tree_path)
       if (!file.exists(rel_ci_path)) rel_ci_path <- rel_ci_file
       ci_df <- read.csv(rel_ci_path, stringsAsFactors = FALSE)
-      source_tag <- "reltime_delta_method"
+      source_tag <- "RelTime-CI"
     } else {
       tr <- read.tree(tree_path)
       if (grepl("^treepl", candidate, ignore.case = TRUE)) {
         ci_df <- treepl_ci(ref_tree, tr, ci_inputs$calib_bundle, n_sites = 1000L)
-        source_tag <- "treepl_delta_method"
+        source_tag <- "TreePL-CI"
       } else {
         ci_df <- chronos_ci(
           ref_tree, tr,
@@ -183,7 +183,7 @@ write_vgp_outputs <- function() {
           cal_min = ci_inputs$cal_min,
           cal_max = ci_inputs$cal_max
         )
-        source_tag <- "chronosci_delta_method"
+        source_tag <- "ChronosCI"
       }
     }
     uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(candidate, ci_df, source = source_tag)
