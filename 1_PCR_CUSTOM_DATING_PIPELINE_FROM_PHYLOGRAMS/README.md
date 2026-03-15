@@ -17,7 +17,7 @@ The script is designed for one specific use case:
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` across a smoothing grid
 - `RelTime` with the same merged node bounds used for the other methods
-- `chronos` bootstrap confidence intervals through the vendored Paradis/Brown/Claramunt/Schliep helper and `RelTime` confidence intervals through the repo-local RelTime helper
+- `chronos` bootstrap confidence intervals through the vendored helper implementing the default parametric bootstrap of [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652), plus `RelTime` confidence intervals through the repo-local RelTime helper
 
 For `treePL`, the default repo path is the recommended two-step run:
 
@@ -33,6 +33,7 @@ The main point is calibration consistency. The script first resolves one shared 
 The three method paths in this repo are tied directly to the core method papers:
 
 - `chronos`: [Paradis 2013, Molecular dating of phylogenies by likelihood methods: A comparison of models and a new information criterion](https://www.sciencedirect.com/science/article/abs/pii/S1055790313000651)
+- `chronos` bootstrap confidence intervals: [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652)
 - `treePL`: [Smith and O'Meara 2012, treePL: divergence time estimation using penalized likelihood for large phylogenies](https://academic.oup.com/bioinformatics/article/28/20/2689/203074)
 - `RelTime`: [Tamura et al. 2012, Estimating divergence times in large molecular phylogenies](https://pubmed.ncbi.nlm.nih.gov/23129628/) and [Tamura, Tao, and Kumar 2018, Theoretical Foundation of the RelTime Method for Estimating Divergence Times from Variable Evolutionary Rates](https://pubmed.ncbi.nlm.nih.gov/29893954/)
 - `RelTime` confidence intervals: [Tao, Tamura, Mello, and Kumar 2020, Reliable confidence intervals for RelTime estimates of evolutionary divergence times](https://academic.oup.com/mbe/article/37/1/280/5602325)
@@ -42,7 +43,7 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
-- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
+- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos) and run here with the default parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
 - `treePL` is treated here as a point-dating method; no repo-generated `treePL` CI is written
 - `RelTime` confidence intervals come from the repo-local Tao-style helper in `scripts/reltime_helpers.R`
 
@@ -317,7 +318,7 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
-- `chronos` uncertainty summaries are written with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`
+- `chronos` uncertainty summaries are written with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`; the default repo path uses the parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
 - `treePL` candidates are carried forward as point trees; if you want a `treePL` uncertainty layer, supply it externally later through PCR's `--uncertainty-csv`
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
