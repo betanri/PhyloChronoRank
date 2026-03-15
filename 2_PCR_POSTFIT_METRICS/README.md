@@ -18,7 +18,7 @@ PCR starts from finished chronograms. If you need to generate a set of chronogra
 
 - `rate irregularity`: for each branch, divides the phylogram branch length (substitutions) by the chronogram branch duration (time) to get an implied evolutionary rate. The score rises when those implied rates are too dispersed, jump sharply from parent to child branch, produce too many outlier branches, or lose the positive autocorrelation expected among closely related lineages. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
 
-- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In the bundled examples, this layer is shown from extracted HPD widths in Syngnatharia and from repo-local `ChronosCI`, `TreePL-CI`, and `RelTime-CI` summaries in Terapontoidei and the vertebrate example.
+- `uncertainty width` (optional precision layer): asks how wide the confidence or credible intervals are around node ages when those intervals are available in a comparable form across candidate chronograms. Lower is more precise, but this is a precision metric, not an accuracy metric. In molecular-dating comparisons, interval width is commonly treated as an uncertainty or precision summary rather than as a direct accuracy score, and confidence intervals versus credibility intervals are often reported side by side rather than collapsed into one score ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). In the bundled examples, this layer is shown from extracted HPD widths in Syngnatharia and from repo-local `ChronosCI`, `TreePL-CI`, and `RelTime-CI` summaries in Terapontoidei and the vertebrate example. When those repo-local CI summaries differ sharply, read that as the same CI framework applied to very different point-tree geometry.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
@@ -239,6 +239,8 @@ This figure shows the pulse layer directly on alternative `chronos` trees (estim
 
 The overall mean rank below is therefore family-balanced across pulse and rate only. The three pulse summaries are shown separately for transparency, but they are first collapsed into one pulse-family contribution. So pulse as a whole contributes one-half of the final overall rank, and `rate irregularity` contributes the other half. The optional uncertainty-width layer is reported separately as a precision check and is not folded into the core rank. The last column reports that mean-rank value itself (`rank_mean_core`), not the separate ordinal finish position (`rank_mean_core_rank`).
 
+The uncertainty-width contrasts here come from the same CI framework applied to finished point trees with very different time geometry. Large differences therefore reflect the geometry of the dated trees, not a switch to different CI math.
+
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | rate irregularity | uncertainty width (mean CI width, Ma) | overall mean rank (pulse = 1/2) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `chronos_clock` | `0.1348` | `0.1464` | `0.1604` | `2.5897` | `12.10` | `1.50` |
@@ -336,6 +338,8 @@ This panel compares the reference phylogram and the five originally selected chr
 ### Ranked post-fit results (lower is better)
 
 The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. The optional uncertainty-width layer is reported separately as a precision check and is not folded into the core rank.
+
+The uncertainty-width contrasts here likewise come from the same CI framework applied to finished point trees with different time geometry, so large differences should be read as geometry-sensitive precision effects rather than as different CI algorithms.
 
 | candidate | burst loss | pulse preservation (burst) | pulse preservation (overall) | mean relative gap | rate irregularity | uncertainty width (mean CI width, Ma) | core overall mean rank (pulse = 1/3) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
