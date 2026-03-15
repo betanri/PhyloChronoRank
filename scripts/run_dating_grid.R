@@ -61,7 +61,7 @@ usage <- function() {
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
     "  --chronos-iter-max      Maximum iterations for chronos optimizer. Default: 10000 (ape default).\n",
     "  --chronos-tol           Convergence tolerance for chronos. Default: 1e-8 (ape default).\n",
-    "  --ci-sites              Alignment length used for delta-method CI widths across ChronosCI, treePL, and RelTime. Default: 1000.\n",
+    "  --ci-sites              Alignment length used for repo-local delta-method CI summaries on finished chronos, treePL, and RelTime trees. Default: 1000.\n",
     "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
     "  --help                  Print this message.\n",
     sep = ""
