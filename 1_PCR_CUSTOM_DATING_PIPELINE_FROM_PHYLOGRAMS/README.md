@@ -44,23 +44,24 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
-- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos) and run here with the default parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
-- `treePL` bootstrap summaries are computed here by rerunning `treePL` on Poisson-perturbed branch-length replicates of the input phylogram, so the shared PCR uncertainty layer can place `chronos`, `treePL`, and `RelTime` on the same bootstrap comparison scale
-- the shared `RelTime` uncertainty layer comes from repo-local bootstrap reruns of the bounded `RelTime` dating path in `scripts/reltime_helpers.R`
-- the Tao-style analytical `RelTime` CI of [Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325) is still written as a supplemental file in `scripts/reltime_helpers.R`
+- the shared bootstrap CI layer for `chronos`, `treePL`, and `RelTime` follows one branch-length resampling design anchored to the default parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
+- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
+- `treePL` bootstrap summaries are computed by rerunning `treePL` on Poisson-perturbed branch-length replicates of the input phylogram
+- the shared `RelTime` bootstrap layer comes from repo-local bootstrap reruns of the bounded `RelTime` dating path in `scripts/reltime_helpers.R`
+- the Tao-style analytical `RelTime` CI of [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325) is still reported separately in `scripts/reltime_helpers.R`, but it is not used to compare `RelTime` directly against `chronos` and `treePL`
 
-In other words, the shipped `treePL` path here is not a minimal one-shot wrapper. It runs the recommended `prime + thorough` workflow from R, then validates the dated output tree before adding it to `candidates.csv`.
+This repo can generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
 
-That means this repo is not just storing finished chronograms. It can also generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
+## Four Layers
 
-## Three Layers
-
-This workflow is easiest to read if you keep three layers separate:
+This workflow is easiest to read if you keep four layers separate:
 
 - dating / fit layer
-  - `run_dating_grid.R` generates dated trees and method-specific run summaries
+  - `run_dating_grid.R` generates dated trees and method-specific run summaries for each candidate (`chronos`, `treePL`, `RelTime`)
+- model-selection layer
+  - for `chronos` only, which is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`); in workflows that compare those `chronos` models, the best-fitting model can be selected with `PHIIC` or penalized log-likelihood before candidates enter post-fit scoring
 - tuning layer
-  - lambda, smoothing, and `nb.rate.cat` grids are there to expose sensitivity, not to guarantee that one single setting must always be declared the winner by fit alone
+  - lambda, smoothing, and `nb.rate.cat` grids expose sensitivity to regularization settings; they are not meant to guarantee that one single setting must always be declared the winner by fit alone
 - post-fit layer
   - PCR, run afterward with `scripts/run_pcr.R`, scores the finished candidate chronograms on a common biological diagnostic set
 
@@ -127,6 +128,7 @@ A large-tree subset strategy can be useful: tune on a smaller calibration-preser
 - rerun the selected settings on the full phylogram with the same shared calibration file
 
 For modest tree sizes, the direct full-tree grid is usually simpler. For very large trees, subset tuning can be the difference between a usable screening pass and an impractically slow one.
+Tree size also affects method behavior itself: [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652) showed that coverage and CI width vary with `n`, and our companion benchmark (`P1` and `P2`) tests this directly by comparing `MAE` across `n = 50`, `150`, and `300` tips for `treePL`, `chronos`, and `RelTime` under the same calibration design.
 
 ## Basic Usage
 
@@ -213,7 +215,8 @@ The script writes:
 - `<prefix>_run_metadata.txt`
   - a compact provenance summary
 
-Method-specific outputs:
+<details>
+<summary><strong>Method-specific outputs</strong></summary>
 
 - `chronos/trees/*.tre`
 - `chronos/ci/*.csv`
@@ -230,6 +233,8 @@ Method-specific outputs:
 - `reltime/<prefix>_RelTime_bounds_used.csv`
 - `reltime/<prefix>_RelTime_run.csv`
 - `uncertainty_summary_long.csv`
+
+</details>
 
 ## What To Open First
 
@@ -262,7 +267,7 @@ Rscript scripts/run_pcr.R \
   --outdir=PATH/TO/pcr_out
 ```
 
-If you are working from primary fossil calibrations, that shared calibration CSV can be used directly in PCR’s gap layer. If your dates were generated from congruified or secondary ages, treat that gap layer as calibration slack rather than as independent fossil-fit evidence. The uncertainty summary is optional; pass it only when you want PCR to report the separate precision layer.
+If you are working from primary fossil calibrations, that shared calibration CSV can be used directly in PCR’s gap layer. If your dates were generated from congruified or secondary ages, treat that gap layer as calibration slack rather than as independent fossil-fit evidence.
 
 ## How To Choose Among Grid Results
 
@@ -325,9 +330,10 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
-- `chronos` uncertainty summaries are written with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`; the default repo path uses the parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
+- the shared `chronos`, `treePL`, and `RelTime` bootstrap CI layer follows one branch-length resampling design anchored to the parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
+- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
 - `uncertainty_summary_long.csv` combines only uncertainty summaries that are meant to live on the same comparison scale: extracted HPD widths, `chronos` bootstrap, `treePL` bootstrap, and `RelTime` bootstrap
-- the Tao-style analytical `RelTime` CI is written as a supplemental file only; on hard-bounded empirical trees it can live in a completely different numerical regime from the bootstrap widths because the analytical variance term can explode after bound projection compresses internal durations
+- the Tao-style analytical `RelTime` CI is reported separately only; on hard-bounded empirical trees it can live in a completely different numerical regime from the bootstrap widths because the analytical variance term can explode after bound projection compresses internal durations
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
 - in the bracketed benchmarks, `RelTime` is run only under the constraints it can actually consume, which means internal max bounds are not used on the `RelTime` side; those runs therefore compare method-specific usable calibration information rather than a literal all-methods-share-every-bound setup
