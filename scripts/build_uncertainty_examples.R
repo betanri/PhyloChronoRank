@@ -35,6 +35,16 @@ resolve_vgp_dir <- function() {
 }
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
+seed <- suppressWarnings(as.integer(kv[["seed"]] %||% "20260315"))
+if (is.finite(seed)) set.seed(seed)
+ci_sites <- as.integer(kv[["ci-sites"]] %||% "1000")
+if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
+chronos_ci_reps <- as.integer(kv[["chronos-ci-reps"]] %||% "100")
+if (!is.finite(chronos_ci_reps) || chronos_ci_reps < 1L) stop("--chronos-ci-reps must be >= 1.")
+reltime_bootstrap_reps <- as.integer(kv[["reltime-bootstrap-reps"]] %||% "100")
+if (!is.finite(reltime_bootstrap_reps) || reltime_bootstrap_reps < 1L) {
+  stop("--reltime-bootstrap-reps must be >= 1.")
+}
 
 build_ci_inputs_local <- function(phy, calibration_df) {
   bounds <- reltime_merge_calibration_bounds(phy, calibration_df)
@@ -90,6 +100,27 @@ sanitize_tree_file_column <- function(path) {
   write.csv(df, path, row.names = FALSE)
 }
 
+write_reltime_outputs <- function(ref_tree, calibration_df, tree_file,
+                                  bootstrap_ci_file, tao_ci_file, bounds_file) {
+  rel_boot <- reltime_bootstrap_ci(
+    phy = ref_tree,
+    calibration_df = calibration_df,
+    B = reltime_bootstrap_reps,
+    n_sites = ci_sites,
+    quiet = TRUE
+  )
+  rel_tao <- reltime_tao_ci_from_bounds_run(
+    phy = ref_tree,
+    rel_run = rel_boot,
+    n_sites = ci_sites
+  )
+  write.tree(rel_boot$tree, tree_file)
+  write.csv(rel_boot$ci, bootstrap_ci_file, row.names = FALSE)
+  write.csv(rel_tao, tao_ci_file, row.names = FALSE)
+  write.csv(rel_boot$bounds, bounds_file, row.names = FALSE)
+  list(tree = rel_boot$tree, bootstrap_ci = rel_boot$ci, tao_ci = rel_tao, bounds = rel_boot$bounds)
+}
+
 load_terap_chronos_settings <- function() {
   fit_path <- file.path(base_dir, "examples", "terapontoid", "summary_terap_empirical_model_fits.csv")
   fit_df <- read.csv(fit_path, stringsAsFactors = FALSE)
@@ -134,6 +165,18 @@ write_terap_outputs <- function() {
   ref_tree <- read.tree(file.path(ex_dir, "Terapontoid_ML_MAIN_phylogram_used.tree"))
   cal_df <- read.csv(file.path(ex_dir, "Terapontoid_ML_MAIN_calibrations_used.csv"), stringsAsFactors = FALSE)
   ci_inputs <- build_ci_inputs_local(ref_tree, cal_df)
+  rel_tree_file <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds.tre")
+  rel_boot_ci_file <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds_bootstrap_ci.csv")
+  rel_tao_ci_file <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds_ci.csv")
+  rel_bounds_file <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_bounds_used.csv")
+  rel_outputs <- write_reltime_outputs(
+    ref_tree = ref_tree,
+    calibration_df = cal_df,
+    tree_file = rel_tree_file,
+    bootstrap_ci_file = rel_boot_ci_file,
+    tao_ci_file = rel_tao_ci_file,
+    bounds_file = rel_bounds_file
+  )
   cand <- read.csv(file.path(ex_dir, "candidates.csv"), stringsAsFactors = FALSE)
   chronos_settings <- load_terap_chronos_settings()
 
@@ -142,9 +185,8 @@ write_terap_outputs <- function() {
     candidate <- cand$candidate[i]
     tree_path <- file.path(ex_dir, cand$tree_file[i])
     if (candidate == "RelTime") {
-      ci_path <- file.path(ex_dir, "Terapontoid_ML_MAIN_RelTime_full_bounds_ci.csv")
-      ci_df <- read.csv(ci_path, stringsAsFactors = FALSE)
-      source_tag <- "RelTime-CI"
+      ci_df <- rel_outputs$bootstrap_ci
+      source_tag <- "RelTime-bootstrap"
     } else if (startsWith(candidate, "chronos_")) {
       tr <- read.tree(tree_path)
       meta <- get_chronos_settings(chronos_settings, tree_path)
@@ -153,9 +195,9 @@ write_terap_outputs <- function() {
         chronos_ci(
           ref_tree, tr,
           calibration = ci_inputs$calib_bundle$chronos_calib,
-          B = as.integer(kv[["chronos-ci-reps"]] %||% "100"),
+          B = chronos_ci_reps,
           type = kv[["chronos-ci-type"]] %||% "parametric",
-          n_sites = 1000L,
+          n_sites = ci_sites,
           model = meta$model[1],
           lambda = meta$lambda[1],
           nb_rate_cat = meta$nb_rate_cat[1],
@@ -210,10 +252,20 @@ write_vgp_outputs <- function() {
   ref_tree_file <- file.path(vgp_dir, "roadies_v1.1.16b.numbers.nwk")
   cal_file <- file.path(vgp_dir, "roadies_manual_calibrations.csv")
   rel_tree_file <- file.path(vgp_dir, "pcr_rerun_20260310", "roadies_v1.1.16b.numbers_RelTime_full_bounds.tre")
-  rel_ci_file <- file.path(vgp_dir, "pcr_rerun_20260310", "roadies_v1.1.16b.numbers_RelTime_full_bounds_ci.csv")
+  rel_boot_ci_file <- file.path(vgp_dir, "pcr_rerun_20260310", "roadies_v1.1.16b.numbers_RelTime_full_bounds_bootstrap_ci.csv")
+  rel_tao_ci_file <- file.path(vgp_dir, "pcr_rerun_20260310", "roadies_v1.1.16b.numbers_RelTime_full_bounds_ci.csv")
+  rel_bounds_file <- file.path(vgp_dir, "pcr_rerun_20260310", "roadies_v1.1.16b.numbers_RelTime_bounds_used.csv")
 
   ref_tree <- read.tree(ref_tree_file)
   cal_df <- read.csv(cal_file, stringsAsFactors = FALSE)
+  rel_outputs <- write_reltime_outputs(
+    ref_tree = ref_tree,
+    calibration_df = cal_df,
+    tree_file = rel_tree_file,
+    bootstrap_ci_file = rel_boot_ci_file,
+    tao_ci_file = rel_tao_ci_file,
+    bounds_file = rel_bounds_file
+  )
   ci_inputs <- build_ci_inputs_local(ref_tree, cal_df)
   cand_file_raw <- kv[["vertebrate-candidates-csv"]] %||% ""
   if (nzchar(cand_file_raw)) {
@@ -230,10 +282,8 @@ write_vgp_outputs <- function() {
     candidate <- cand$candidate[i]
     tree_path <- cand$tree_file[i]
     if (candidate == "RelTime") {
-      rel_ci_path <- kv[["vertebrate-reltime-ci"]] %||% sub("\\.tre$", "_ci.csv", tree_path)
-      if (!file.exists(rel_ci_path)) rel_ci_path <- rel_ci_file
-      ci_df <- read.csv(rel_ci_path, stringsAsFactors = FALSE)
-      source_tag <- "RelTime-CI"
+      ci_df <- rel_outputs$bootstrap_ci
+      source_tag <- "RelTime-bootstrap"
     } else if (startsWith(candidate, "chronos_")) {
       tr <- read.tree(tree_path)
       meta <- get_chronos_settings(chronos_settings, tree_path)
@@ -241,9 +291,9 @@ write_vgp_outputs <- function() {
         chronos_ci(
           ref_tree, tr,
           calibration = ci_inputs$calib_bundle$chronos_calib,
-          B = as.integer(kv[["chronos-ci-reps"]] %||% "100"),
+          B = chronos_ci_reps,
           type = kv[["chronos-ci-type"]] %||% "parametric",
-          n_sites = 1000L,
+          n_sites = ci_sites,
           model = meta$model[1],
           lambda = meta$lambda[1],
           nb_rate_cat = meta$nb_rate_cat[1],

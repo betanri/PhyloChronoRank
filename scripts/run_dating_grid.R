@@ -28,6 +28,7 @@ usage <- function() {
       "[--ci-sites=1000]",
       "[--chronos-ci-type=parametric]",
       "[--chronos-ci-reps=100]",
+      "[--reltime-bootstrap-reps=100]",
       "[--chronos-pml-rds=FIT.rds]",
       "[--calibration-tag=NAME]",
       sep = " "
@@ -67,6 +68,7 @@ usage <- function() {
     "  --ci-sites              Alignment length used for optional uncertainty summaries. Default: 1000.\n",
     "  --chronos-ci-type       chronos bootstrap type: nonparametric, semiparametric, or parametric. Default: parametric.\n",
     "  --chronos-ci-reps       chronos bootstrap replicates. Default: 100.\n",
+    "  --reltime-bootstrap-reps RelTime bootstrap replicates for the shared uncertainty layer. Default: 100.\n",
     "  --chronos-pml-rds       Optional RDS containing a phangorn pml.output for nonparametric/semiparametric chronos bootstrap.\n",
     "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
     "  --help                  Print this message.\n",
@@ -803,6 +805,10 @@ if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
 chronos_ci_type <- kv[["chronos-ci-type"]] %||% "parametric"
 chronos_ci_reps <- as.integer(kv[["chronos-ci-reps"]] %||% "100")
 if (!is.finite(chronos_ci_reps) || chronos_ci_reps < 1L) stop("--chronos-ci-reps must be >= 1.")
+reltime_bootstrap_reps <- as.integer(kv[["reltime-bootstrap-reps"]] %||% "100")
+if (!is.finite(reltime_bootstrap_reps) || reltime_bootstrap_reps < 1L) {
+  stop("--reltime-bootstrap-reps must be >= 1.")
+}
 chronos_pml_output <- load_chronos_pml_output(kv[["chronos-pml-rds"]] %||% "")
 if (!nzchar(chronos_ci_type)) stop("--chronos-ci-type must be non-empty.")
 if (!(chronos_ci_type %in% c("nonparametric", "semiparametric", "parametric"))) {
@@ -1090,24 +1096,33 @@ if ("reltime" %in% methods) {
   msg("Running RelTime...")
   rel_candidate <- "RelTime"
   rel_tree_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime.tre"))
-  rel_ci_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_ci.csv"))
+  rel_boot_ci_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_bootstrap_ci.csv"))
+  rel_tao_ci_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_ci.csv"))
   rel_bounds_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_bounds_used.csv"))
   rel_summary_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_run.csv"))
 
   rel_run <- try(
-    run_reltime_with_bounds_ci(
+    reltime_bootstrap_ci(
       phy = phy,
       calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
       root_age = if (is.finite(root_age)) root_age else NULL,
-      n_sites = ci_sites
+      B = reltime_bootstrap_reps,
+      n_sites = ci_sites,
+      quiet = TRUE
     ),
     silent = TRUE
   )
 
   if (!inherits(rel_run, "try-error")) {
     ape::write.tree(rel_run$tree, file = rel_tree_file)
-    write.csv(rel_run$ci, rel_ci_file, row.names = FALSE)
+    write.csv(rel_run$ci, rel_boot_ci_file, row.names = FALSE)
     write.csv(rel_run$bounds, rel_bounds_file, row.names = FALSE)
+    rel_tao_ci <- reltime_tao_ci_from_bounds_run(
+      phy = phy,
+      rel_run = rel_run,
+      n_sites = ci_sites
+    )
+    write.csv(rel_tao_ci, rel_tao_ci_file, row.names = FALSE)
     rel_df <- data.frame(
       candidate = rel_candidate,
       method = "RelTime",
@@ -1117,7 +1132,8 @@ if ("reltime" %in% methods) {
       smooth = NA_real_,
       status = "OK",
       tree_file = rel_tree_file,
-      ci_file = rel_ci_file,
+      ci_file = rel_boot_ci_file,
+      tao_ci_file = rel_tao_ci_file,
       bounds_file = rel_bounds_file,
       n_sites = ci_sites,
       error = NA_character_,
@@ -1126,7 +1142,7 @@ if ("reltime" %in% methods) {
     uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
       rel_candidate,
       rel_run$ci,
-      source = "RelTime-CI"
+      source = "RelTime-bootstrap"
     )
     candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
       candidate = rel_candidate,
@@ -1145,6 +1161,7 @@ if ("reltime" %in% methods) {
       status = "FAILED",
       tree_file = "",
       ci_file = "",
+      tao_ci_file = "",
       bounds_file = "",
       n_sites = ci_sites,
       error = conditionMessage(attr(rel_run, "condition")),
@@ -1185,6 +1202,8 @@ meta_lines <- c(
   paste0("chronos bootstrap type: ", chronos_ci_type),
   paste0("chronos bootstrap replicates: ", chronos_ci_reps),
   paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
+  paste0("RelTime bootstrap replicates: ", reltime_bootstrap_reps),
+  "RelTime Tao analytical CI: written as supplemental file only; not used in uncertainty_summary_long.csv",
   paste0("Calibration pairs input: ", nrow(pair_df)),
   paste0("Calibration pairs mapped: ", nrow(pair_map$mapped)),
   paste0("Calibration bounds retained: ", nrow(node_bounds)),

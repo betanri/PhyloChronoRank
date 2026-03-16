@@ -443,7 +443,7 @@ run_reltime_with_ci <- function(phy, root_age, internal_cal = NULL,
     se    = se[int_nodes]
   )
 
-  list(
+list(
     tree  = dated,
     ci    = ci_df,
     node_age = node_age,
@@ -451,6 +451,222 @@ run_reltime_with_ci <- function(phy, root_age, internal_cal = NULL,
     RV_R  = vb_res$RV_R,
     V_obs = vb_res$V_obs
   )
+}
+
+.reltime_prepare_bounds_context <- function(phy, calibration_df, root_age = NULL) {
+  bounds <- reltime_merge_calibration_bounds(phy, calibration_df)
+  n_tip <- Ntip(phy)
+  root_node <- n_tip + 1L
+
+  root_row <- bounds[bounds$node == root_node, , drop = FALSE]
+  if (!nrow(root_row) && (is.null(root_age) || !is.finite(root_age))) {
+    stop("A root calibration or explicit root_age is required.")
+  }
+
+  root_var <- 0
+  if (nrow(root_row)) {
+    if (is.null(root_age) || !is.finite(root_age)) {
+      if (is.finite(root_row$age_max[1])) {
+        root_age <- mean(c(root_row$age_min[1], root_row$age_max[1]))
+      } else {
+        root_age <- root_row$age_min[1]
+      }
+    }
+    if (is.finite(root_row$age_max[1]) &&
+        abs(root_row$age_max[1] - root_row$age_min[1]) > 1e-10) {
+      root_var <- ((root_row$age_max[1] - root_row$age_min[1]) / (2 * 1.96))^2
+    }
+  }
+  if (!is.finite(root_age) || root_age <= 0) {
+    stop("root_age must be positive after root calibration handling.")
+  }
+
+  lower <- numeric(n_tip + phy$Nnode)
+  upper <- rep(Inf, n_tip + phy$Nnode)
+  if (nrow(bounds)) {
+    lower[bounds$node] <- bounds$age_min
+    upper[bounds$node] <- bounds$age_max
+  } else {
+    lower[root_node] <- root_age
+    upper[root_node] <- root_age
+  }
+
+  list(
+    bounds = bounds,
+    root_age = root_age,
+    root_var = root_var,
+    lower = lower,
+    upper = upper
+  )
+}
+
+.run_reltime_with_bounds_context <- function(phy, ctx, eps = 1e-6) {
+  n_tip <- Ntip(phy)
+
+  base <- .compute_H(phy)
+  node_age_init <- .assign_node_ages(phy, base$H, ctx$root_age)
+  node_age <- .reltime_project_node_ages_qp(
+    phy = phy,
+    node_age_init = node_age_init,
+    lower = ctx$lower,
+    upper = ctx$upper,
+    eps = eps
+  )
+
+  dated <- phy
+  for (k in seq_len(nrow(phy$edge))) {
+    p <- phy$edge[k, 1L]
+    c <- phy$edge[k, 2L]
+    T_p <- node_age[p]
+    T_c <- if (c <= n_tip) 0 else node_age[c]
+    dated$edge.length[k] <- max(T_p - T_c, eps)
+  }
+
+  list(
+    tree = dated,
+    node_age = node_age,
+    bounds = ctx$bounds,
+    initial_node_age = node_age_init,
+    lower = ctx$lower,
+    upper = ctx$upper,
+    root_age = ctx$root_age,
+    root_var = ctx$root_var
+  )
+}
+
+#' Run bounded RelTime without confidence intervals
+#'
+#' @param phy            Rooted phylogram.
+#' @param calibration_df Pairwise calibration table with taxonA,taxonB,age_min,age_max.
+#' @param root_age       Optional root point estimate used for the initial profile.
+#' @param eps            Minimum internal branch duration enforced in the QP.
+#' @return               List with tree, node_age, bounds, and projection context.
+run_reltime_with_bounds <- function(phy, calibration_df, root_age = NULL, eps = 1e-6) {
+  ctx <- .reltime_prepare_bounds_context(phy, calibration_df, root_age = root_age)
+  .run_reltime_with_bounds_context(phy, ctx, eps = eps)
+}
+
+#' Compute Tao-style analytical CIs for a bounded RelTime run
+#'
+#' @param phy       Rooted phylogram used for the bounded RelTime run.
+#' @param rel_run   Output list from [run_reltime_with_bounds()] or
+#'                  [reltime_bootstrap_ci()].
+#' @param n_sites   Alignment length for CI variance calculations.
+#' @return          data.frame(node, age, ci_lo, ci_hi, se)
+reltime_tao_ci_from_bounds_run <- function(phy, rel_run, n_sites = 1000L) {
+  bounds <- rel_run$bounds
+  cal_min <- if (nrow(bounds)) {
+    as.list(stats::setNames(rel_run$lower[bounds$node], bounds$node))
+  } else {
+    list()
+  }
+  cal_max <- if (nrow(bounds)) {
+    as.list(stats::setNames(rel_run$upper[bounds$node], bounds$node))
+  } else {
+    list()
+  }
+  reltime_ci(
+    phy = phy,
+    node_age = rel_run$node_age,
+    n_sites = n_sites,
+    root_var = rel_run$root_var,
+    cal_min = cal_min,
+    cal_max = cal_max
+  )
+}
+
+.reltime_poisson_perturb_phy <- function(phy, n_sites, min_edge = 1e-12) {
+  if (!is.finite(n_sites) || n_sites <= 0) {
+    stop("n_sites must be a positive finite number for RelTime bootstrap.")
+  }
+  out <- phy
+  lambda <- pmax(as.numeric(phy$edge.length) * n_sites, 0)
+  out$edge.length <- stats::rpois(length(lambda), lambda) / n_sites
+  out$edge.length <- pmax(out$edge.length, min_edge)
+  out
+}
+
+#' Bootstrap confidence intervals for bounded RelTime point trees
+#'
+#' This is the shared empirical uncertainty path used in PCR comparisons.
+#' Branch lengths are perturbed with a Poisson parametric bootstrap, the same
+#' bounded RelTime point-dating procedure is rerun on each replicate, and node
+#' ages are summarized with empirical quantiles. Tao-style analytical CIs remain
+#' available as a separate supplemental RelTime-specific diagnostic.
+#'
+#' @param phy            Rooted phylogram.
+#' @param calibration_df Pairwise calibration table with taxonA,taxonB,age_min,age_max.
+#' @param root_age       Optional root point estimate used for the initial profile.
+#' @param B              Number of bootstrap replicates.
+#' @param n_sites        Alignment length used for Poisson branch-length resampling.
+#' @param eps            Minimum internal branch duration enforced in the QP.
+#' @param quiet          Suppress progress messages.
+#' @param trees          Return successful bootstrap trees as well.
+#' @param min_edge       Small positive floor for zero-count bootstrap branches.
+#' @return               List with tree, ci, node_age, bounds, and bootstrap metadata.
+reltime_bootstrap_ci <- function(phy, calibration_df, root_age = NULL,
+                                 B = 100L, n_sites = 1000L, eps = 1e-6,
+                                 quiet = FALSE, trees = FALSE,
+                                 min_edge = 1e-12) {
+  B <- as.integer(B)
+  if (!is.finite(B) || B < 1L) stop("B must be a positive integer.")
+  if (!is.finite(n_sites) || n_sites <= 0) {
+    stop("n_sites must be a positive finite number for RelTime bootstrap.")
+  }
+
+  ctx <- .reltime_prepare_bounds_context(phy, calibration_df, root_age = root_age)
+  base_run <- .run_reltime_with_bounds_context(phy, ctx, eps = eps)
+
+  n_tip <- Ntip(phy)
+  int_nodes <- seq.int(n_tip + 1L, n_tip + phy$Nnode)
+  boot_age <- matrix(NA_real_, nrow = length(int_nodes), ncol = B)
+  boot_trees <- if (isTRUE(trees)) vector("list", B) else NULL
+  ok <- logical(B)
+
+  for (i in seq_len(B)) {
+    if (!quiet) cat("\rRunning RelTime bootstrap:", i, "/", B)
+    phy_boot <- try(.reltime_poisson_perturb_phy(phy, n_sites, min_edge = min_edge), silent = TRUE)
+    if (inherits(phy_boot, "try-error")) next
+    run_i <- try(.run_reltime_with_bounds_context(phy_boot, ctx, eps = eps), silent = TRUE)
+    if (inherits(run_i, "try-error") || is.null(run_i)) next
+    ages_i <- run_i$node_age[int_nodes]
+    if (!all(is.finite(ages_i))) next
+    boot_age[, i] <- ages_i
+    ok[i] <- TRUE
+    if (isTRUE(trees)) boot_trees[[i]] <- run_i$tree
+  }
+  if (!quiet) cat("\n")
+  if (!any(ok)) stop("RelTime bootstrap produced no successful replicates")
+
+  boot_ok <- boot_age[, ok, drop = FALSE]
+  qfun <- function(probs) {
+    apply(
+      boot_ok,
+      1L,
+      stats::quantile,
+      probs = probs,
+      names = FALSE,
+      na.rm = TRUE,
+      type = 8
+    )
+  }
+
+  ci_df <- data.frame(
+    node = int_nodes,
+    age = base_run$node_age[int_nodes],
+    ci_lo = qfun(0.025),
+    ci_hi = qfun(0.975),
+    q50_lo = qfun(0.25),
+    q50_hi = qfun(0.75),
+    se = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  base_run$ci <- ci_df
+  base_run$bootstrap_ok <- ok
+  base_run$n_bootstrap_ok <- sum(ok)
+  if (isTRUE(trees)) base_run$trees <- boot_trees[ok]
+  base_run
 }
 
 #' CI coverage: fraction of internal nodes whose true age falls in [ci_lo, ci_hi]
@@ -627,79 +843,16 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
 #' @return               List with tree, ci, node_age, bounds, and initial ages.
 run_reltime_with_bounds_ci <- function(phy, calibration_df, root_age = NULL,
                                        n_sites = 1000L, eps = 1e-6) {
-  bounds <- reltime_merge_calibration_bounds(phy, calibration_df)
-  n_tip <- Ntip(phy)
-  root_node <- n_tip + 1L
-
-  root_row <- bounds[bounds$node == root_node, , drop = FALSE]
-  if (!nrow(root_row) && (is.null(root_age) || !is.finite(root_age))) {
-    stop("A root calibration or explicit root_age is required.")
-  }
-
-  root_var <- 0
-  if (nrow(root_row)) {
-    if (is.null(root_age) || !is.finite(root_age)) {
-      if (is.finite(root_row$age_max[1])) {
-        root_age <- mean(c(root_row$age_min[1], root_row$age_max[1]))
-      } else {
-        root_age <- root_row$age_min[1]
-      }
-    }
-    if (is.finite(root_row$age_max[1]) &&
-        abs(root_row$age_max[1] - root_row$age_min[1]) > 1e-10) {
-      root_var <- ((root_row$age_max[1] - root_row$age_min[1]) / (2 * 1.96))^2
-    }
-  }
-  if (!is.finite(root_age) || root_age <= 0) {
-    stop("root_age must be positive after root calibration handling.")
-  }
-
-  base <- .compute_H(phy)
-  node_age_init <- .assign_node_ages(phy, base$H, root_age)
-
-  lower <- numeric(length(node_age_init))
-  upper <- rep(Inf, length(node_age_init))
-  if (nrow(bounds)) {
-    lower[bounds$node] <- bounds$age_min
-    upper[bounds$node] <- bounds$age_max
-  } else {
-    lower[root_node] <- root_age
-    upper[root_node] <- root_age
-  }
-
-  node_age <- .reltime_project_node_ages_qp(
+  rel_run <- run_reltime_with_bounds(
     phy = phy,
-    node_age_init = node_age_init,
-    lower = lower,
-    upper = upper,
+    calibration_df = calibration_df,
+    root_age = root_age,
     eps = eps
   )
-
-  dated <- phy
-  for (k in seq_len(nrow(phy$edge))) {
-    p <- phy$edge[k, 1L]
-    c <- phy$edge[k, 2L]
-    T_p <- node_age[p]
-    T_c <- if (c <= n_tip) 0 else node_age[c]
-    dated$edge.length[k] <- max(T_p - T_c, eps)
-  }
-
-  cal_min <- as.list(stats::setNames(lower[bounds$node], bounds$node))
-  cal_max <- as.list(stats::setNames(upper[bounds$node], bounds$node))
-  ci <- reltime_ci(
+  rel_run$ci <- reltime_tao_ci_from_bounds_run(
     phy = phy,
-    node_age = node_age,
-    n_sites = n_sites,
-    root_var = root_var,
-    cal_min = cal_min,
-    cal_max = cal_max
+    rel_run = rel_run,
+    n_sites = n_sites
   )
-
-  list(
-    tree = dated,
-    ci = ci,
-    node_age = node_age,
-    bounds = bounds,
-    initial_node_age = node_age_init
-  )
+  rel_run
 }

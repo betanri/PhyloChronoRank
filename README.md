@@ -4,7 +4,7 @@
 
 ## [1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS](1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md)
 
-Start from an unconstrained phylogram plus a calibration source. This tab runs `chronos`, `treePL`, and `RelTime` under one shared calibration-resolution step to produce a set of candidate chronograms, plus optional `chronos` bootstrap and `RelTime` CI summaries, for comparison in tab 2.
+Start from an unconstrained phylogram plus a calibration source. This tab runs `chronos`, `treePL`, and `RelTime` under one shared calibration-resolution step to produce a set of candidate chronograms, plus optional `chronos` bootstrap and `RelTime` bootstrap summaries for comparison in tab 2 while keeping the Tao-style `RelTime` analytical CI as a supplemental file.
 
 ## [2_PCR_POSTFIT_METRICS](2_PCR_POSTFIT_METRICS/README.md)
 

@@ -1,7 +1,7 @@
 "candidate","uncertainty_source","uncertainty_n_bars","uncertainty_mean_width_ma","uncertainty_median_width_ma","uncertainty_sd_width_ma","uncertainty_min_width_ma","uncertainty_max_width_ma","uncertainty_q25_width_ma","uncertainty_q75_width_ma"
-"chronos_clock","not_scored",0,NA,NA,NA,NA,NA,NA,NA
-"chronos_correlated","not_scored",0,NA,NA,NA,NA,NA,NA,NA
-"chronos_relaxed","not_scored",0,NA,NA,NA,NA,NA,NA,NA
-"chronos_discrete","not_scored",0,NA,NA,NA,NA,NA,NA,NA
+"chronos_clock","chronos-bootstrap",580,30.0375277074097,24.2553518396769,16.7195138767414,6.57470978118581,128.834414544865,19.2119900088731,35.2056947862047
+"chronos_correlated","chronos-bootstrap",580,18.6809377680543,8.2767889039574,22.7764596235538,0.356498950195499,140.956729716408,3.47491404455257,25.6501955884355
+"chronos_relaxed","chronos-bootstrap",580,22.4271325706514,13.1182814101681,21.8428233050296,1.1387266772157,139.394746410599,8.11346254087394,28.8880516979096
+"chronos_discrete","chronos-bootstrap",580,23.3335379703319,16.1269482059364,19.6310798901821,2.986347281589,127.699305627045,9.34951461802578,30.8856572481317
 "treepl_best-smooth-100","not_scored",0,NA,NA,NA,NA,NA,NA,NA
-"RelTime","RelTime-CI",580,190682.318124908,137300.661012819,192818.388899904,0,1103727.37511229,31681.2598008417,295706.890666214
+"RelTime","RelTime-bootstrap",580,6.16626735741408,5.53569304579507,5.1413601604052,0,28.5391573233331,2.15531664352668,9.42314001450196
