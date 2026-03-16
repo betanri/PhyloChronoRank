@@ -44,7 +44,7 @@ Operationally, all three methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` is implemented in repo-local R code derived from the relative-rate framework papers above, so this workflow does not require `MEGA`
-- the shared bootstrap CI layer for `chronos`, `treePL`, and `RelTime` follows one branch-length resampling design anchored to the default parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
+- the shared bootstrap CI layer for `chronos`, `treePL`, and `RelTime` uses one branch-length resampling design; `chronos` uses the vendored default parametric bootstrap helper of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652), while `treePL` and `RelTime` use repo-local reruns under the same resampling logic
 - `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
 - `treePL` bootstrap summaries are computed by rerunning `treePL` on Poisson-perturbed branch-length replicates of the input phylogram
 - the shared `RelTime` bootstrap layer comes from repo-local bootstrap reruns of the bounded `RelTime` dating path in `scripts/reltime_helpers.R`
@@ -330,7 +330,7 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`
-- the shared `chronos`, `treePL`, and `RelTime` bootstrap CI layer follows one branch-length resampling design anchored to the parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
+- the shared `chronos`, `treePL`, and `RelTime` bootstrap CI layer uses one branch-length resampling design; `chronos` uses the vendored default parametric bootstrap helper of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652), while `treePL` and `RelTime` use repo-local reruns under the same resampling logic
 - `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
 - `uncertainty_summary_long.csv` combines only uncertainty summaries that are meant to live on the same comparison scale: extracted HPD widths, `chronos` bootstrap, `treePL` bootstrap, and `RelTime` bootstrap
 - the Tao-style analytical `RelTime` CI is reported separately only; on hard-bounded empirical trees it can live in a completely different numerical regime from the bootstrap widths because the analytical variance term can explode after bound projection compresses internal durations
