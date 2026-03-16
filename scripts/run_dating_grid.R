@@ -28,6 +28,8 @@ usage <- function() {
       "[--ci-sites=1000]",
       "[--chronos-ci-type=parametric]",
       "[--chronos-ci-reps=100]",
+      "[--treepl-bootstrap-reps=0]",
+      "[--treepl-bootstrap-jobs=1]",
       "[--reltime-bootstrap-reps=100]",
       "[--chronos-pml-rds=FIT.rds]",
       "[--calibration-tag=NAME]",
@@ -68,6 +70,8 @@ usage <- function() {
     "  --ci-sites              Alignment length used for optional uncertainty summaries. Default: 1000.\n",
     "  --chronos-ci-type       chronos bootstrap type: nonparametric, semiparametric, or parametric. Default: parametric.\n",
     "  --chronos-ci-reps       chronos bootstrap replicates. Default: 100.\n",
+    "  --treepl-bootstrap-reps treePL bootstrap replicates for the shared uncertainty layer. Default: 0 (skip treePL CI).\n",
+    "  --treepl-bootstrap-jobs Parallel workers for treePL bootstrap replicates. Default: 1.\n",
     "  --reltime-bootstrap-reps RelTime bootstrap replicates for the shared uncertainty layer. Default: 100.\n",
     "  --chronos-pml-rds       Optional RDS containing a phangorn pml.output for nonparametric/semiparametric chronos bootstrap.\n",
     "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
@@ -117,6 +121,7 @@ if (length(script_file_arg)) {
 repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
 source(file.path(script_dir, "reltime_helpers.R"))
 source(file.path(script_dir, "chronos_ci_helpers.R"))
+source(file.path(script_dir, "treepl_bootstrap_helpers.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
 
@@ -809,6 +814,14 @@ reltime_bootstrap_reps <- as.integer(kv[["reltime-bootstrap-reps"]] %||% "100")
 if (!is.finite(reltime_bootstrap_reps) || reltime_bootstrap_reps < 1L) {
   stop("--reltime-bootstrap-reps must be >= 1.")
 }
+treepl_bootstrap_reps <- as.integer(kv[["treepl-bootstrap-reps"]] %||% "0")
+if (!is.finite(treepl_bootstrap_reps) || treepl_bootstrap_reps < 0L) {
+  stop("--treepl-bootstrap-reps must be >= 0.")
+}
+treepl_bootstrap_jobs <- as.integer(kv[["treepl-bootstrap-jobs"]] %||% "1")
+if (!is.finite(treepl_bootstrap_jobs) || treepl_bootstrap_jobs < 1L) {
+  stop("--treepl-bootstrap-jobs must be >= 1.")
+}
 chronos_pml_output <- load_chronos_pml_output(kv[["chronos-pml-rds"]] %||% "")
 if (!nzchar(chronos_ci_type)) stop("--chronos-ci-type must be non-empty.")
 if (!(chronos_ci_type %in% c("nonparametric", "semiparametric", "parametric"))) {
@@ -1003,7 +1016,7 @@ if ("chronos" %in% methods) {
 }
 
 if ("treepl" %in% methods) {
-  treepl_bin <- resolve_treepl_bin(kv[["treepl-bin"]] %||% NULL, repo_dir)
+  treepl_bin <- treepl_resolve_bin(kv[["treepl-bin"]] %||% NULL, repo_dir)
   if (!nzchar(treepl_bin)) {
     stop("treePL requested, but no executable was found. Pass --treepl-bin or set TREEPL_BIN.")
   }
@@ -1025,18 +1038,18 @@ if ("treepl" %in% methods) {
 
     prime_lines <- character(0)
     if (isTRUE(treepl_prime)) {
-      write_treepl_cfg(
+      treepl_write_cfg(
         prime_cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
         thorough = treepl_thorough, prime = TRUE,
         opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter
       )
       run_treepl_one(treepl_bin, prime_cfg_path, prime_log_path, omp_threads = treepl_threads)
-      prime_lines <- parse_treepl_prime_lines(prime_log_path)
+      prime_lines <- treepl_parse_prime_lines(prime_log_path)
       if (file.exists(out_tree)) unlink(out_tree)
       if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
     }
 
-    write_treepl_cfg(
+    treepl_write_cfg(
       cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
       thorough = treepl_thorough, prime = FALSE,
       opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
@@ -1055,10 +1068,51 @@ if ("treepl" %in% methods) {
           !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length >= 0)) {
         status <- if (identical(exit_code, 0L)) "OK" else "OK_NONZERO_EXIT"
         err <- NA_character_
-        uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(
-          candidate,
-          source = "not_scored"
-        )
+        if (treepl_bootstrap_reps > 0L) {
+          out_ci <- file.path(outdir, "treepl", "ci", paste0(prefix, "_", candidate, "_ci.csv"))
+          ci_res <- try(
+            treepl_bootstrap_ci(
+              treepl_bin = treepl_bin,
+              phy = phy,
+              calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
+              smooth = smooth,
+              dated_tree = tr,
+              B = treepl_bootstrap_reps,
+              n_sites = ci_sites,
+              numsites = treepl_numsites,
+              thorough = treepl_thorough,
+              prime = treepl_prime,
+              opt = treepl_opt,
+              plsimaniter = treepl_plsimaniter,
+              pliter = treepl_pliter,
+              quiet = TRUE,
+              omp_threads = treepl_threads,
+              jobs = treepl_bootstrap_jobs,
+              workdir = tempfile(pattern = paste0(prefix, "_", candidate, "_treepl_boot_")),
+              prefix = paste0(prefix, "_", candidate)
+            ),
+            silent = TRUE
+          )
+          if (!inherits(ci_res, "try-error")) {
+            write.csv(ci_res$ci, out_ci, row.names = FALSE)
+            uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+              candidate,
+              ci_res$ci,
+              source = "treePL-bootstrap"
+            )
+          } else {
+            out_ci <- ""
+            uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(
+              candidate,
+              source = "not_scored"
+            )
+          }
+        } else {
+          uncertainty_rows[[length(uncertainty_rows) + 1L]] <- make_unscored_uncertainty_row(
+            candidate,
+            source = "not_scored"
+          )
+        }
         candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
           candidate = candidate,
           tree_file = out_tree,
@@ -1077,8 +1131,8 @@ if ("treepl" %in% methods) {
       status = status,
       exit_code = exit_code,
       tree_file = if (grepl("^OK", status)) out_tree else "",
-      ci_file = "",
-      n_sites = NA_integer_,
+      ci_file = out_ci,
+      n_sites = if (nzchar(out_ci)) ci_sites else NA_integer_,
       cfg_file = cfg_path,
       log_file = log_path,
       error = err %||% NA_character_,
@@ -1202,6 +1256,8 @@ meta_lines <- c(
   paste0("chronos bootstrap type: ", chronos_ci_type),
   paste0("chronos bootstrap replicates: ", chronos_ci_reps),
   paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
+  paste0("treePL bootstrap replicates: ", treepl_bootstrap_reps),
+  paste0("treePL bootstrap jobs: ", treepl_bootstrap_jobs),
   paste0("RelTime bootstrap replicates: ", reltime_bootstrap_reps),
   "RelTime Tao analytical CI: written as supplemental file only; not used in uncertainty_summary_long.csv",
   paste0("Calibration pairs input: ", nrow(pair_df)),
