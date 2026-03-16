@@ -217,7 +217,7 @@ This tab does not do model fitting; that workflow lives in tab 1. In this exampl
 
 ### Quick takeaway
 
-- the core PCR comparison in this example uses `pulse` and `rate irregularity`, not `gap burden`
+- the core PCR comparison in this example uses `pulse` and `rate irregularity`, not `gap burden`, because the dates come from secondary / congruified calibration ages rather than primary calibration evidence
 - `chronos_clock` is the clear winner under the two-family core rank
 - `chronos_discrete` is the close runner-up
 - `RelTime` is the strongest pulse-preservation candidate, but it pays a large `rate irregularity` penalty
