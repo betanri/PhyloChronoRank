@@ -154,22 +154,22 @@ assert_table_matches(
   table1,
   csv1,
   mapping = c(
-    "burst loss" = "burst_loss",
-    "pulse preservation (burst)" = "pulse_burst_selector_error",
-    "pulse preservation (overall)" = "pulse_default_selector_error",
-    "mean relative gap" = "mean_relative_gap",
-    "rate irregularity" = "rate_irregularity",
-    "uncertainty width (mean HPD width, Ma)" = "uncertainty_mean_width_ma",
-    "core overall mean rank (pulse = 1/3)" = "rank_mean_3families"
+    "burst loss (lower is better)" = "burst_loss",
+    "pulse preservation (burst; lower is better)" = "pulse_burst_selector_error",
+    "pulse preservation (overall; lower is better)" = "pulse_default_selector_error",
+    "mean relative gap (lower is better)" = "mean_relative_gap",
+    "rate irregularity (lower is better)" = "rate_irregularity",
+    "uncertainty width (mean HPD width, Ma; lower is better)" = "uncertainty_mean_width_ma",
+    "core overall mean rank (pulse = 1/3; lower is better)" = "rank_mean_3families"
   ),
   digits = c(
-    "burst loss" = 4,
-    "pulse preservation (burst)" = 4,
-    "pulse preservation (overall)" = 4,
-    "mean relative gap" = 4,
-    "rate irregularity" = 4,
-    "uncertainty width (mean HPD width, Ma)" = 2,
-    "core overall mean rank (pulse = 1/3)" = 2
+    "burst loss (lower is better)" = 4,
+    "pulse preservation (burst; lower is better)" = 4,
+    "pulse preservation (overall; lower is better)" = 4,
+    "mean relative gap (lower is better)" = 4,
+    "rate irregularity (lower is better)" = 4,
+    "uncertainty width (mean HPD width, Ma; lower is better)" = 2,
+    "core overall mean rank (pulse = 1/3; lower is better)" = 2
   )
 )
 
@@ -180,23 +180,23 @@ assert_table_matches(
   table2,
   csv2,
   mapping = c(
-    "burst loss" = "burst_loss",
-    "pulse preservation (burst)" = "pulse_burst_selector_error",
-    "pulse preservation (overall)" = "pulse_default_selector_error",
-    "rate irregularity" = "rate_irregularity",
-    "uncertainty width (mean CI width, Ma)" = "uncertainty_mean_width_ma",
-    "overall mean rank (pulse = 1/2)" = "rank_mean_core"
+    "burst loss (lower is better)" = "burst_loss",
+    "pulse preservation (burst; lower is better)" = "pulse_burst_selector_error",
+    "pulse preservation (overall; lower is better)" = "pulse_default_selector_error",
+    "rate irregularity (lower is better)" = "rate_irregularity",
+    "uncertainty width (mean CI width, Ma; lower is better)" = "uncertainty_mean_width_ma",
+    "overall mean rank (pulse = 1/2; lower is better)" = "rank_mean_core"
   ),
   digits = c(
-    "burst loss" = 4,
-    "pulse preservation (burst)" = 4,
-    "pulse preservation (overall)" = 4,
-    "rate irregularity" = 4,
-    "uncertainty width (mean CI width, Ma)" = 2,
-    "overall mean rank (pulse = 1/2)" = 2
+    "burst loss (lower is better)" = 4,
+    "pulse preservation (burst; lower is better)" = 4,
+    "pulse preservation (overall; lower is better)" = 4,
+    "rate irregularity (lower is better)" = 4,
+    "uncertainty width (mean CI width, Ma; lower is better)" = 2,
+    "overall mean rank (pulse = 1/2; lower is better)" = 2
   ),
   na_labels = c(
-    "uncertainty width (mean CI width, Ma)" = "not scored"
+    "uncertainty width (mean CI width, Ma; lower is better)" = "not scored"
   )
 )
 
@@ -207,26 +207,26 @@ assert_table_matches(
   table3,
   csv3,
   mapping = c(
-    "burst loss" = "burst_loss",
-    "pulse preservation (burst)" = "pulse_burst_selector_error",
-    "pulse preservation (overall)" = "pulse_default_selector_error",
-    "mean relative gap" = "mean_relative_gap",
-    "rate irregularity" = "rate_irregularity",
-    "uncertainty width (mean CI width, Ma)" = "uncertainty_mean_width_ma",
-    "core overall mean rank (pulse = 1/3)" = "rank_mean_core"
+    "burst loss (lower is better)" = "burst_loss",
+    "pulse preservation (burst; lower is better)" = "pulse_burst_selector_error",
+    "pulse preservation (overall; lower is better)" = "pulse_default_selector_error",
+    "mean relative gap (lower is better)" = "mean_relative_gap",
+    "rate irregularity (lower is better)" = "rate_irregularity",
+    "uncertainty width (mean CI width, Ma; lower is better)" = "uncertainty_mean_width_ma",
+    "core overall mean rank (pulse = 1/3; lower is better)" = "rank_mean_core"
   ),
   digits = c(
-    "burst loss" = 4,
-    "pulse preservation (burst)" = 4,
-    "pulse preservation (overall)" = 4,
-    "mean relative gap" = 4,
-    "rate irregularity" = 4,
-    "uncertainty width (mean CI width, Ma)" = 2,
-    "core overall mean rank (pulse = 1/3)" = 2
+    "burst loss (lower is better)" = 4,
+    "pulse preservation (burst; lower is better)" = 4,
+    "pulse preservation (overall; lower is better)" = 4,
+    "mean relative gap (lower is better)" = 4,
+    "rate irregularity (lower is better)" = 4,
+    "uncertainty width (mean CI width, Ma; lower is better)" = 2,
+    "core overall mean rank (pulse = 1/3; lower is better)" = 2
   ),
   candidate_transform = function(x) sub("^treepl_best-smooth-[^,]+$", "treePL", x),
   na_labels = c(
-    "uncertainty width (mean CI width, Ma)" = "not scored"
+    "uncertainty width (mean CI width, Ma; lower is better)" = "not scored"
   )
 )
 

@@ -71,7 +71,7 @@ That separation matters. A tree can look best by a fit criterion inside one meth
 
 You must provide:
 
-- one rooted phylogram with positive branch lengths
+- one rooted phylogram with positive branch lengths measured in substitutions per site (not in coalescent time units)
 - one output directory
 - exactly one calibration source:
   - a pairwise calibration CSV
@@ -82,7 +82,7 @@ Optional:
 - an exact `root_age`
 - a reduced method list
 - custom lambda and smoothing grids
-- a method tag filter if your calibration CSV contains a `candidate` column
+- a method tag filter if your calibration CSV contains a `candidate` tag column
 
 ## Calibration Modes
 
@@ -97,12 +97,14 @@ Required columns:
 Optional columns:
 
 - `age_max`
-- `candidate`
+- `candidate` (an optional tag column used only to filter rows when one CSV contains multiple calibration subsets or method-specific rows)
 
 Notes:
 
 - if `age_max` is missing, the script treats that row as minimum-only with an open upper bound
-- if a `candidate` column exists and contains multiple method-specific tags, pass `--calibration-tag=...` so the script knows which subset to keep before the shared calibration merge
+- if a `candidate` column exists, its values are just row labels for filtering; they do not name candidate trees
+- if the same CSV mixes multiple tags, pass `--calibration-tag=...` so the script keeps the desired tagged rows before the shared calibration merge
+- blank `candidate` cells can be used for calibration rows that should apply to all methods
 - if you pass `--root-age=...`, that exact root age is appended to the shared calibration set for all methods
 
 ### Option 2: Reference Backbone Time Tree
