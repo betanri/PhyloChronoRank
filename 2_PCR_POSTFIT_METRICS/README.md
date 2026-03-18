@@ -6,7 +6,7 @@ In simple terms, the core idea is that divergence-time estimation is hard: the r
 
 It is method-agnostic. The candidates can come from `BEAST`, `MCMCTree`, `MrBayes`, `chronos`, `treePL`, `RelTime`, or any other dating workflow.
 
-PCR starts from finished chronograms. If you need to generate a set of chronograms from three alternative methods (`chronos`, `treePL`, `RelTime`) using an unconstrained phylogram and a calibration set, you can do that here: [PCR Custom Dating Pipeline From Phylograms](../1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md). In this repo, `scripts/run_dating_grid.R` can run `chronos` (all four clock models across a lambda grid), `treePL` (smoothing grid), and `RelTime` from one shared calibration source, and it can also write optional `chronos`, `treePL`, and `RelTime` bootstrap summaries for the shared uncertainty layer while keeping the Tao-style `RelTime` analytical CI as a supplemental output.
+PCR starts from finished chronograms. If you need to generate a set of chronograms from three alternative methods (`chronos`, `treePL`, `RelTime`) using an unconstrained phylogram and a calibration set, you can do that here: [PCR Custom Dating Pipeline From Phylograms](../1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md).
 
 ## What it evaluates
 
