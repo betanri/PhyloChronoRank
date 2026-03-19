@@ -2,15 +2,6 @@
 
 This page documents `scripts/run_dating_grid.R`, the repo-local helper for generating candidate chronograms before running PCR.
 
-The script is designed for one specific use case:
-
-- start from an unconstrained phylogram
-- define one shared calibration source
-- run the same effective calibration set through `chronos` (four clock-model candidates in the standard full-method comparison), `treePL`, and `RelTime`
-- collect all successful dated trees into one `candidates.csv` that can be passed directly into `scripts/run_pcr.R`
-- write a shared optional uncertainty summary from `chronos`, `treePL`, and `RelTime` bootstrap outputs when those intervals are computed, with `chronos` using the default parametric bootstrap of [Paradis et al. 2023 on confidence intervals (CIs) in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652)
-- write an additional analytical `RelTime`-style CI following [Tao et al. 2020, Reliable confidence intervals for RelTime estimates of evolutionary divergence times](https://academic.oup.com/mbe/article/37/1/280/5602325), without folding it into the shared PCR uncertainty table
-
 ## What It Runs
 
 `scripts/run_dating_grid.R` can run:
@@ -18,16 +9,26 @@ The script is designed for one specific use case:
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` across a smoothing grid
 - `RelTime` with the same merged node bounds used for the other methods
-- `chronos` bootstrap confidence intervals through the vendored helper implementing the default parametric bootstrap of [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652), plus repo-local `treePL` and `RelTime` bootstrap confidence intervals for the shared PCR uncertainty layer and a supplemental Tao-style analytical `RelTime` CI file
+- optional uncertainty summaries: `chronos` bootstrap CIs through the vendored helper implementing the default parametric bootstrap of [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652), plus repo-local `treePL` and `RelTime` bootstrap CIs for the shared PCR uncertainty layer, and a separate supplemental Tao-style analytical `RelTime` CI file
 
-For `treePL`, the default repo path is the recommended two-step run:
-
-- a `prime` pass first
-- then the real optimized run using the optimizer hints reported by the prime pass
-- with `thorough` enabled by default
-- and with no explicit `opt` override unless you pass `--treepl-opt=...`
+For `treePL`, the default repo path is the recommended two-step run: a `prime` pass first, then the real optimized run using the optimizer hints from that pass, with `thorough` enabled by default and no explicit `opt` override unless you pass `--treepl-opt=...`.
 
 The main point is calibration consistency. The script first resolves one shared calibration table, maps pairwise calibrations onto MRCA nodes on the target phylogram, merges duplicate-node rows by interval intersection, drops empty intersections, and then passes that same resolved node-bound set to all three methods.
+
+## What You Get
+
+In the standard full-method comparison, the pipeline returns six candidate chronograms:
+
+- `chronos_clock`
+- `chronos_discrete`
+- `chronos_correlated`
+- `chronos_relaxed`
+- `treePL`
+- `RelTime`
+
+The `chronos` side is kept as four separate trees, one per clock model, rather than collapsed to a single selected `chronos` result. Variation among `chronos` clock models is often large, and in practice can exceed the difference between some `chronos` models and `treePL` or `RelTime`. Keeping all four therefore avoids hiding biologically meaningful variation before PCR evaluates it.
+
+The pipeline also reports upstream `chronos` fit statistics. Those are useful, but they should not be treated as the final decision rule by themselves: simulations suggest, as discussed in [WHY_CHRONOS_AND_NOT_TREEPL](https://github.com/betanri/chronos/tree/codex/chronos-pipeline/WHY_CHRONOS_AND_NOT_TREEPL), that `PHIIC` does not always recover the true generating clock model reliably. Across both simulations and the bundled empirical examples, `chronos_clock` and `chronos_discrete` are often the strongest `chronos` performers, whereas `chronos_correlated` and `chronos_relaxed` tend to perform worse, including on the downstream post-fit biological metrics. One notable pattern is that `chronos_clock` often remains competitive even under fairly high heterotachy, as also discussed in [WHY_CHRONOS_AND_NOT_TREEPL](https://github.com/betanri/chronos/tree/codex/chronos-pipeline/WHY_CHRONOS_AND_NOT_TREEPL), although the reason for that is still not fully clear.
 
 ## Method Provenance
 
