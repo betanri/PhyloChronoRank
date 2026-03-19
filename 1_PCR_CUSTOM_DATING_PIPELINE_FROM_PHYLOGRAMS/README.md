@@ -8,8 +8,8 @@ The script is designed for one specific use case:
 - define one shared calibration source
 - run the same effective calibration set through `chronos` (four clock-model candidates in the standard full-method comparison), `treePL`, and `RelTime`
 - collect all successful dated trees into one `candidates.csv` that can be passed directly into `scripts/run_pcr.R`
-- write a shared optional uncertainty summary from `chronos`, `treePL`, and `RelTime` bootstrap outputs when those intervals are computed, with `chronos` using the default parametric bootstrap of [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652)
-- write an additional analytical `RelTime`-style CI following [Tao et al. 2020, Reliable confidence intervals for RelTime estimates of evolutionary divergence times](https://academic.oup.com/mbe/article/37/1/280/5602325) without folding it into the shared PCR uncertainty table
+- write a shared optional uncertainty summary from `chronos`, `treePL`, and `RelTime` bootstrap outputs when those intervals are computed, with `chronos` using the default parametric bootstrap of [Paradis et al. 2023 on confidence intervals (CIs) in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652)
+- write an additional analytical `RelTime`-style CI following [Tao et al. 2020, Reliable confidence intervals for RelTime estimates of evolutionary divergence times](https://academic.oup.com/mbe/article/37/1/280/5602325), without folding it into the shared PCR uncertainty table
 
 ## What It Runs
 
