@@ -694,6 +694,131 @@ tail_text <- function(path, n = 12L) {
   paste(tail(txt, n), collapse = "\n")
 }
 
+parse_treepl_final_objective <- function(log_path) {
+  if (!file.exists(log_path)) return(NA_real_)
+  txt <- readLines(log_path, warn = FALSE)
+  for (pat in c("after opt calc2:", "after opt calc1:", "exit siman:")) {
+    hits <- grep(pat, txt, fixed = TRUE, value = TRUE)
+    if (!length(hits)) next
+    val <- suppressWarnings(as.numeric(trimws(sub("^.*:\\s*", "", tail(hits, 1L)))))
+    if (is.finite(val)) return(val)
+  }
+  NA_real_
+}
+
+distance_from_one <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  ifelse(is.finite(x) & x > 0, abs(log10(x)), Inf)
+}
+
+build_representative_candidates <- function(all_df) {
+  reps <- list()
+  add_i <- 0L
+
+  chronos_df <- all_df[
+    all_df$method == "chronos" &
+      all_df$status == "OK" &
+      nzchar(all_df$tree_file),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(chronos_df)) {
+    for (mdl in unique(as.character(chronos_df$model))) {
+      z <- chronos_df[chronos_df$model == mdl, , drop = FALSE]
+      if (!nrow(z)) next
+      ord <- order(
+        ifelse(is.finite(z$fit_score), z$fit_score, Inf),
+        distance_from_one(z$lambda),
+        ifelse(is.finite(z$lambda), z$lambda, Inf),
+        ifelse(is.finite(z$nb_rate_cat), z$nb_rate_cat, Inf),
+        z$candidate
+      )
+      best <- z[ord[1L], , drop = FALSE]
+      add_i <- add_i + 1L
+      reps[[add_i]] <- data.frame(
+        candidate = paste0("chronos_", mdl),
+        tree_file = best$tree_file[1L],
+        method = "chronos",
+        model = mdl,
+        lambda = best$lambda[1L],
+        nb_rate_cat = best$nb_rate_cat[1L],
+        smooth = NA_real_,
+        selected_from_candidate = best$candidate[1L],
+        selection_score = best$fit_score[1L],
+        selection_rule = "min_fit_score_then_lambda_closest_to_1",
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  treepl_df <- all_df[
+    all_df$method == "treePL" &
+      grepl("^OK", all_df$status) &
+      nzchar(all_df$tree_file),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(treepl_df)) {
+    if (!("treepl_objective" %in% names(treepl_df))) treepl_df$treepl_objective <- NA_real_
+    missing_obj <- !is.finite(treepl_df$treepl_objective)
+    if (any(missing_obj) && "log_file" %in% names(treepl_df)) {
+      treepl_df$treepl_objective[missing_obj] <- vapply(
+        treepl_df$log_file[missing_obj],
+        parse_treepl_final_objective,
+        FUN.VALUE = numeric(1)
+      )
+    }
+    ord <- order(
+      ifelse(is.finite(treepl_df$treepl_objective), treepl_df$treepl_objective, Inf),
+      distance_from_one(treepl_df$smooth),
+      ifelse(is.finite(treepl_df$smooth), treepl_df$smooth, Inf),
+      treepl_df$candidate
+    )
+    best <- treepl_df[ord[1L], , drop = FALSE]
+    add_i <- add_i + 1L
+    reps[[add_i]] <- data.frame(
+      candidate = "treePL",
+      tree_file = best$tree_file[1L],
+      method = "treePL",
+      model = "treePL",
+      lambda = NA_real_,
+      nb_rate_cat = NA_integer_,
+      smooth = best$smooth[1L],
+      selected_from_candidate = best$candidate[1L],
+      selection_score = best$treepl_objective[1L],
+      selection_rule = "min_treepl_objective_then_smoothing_closest_to_1",
+      stringsAsFactors = FALSE
+    )
+  }
+
+  rel_df <- all_df[
+    all_df$method == "RelTime" &
+      all_df$status == "OK" &
+      nzchar(all_df$tree_file),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rel_df)) {
+    best <- rel_df[1L, , drop = FALSE]
+    add_i <- add_i + 1L
+    reps[[add_i]] <- data.frame(
+      candidate = "RelTime",
+      tree_file = best$tree_file[1L],
+      method = "RelTime",
+      model = "RelTime",
+      lambda = NA_real_,
+      nb_rate_cat = NA_integer_,
+      smooth = NA_real_,
+      selected_from_candidate = best$candidate[1L],
+      selection_score = NA_real_,
+      selection_rule = "single_reltime_run",
+      stringsAsFactors = FALSE
+    )
+  }
+
+  bind_rows_fill(reps)
+}
+
 resolve_treepl_bin <- function(user_bin, repo_dir) {
   candidates <- c(
     user_bin %||% NA_character_,
@@ -1128,6 +1253,7 @@ if ("treepl" %in% methods) {
       lambda = NA_real_,
       nb_rate_cat = NA_integer_,
       smooth = smooth,
+      treepl_objective = if (grepl("^OK", status)) parse_treepl_final_objective(log_path) else NA_real_,
       status = status,
       exit_code = exit_code,
       tree_file = if (grepl("^OK", status)) out_tree else "",
@@ -1238,9 +1364,22 @@ if (nrow(uncertainty_df)) {
   write.csv(uncertainty_df, uncertainty_csv, row.names = FALSE)
 }
 
-candidates_df <- if (length(candidate_rows)) do.call(rbind, candidate_rows) else data.frame(candidate = character(0), tree_file = character(0), stringsAsFactors = FALSE)
-if (nrow(candidates_df)) {
-  candidates_df <- candidates_df[!duplicated(candidates_df$candidate), , drop = FALSE]
+full_candidates_df <- if (length(candidate_rows)) {
+  do.call(rbind, candidate_rows)
+} else {
+  data.frame(candidate = character(0), tree_file = character(0), stringsAsFactors = FALSE)
+}
+if (nrow(full_candidates_df)) {
+  full_candidates_df <- full_candidates_df[!duplicated(full_candidates_df$candidate), , drop = FALSE]
+}
+full_grid_dir <- file.path(outdir, "full_grid")
+dir.create(full_grid_dir, recursive = TRUE, showWarnings = FALSE)
+full_candidates_csv <- file.path(full_grid_dir, "candidates.csv")
+write.csv(full_candidates_df, full_candidates_csv, row.names = FALSE, quote = TRUE)
+
+candidates_df <- build_representative_candidates(all_df)
+if (!nrow(candidates_df)) {
+  candidates_df <- full_candidates_df
 }
 candidates_csv <- file.path(outdir, "candidates.csv")
 write.csv(candidates_df, candidates_csv, row.names = FALSE, quote = TRUE)
@@ -1264,13 +1403,16 @@ meta_lines <- c(
   paste0("Calibration pairs mapped: ", nrow(pair_map$mapped)),
   paste0("Calibration bounds retained: ", nrow(node_bounds)),
   paste0("Calibration bounds dropped as inconsistent: ", nrow(pair_map$dropped_inconsistent)),
-  paste0("Successful candidates written: ", nrow(candidates_df)),
+  paste0("Successful full-grid candidates written: ", nrow(full_candidates_df)),
+  paste0("Representative candidates written: ", nrow(candidates_df)),
   paste0("Combined runs summary: ", all_runs_csv),
+  paste0("Full-grid candidates CSV: ", full_candidates_csv),
   paste0("Candidates CSV: ", candidates_csv),
   paste0("Uncertainty summary CSV: ", if (nrow(uncertainty_df)) uncertainty_csv else "none")
 )
 writeLines(meta_lines, file.path(outdir, paste0(prefix, "_run_metadata.txt")))
 
 msg("Saved combined runs summary: ", all_runs_csv)
+msg("Saved full-grid candidates CSV: ", full_candidates_csv)
 msg("Saved candidates CSV: ", candidates_csv)
 msg("Done.")

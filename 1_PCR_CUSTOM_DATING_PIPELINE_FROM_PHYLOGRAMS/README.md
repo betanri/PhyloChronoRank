@@ -203,7 +203,11 @@ Rscript scripts/run_dating_grid.R \
 The script writes:
 
 - `candidates.csv`
-  - one row per successful dated tree
+  - the representative PCR-ready candidate set
+  - in the standard full-method comparison, this is the reduced 6-tree table: one retained `chronos` tree per clock model, one retained `treePL` tree, and `RelTime`
+  - ready for `scripts/run_pcr.R`
+- `full_grid/candidates.csv`
+  - one row per successful dated tree across the full grid
   - ready for `scripts/run_pcr.R`
 - `<prefix>_all_runs_summary.csv`
   - combined run summary across all requested methods
@@ -249,17 +253,19 @@ If you are reviewing a new run, the most useful order is:
 4. `treepl/<prefix>_treepl_runs.csv`
 5. `uncertainty_summary_long.csv`
 6. `candidates.csv`
+7. `full_grid/candidates.csv`
 
 That tells you:
 
 - which calibrations survived the shared merge step
 - which runs actually succeeded
 - which CI summaries were written for the successful dated trees
-- which candidate trees were promoted into the PCR-ready set
+- which candidate trees were promoted into the reduced PCR-ready set
+- which additional successful trees remain available in the full grid
 
 ## Feeding The Results Into PCR
 
-Once the dating grid finishes, run PCR on the generated candidates:
+Once the dating grid finishes, run PCR on the reduced representative candidates:
 
 ```bash
 Rscript scripts/run_pcr.R \
@@ -274,10 +280,12 @@ If you are working from primary fossil calibrations, that shared calibration CSV
 
 ## How To Choose Among Grid Results
 
-The script writes the full grid. It does not enforce one global selector for you.
+The script writes both the full grid and a reduced representative candidate set.
 
 The practical review pattern is:
 
+- inspect the reduced `candidates.csv` first if you want the standard 6-tree PCR comparison
+- inspect `full_grid/candidates.csv` and the run summaries if you want to review the full sensitivity surface
 - compare fit within a method family first
   - for `chronos`, inspect `chronos/<prefix>_chronos_runs.csv`
   - for `treePL`, inspect `treepl/<prefix>_treepl_runs.csv`
