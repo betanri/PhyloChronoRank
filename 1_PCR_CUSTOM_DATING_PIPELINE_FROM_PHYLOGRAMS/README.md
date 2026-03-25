@@ -30,7 +30,7 @@ The pipeline also reports upstream `chronos` fit statistics. Those are useful, b
 
 **Example output (terapontoid dataset, 105 tips, 6 calibrations):**
 
-![Terapontoid pipeline output](figures/terapontoid_pipeline_output.png)
+![Terapontoid pipeline output](../figures/terapontoid_pipeline_output.png)
 
 ## Method Provenance
 
