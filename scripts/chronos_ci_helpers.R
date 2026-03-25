@@ -413,13 +413,21 @@ chronosCI <-
         cal <- calibration
     }
 
+    boot_cal_base <- if (length(CALS)) calibration[!DUP, ] else cal
+
     for (i in 1:B) {
         if (!quiet) cat("\rRunning chronos bootstrap:", i, "/", B)
         if (length(CALS)) {
-            cal <- calibration[!DUP, ]
+            cal <- boot_cal_base
             ages2 <- sapply(CALS, "[", i)
             cal[match(names(ages2), cal$node), 2:3] <- ages2
+        } else {
+            cal <- boot_cal_base
         }
+        cal <- .chronos_remap_calibration_nodes(chronogram, rTR[[i]], cal)
+        cal <- .chronos_prepare_calibration_for_ape(cal)
+        if (is.null(cal) || !nrow(cal)) next
+
         chr_try <- try(
             ape::chronos(rTR[[i]], quiet = TRUE, model = model,
                          calibration = cal, control = control),
@@ -431,13 +439,41 @@ chronosCI <-
         }
     }
     if (!any(OK)) stop("chronosCI bootstrap produced no successful chronos replicates")
-    BT <- sapply(CHR[OK], ape::branching.times)
-    CI <- apply(BT, 1, stats::quantile, probs = c(0.025, 0.25, 0.75, 0.975))
+    ok_idx <- which(OK)
+    target_sig <- .chronos_signature_index(chronogram)
+    target_nodes <- as.integer(names(target_sig))
+    BT <- matrix(
+        NA_real_,
+        nrow = length(target_nodes),
+        ncol = length(ok_idx),
+        dimnames = list(as.character(target_nodes), NULL)
+    )
+    for (j in seq_along(ok_idx)) {
+        chr_j <- CHR[[ok_idx[[j]]]]
+        bt_j <- ape::branching.times(chr_j)
+        sig_j <- .chronos_signature_index(chr_j)
+        node_by_sig_j <- stats::setNames(as.integer(names(sig_j)), sig_j)
+        matched_nodes_j <- unname(node_by_sig_j[target_sig])
+        keep_j <- is.finite(matched_nodes_j)
+        if (any(keep_j)) {
+            BT[keep_j, j] <- bt_j[as.character(matched_nodes_j[keep_j])]
+        }
+    }
+    q_probs <- c(0.025, 0.25, 0.75, 0.975)
+    CI <- sapply(
+        seq_len(nrow(BT)),
+        function(r) {
+            vals <- BT[r, is.finite(BT[r, ])]
+            if (!length(vals)) return(rep(NA_real_, length(q_probs)))
+            as.numeric(stats::quantile(vals, probs = q_probs, names = FALSE))
+        }
+    )
+    colnames(CI) <- rownames(BT)
     if (!quiet) cat("\nDone.\n")
-    if (needReorder) CI <- CI[, o]
     if (!trees) return(CI)
-    class(rTR) <- "multiPhylo"
-    list(CI = CI, trees = rTR)
+    out_trees <- CHR[OK]
+    class(out_trees) <- "multiPhylo"
+    list(CI = CI, trees = out_trees)
 }
 
 isUnimodal <- function(density)
@@ -578,6 +614,74 @@ drawChronosCI <- function(CI, col95 = "#FF00004D", col50 = "#0000FF4D",
   if (!is.matrix(CI) || nrow(CI) != 4L) {
     stop('chronosCI() must return a 4 x N CI matrix.')
   }
+  ci_nodes <- suppressWarnings(as.integer(colnames(CI)))
+  if (length(ci_nodes) == ncol(CI) && all(is.finite(ci_nodes)) && all(ci_nodes %in% internal_nodes)) {
+    out <- data.frame(
+      node = ci_nodes,
+      age = as.numeric(node_age[ci_nodes]),
+      ci_lo = as.numeric(CI[1, ]),
+      ci_hi = as.numeric(CI[4, ]),
+      q50_lo = as.numeric(CI[2, ]),
+      q50_hi = as.numeric(CI[3, ]),
+      se = NA_real_,
+      stringsAsFactors = FALSE
+    )
+    out <- out[match(internal_nodes, out$node), , drop = FALSE]
+    rownames(out) <- NULL
+    return(out)
+  }
+  bt_nodes <- suppressWarnings(as.integer(names(ape::branching.times(dated_tree))))
+  if (length(bt_nodes) != length(internal_nodes) || any(!is.finite(bt_nodes))) {
+    bt_nodes <- internal_nodes
+  }
+  if (ncol(CI) == length(bt_nodes)) {
+    return(data.frame(
+      node = bt_nodes,
+      age = as.numeric(node_age[bt_nodes]),
+      ci_lo = as.numeric(CI[1, ]),
+      ci_hi = as.numeric(CI[4, ]),
+      q50_lo = as.numeric(CI[2, ]),
+      q50_hi = as.numeric(CI[3, ]),
+      se = NA_real_,
+      stringsAsFactors = FALSE
+    ))
+  }
+  if (!is.null(colnames(CI)) && all(nzchar(colnames(CI)))) {
+    ci_nodes <- suppressWarnings(as.integer(colnames(CI)))
+    keep <- is.finite(ci_nodes) & ci_nodes %in% internal_nodes
+    if (!any(keep)) {
+      stop('CI matrix column names do not map to internal nodes.')
+    }
+    CI <- CI[, keep, drop = FALSE]
+    ci_nodes <- ci_nodes[keep]
+    out <- data.frame(
+      node = ci_nodes,
+      age = as.numeric(node_age[ci_nodes]),
+      ci_lo = as.numeric(CI[1, ]),
+      ci_hi = as.numeric(CI[4, ]),
+      q50_lo = as.numeric(CI[2, ]),
+      q50_hi = as.numeric(CI[3, ]),
+      se = NA_real_,
+      stringsAsFactors = FALSE
+    )
+    missing_nodes <- setdiff(internal_nodes, out$node)
+    if (length(missing_nodes)) {
+      fill <- data.frame(
+        node = missing_nodes,
+        age = as.numeric(node_age[missing_nodes]),
+        ci_lo = as.numeric(node_age[missing_nodes]),
+        ci_hi = as.numeric(node_age[missing_nodes]),
+        q50_lo = as.numeric(node_age[missing_nodes]),
+        q50_hi = as.numeric(node_age[missing_nodes]),
+        se = 0,
+        stringsAsFactors = FALSE
+      )
+      out <- rbind(out, fill)
+    }
+    out <- out[match(internal_nodes, out$node), , drop = FALSE]
+    rownames(out) <- NULL
+    return(out)
+  }
   if (ncol(CI) != length(internal_nodes)) {
     stop('CI matrix column count does not match internal-node count.')
   }
@@ -594,7 +698,20 @@ drawChronosCI <- function(CI, col95 = "#FF00004D", col50 = "#0000FF4D",
 }
 
 .legacy_calibration_to_df <- function(calibration = NULL, cal_min = NULL, cal_max = NULL) {
-  if (!is.null(calibration)) return(calibration)
+  if (!is.null(calibration)) {
+    calibration <- as.data.frame(calibration, stringsAsFactors = FALSE)
+    if ("age_min" %in% names(calibration) && !("age.min" %in% names(calibration))) {
+      names(calibration)[names(calibration) == "age_min"] <- "age.min"
+    }
+    if ("age_max" %in% names(calibration) && !("age.max" %in% names(calibration))) {
+      names(calibration)[names(calibration) == "age_max"] <- "age.max"
+    }
+    if (!("soft.bounds" %in% names(calibration))) calibration$soft.bounds <- FALSE
+    if ("node" %in% names(calibration)) calibration$node <- suppressWarnings(as.integer(calibration$node))
+    if ("age.min" %in% names(calibration)) calibration$age.min <- as.numeric(calibration$age.min)
+    if ("age.max" %in% names(calibration)) calibration$age.max <- as.numeric(calibration$age.max)
+    return(calibration)
+  }
   cal_min_names <- if (is.null(cal_min)) character(0) else names(cal_min)
   cal_max_names <- if (is.null(cal_max)) character(0) else names(cal_max)
   keys <- union(cal_min_names, cal_max_names)
@@ -615,6 +732,98 @@ drawChronosCI <- function(CI, col95 = "#FF00004D", col50 = "#0000FF4D",
     soft.bounds = FALSE,
     stringsAsFactors = FALSE
   )
+}
+
+.chronos_prepare_calibration_for_ape <- function(calibration) {
+  if (is.null(calibration) || !nrow(calibration)) return(calibration)
+  keep <- intersect(c("node", "age.min", "age.max", "soft.bounds"), names(calibration))
+  out <- calibration[, keep, drop = FALSE]
+  if (!("soft.bounds" %in% names(out))) out$soft.bounds <- FALSE
+  out$node <- suppressWarnings(as.integer(out$node))
+  out$age.min <- as.numeric(out$age.min)
+  out$age.max <- as.numeric(out$age.max)
+  out$soft.bounds <- as.logical(out$soft.bounds)
+  out
+}
+
+.chronos_children_lookup <- function(phy) {
+  total <- ape::Ntip(phy) + phy$Nnode
+  kids <- vector("list", total)
+  for (k in seq_len(nrow(phy$edge))) {
+    kids[[phy$edge[k, 1L]]] <- c(kids[[phy$edge[k, 1L]]], phy$edge[k, 2L])
+  }
+  kids
+}
+
+.chronos_descendant_tip_labels <- function(phy, node, children = NULL) {
+  if (is.null(children)) children <- .chronos_children_lookup(phy)
+  n_tip <- ape::Ntip(phy)
+  stack <- node
+  out <- integer(0)
+  while (length(stack)) {
+    cur <- stack[[1L]]
+    stack <- stack[-1L]
+    if (cur <= n_tip) {
+      out <- c(out, cur)
+    } else {
+      stack <- c(children[[cur]], stack)
+    }
+  }
+  sort(phy$tip.label[unique(out)])
+}
+
+.chronos_signature_index <- function(phy) {
+  n_tip <- ape::Ntip(phy)
+  int_nodes <- seq.int(n_tip + 1L, n_tip + phy$Nnode)
+  children <- .chronos_children_lookup(phy)
+  sig <- vapply(
+    int_nodes,
+    function(nd) paste(.chronos_descendant_tip_labels(phy, nd, children), collapse = "\r"),
+    FUN.VALUE = character(1)
+  )
+  names(sig) <- as.character(int_nodes)
+  sig
+}
+
+.chronos_remap_calibration_nodes <- function(source_phy, target_phy, calibration) {
+  if (is.null(calibration) || !nrow(calibration)) return(calibration)
+  if (!inherits(source_phy, "phylo") || !inherits(target_phy, "phylo")) return(calibration)
+  if (!setequal(source_phy$tip.label, target_phy$tip.label)) return(calibration)
+  if (!("node" %in% names(calibration))) return(calibration)
+
+  if (all(c("taxonA", "taxonB") %in% names(calibration))) {
+    pair_nodes <- mapply(
+      function(a, b) {
+        if (!is.character(a) || !is.character(b)) return(NA_integer_)
+        if (!(a %in% source_phy$tip.label) || !(b %in% source_phy$tip.label)) return(NA_integer_)
+        nd <- ape::getMRCA(source_phy, c(a, b))
+        if (is.null(nd) || !is.finite(nd)) return(NA_integer_)
+        as.integer(nd)
+      },
+      calibration$taxonA,
+      calibration$taxonB
+    )
+    use_pair_nodes <- is.finite(pair_nodes)
+    if (any(use_pair_nodes)) {
+      calibration$node[use_pair_nodes] <- as.integer(pair_nodes[use_pair_nodes])
+    }
+  }
+
+  src_sig <- .chronos_signature_index(source_phy)
+  tgt_sig <- .chronos_signature_index(target_phy)
+  tgt_node_by_sig <- stats::setNames(as.integer(names(tgt_sig)), tgt_sig)
+  src_nodes <- as.integer(calibration$node)
+  src_key <- as.character(src_nodes)
+  src_match <- src_sig[src_key]
+  mapped <- unname(tgt_node_by_sig[src_match])
+  keep <- is.finite(mapped)
+  if (!all(keep)) {
+    calibration <- calibration[keep, , drop = FALSE]
+    mapped <- mapped[keep]
+  }
+  calibration$node <- as.integer(mapped)
+  rownames(calibration) <- NULL
+  calibration
 }
 
 .chronos_call_arg <- function(chronogram, name, default = NULL) {
@@ -672,6 +881,7 @@ chronos_ci <- function(phy, dated_tree, pml_output = NULL, calibration = NULL,
     nb_rate_cat = nb_rate_cat,
     control = control
   )
+  calibration <- .chronos_remap_calibration_nodes(phy, dated_tree, calibration)
   if (is.null(pml_output)) {
     if (!(identical(type, 'parametric') || identical(type, 3L))) {
       stop(

@@ -82,6 +82,112 @@ pcr_metric_burstiness_from_events <- function(ev) {
   stats::sd(waits) / m
 }
 
+## Internode clustering diagnostic (Actions B-C: Manceau et al. 2020 RCS model)
+## Identifies radiation zones and computes:
+## - internode CV concordance (phylogram vs chronogram)
+## - spike-to-background rate ratio within radiation zones
+pcr_metric_internode_cv <- function(tr) {
+  ## CV of internode distances (branch lengths on internal backbone)
+  n <- ape::Ntip(tr)
+  if (tr$Nnode < 3L) return(NA_real_)
+  int_edges <- which(tr$edge[,2] > n)  ## edges leading to internal nodes
+  if (length(int_edges) < 3L) return(NA_real_)
+  int_bl <- tr$edge.length[int_edges]
+  int_bl <- int_bl[is.finite(int_bl) & int_bl > 0]
+  if (length(int_bl) < 3L) return(NA_real_)
+  stats::sd(int_bl) / mean(int_bl)
+}
+
+pcr_identify_radiation_zones <- function(ref, min_tips = 8L, min_internal = 4L,
+                                         internode_ratio_threshold = 0.5) {
+  ## Radiation zone: a clade where internal branch lengths are short
+
+  ## relative to the tree-wide mean (internodes clustered together).
+  n <- ape::Ntip(ref)
+  if (n < min_tips) return(list())
+  tree_mean_bl <- mean(ref$edge.length[ref$edge.length > 0], na.rm = TRUE)
+  ref_nodes <- (n + 1L):(n + ref$Nnode)
+  zones <- list()
+  for (nd in ref_nodes) {
+    sub <- try(ape::extract.clade(ref, nd), silent = TRUE)
+    if (inherits(sub, "try-error") || !inherits(sub, "phylo")) next
+    nt <- ape::Ntip(sub)
+    if (nt < min_tips || nt >= n) next
+    ns <- sub$Nnode
+    int_edges <- which(sub$edge[,2] > nt)
+    if (length(int_edges) < min_internal) next
+    int_bl <- sub$edge.length[int_edges]
+    int_bl <- int_bl[is.finite(int_bl) & int_bl > 0]
+    if (length(int_bl) < min_internal) next
+    mean_int <- mean(int_bl)
+    if (mean_int / tree_mean_bl > internode_ratio_threshold) next  ## not a radiation
+    zones[[length(zones) + 1L]] <- list(
+      node = nd,
+      tips = sort(sub$tip.label),
+      n_tips = nt,
+      n_internal = length(int_bl),
+      internode_cv = stats::sd(int_bl) / mean_int,
+      mean_internode = mean_int
+    )
+  }
+  zones
+}
+
+pcr_score_internode_concordance <- function(ref, tr, zones) {
+  ## For each radiation zone, compare internode CV between ref and candidate.
+  ## Also compute spike-to-background rate ratio.
+  if (!length(zones)) return(list(
+    concordance_mean = NA_real_,
+    spike_ratio_mean = NA_real_,
+    n_zones = 0L,
+    detail = data.frame()
+  ))
+  rows <- list()
+  for (z in zones) {
+    node_c <- pcr_safe_get_mrca(tr, z$tips)
+    if (!is.finite(node_c)) next
+    sub_c <- try(ape::extract.clade(tr, node_c), silent = TRUE)
+    if (inherits(sub_c, "try-error") || !inherits(sub_c, "phylo")) next
+    if (!setequal(sub_c$tip.label, z$tips)) next
+    cv_c <- pcr_metric_internode_cv(sub_c)
+    if (!is.finite(cv_c)) next
+    ## Concordance: ratio of CVs, ideally near 1
+    concordance <- if (z$internode_cv > 0) min(cv_c, z$internode_cv) / max(cv_c, z$internode_cv) else NA_real_
+
+    ## Spike ratio: mean rate on internal branches / mean rate across clade
+    ## Rate = ref_branch_length / chronogram_branch_length
+    sub_r <- try(ape::extract.clade(ref, pcr_safe_get_mrca(ref, z$tips)), silent = TRUE)
+    spike_ratio <- NA_real_
+    if (inherits(sub_r, "phylo") && inherits(sub_c, "phylo")) {
+      nt_c <- ape::Ntip(sub_c)
+      int_edges_c <- which(sub_c$edge[,2] > nt_c)
+      all_rates <- sub_r$edge.length / pmax(sub_c$edge.length, 1e-12)
+      all_rates <- all_rates[is.finite(all_rates)]
+      int_rates <- all_rates[int_edges_c[int_edges_c <= length(all_rates)]]
+      if (length(int_rates) > 0 && length(all_rates) > 0 && mean(all_rates) > 0) {
+        spike_ratio <- mean(int_rates) / mean(all_rates)
+      }
+    }
+    rows[[length(rows) + 1L]] <- data.frame(
+      node = z$node, n_tips = z$n_tips,
+      cv_ref = z$internode_cv, cv_est = cv_c,
+      concordance = concordance, spike_ratio = spike_ratio,
+      stringsAsFactors = FALSE
+    )
+  }
+  if (!length(rows)) return(list(
+    concordance_mean = NA_real_, spike_ratio_mean = NA_real_,
+    n_zones = 0L, detail = data.frame()
+  ))
+  detail <- do.call(rbind, rows)
+  list(
+    concordance_mean = mean(detail$concordance, na.rm = TRUE),
+    spike_ratio_mean = mean(detail$spike_ratio, na.rm = TRUE),
+    n_zones = nrow(detail),
+    detail = detail
+  )
+}
+
 pcr_build_pulse_panel <- function(ref, min_tips = 8L, min_events = 4L) {
   ref_nodes <- (ape::Ntip(ref) + 1L):(ape::Ntip(ref) + ref$Nnode)
   panel <- list()
@@ -243,6 +349,44 @@ pcr_metric_edge_signature <- function(tr) {
   sig
 }
 
+## Node-depth concordance: R² of relative node depths between ref and candidate.
+## Directly captures global distortion (e.g., tipward compression in relaxed models).
+## Also computes depth_emd: EMD between the two depth distributions.
+pcr_depth_concordance <- function(ref_tree, dated_tree) {
+  n_ref <- ape::Ntip(ref_tree)
+  n_est <- ape::Ntip(dated_tree)
+  if (n_ref != n_est) return(list(depth_r2 = NA_real_, depth_slope = NA_real_, depth_emd = NA_real_))
+
+  ## Get relative node depths (fraction of root-to-tip) for internal nodes
+  d_ref <- ape::node.depth.edgelength(ref_tree)
+  d_est <- ape::node.depth.edgelength(dated_tree)
+  max_ref <- max(d_ref[seq_len(n_ref)])
+  max_est <- max(d_est[seq_len(n_est)])
+  if (max_ref <= 0 || max_est <= 0) return(list(depth_r2 = NA_real_, depth_slope = NA_real_, depth_emd = NA_real_))
+
+  ## Match internal nodes by descendant tip sets
+  ref_sig <- pcr_metric_edge_signature(ref_tree)
+  est_sig <- pcr_metric_edge_signature(dated_tree)
+  ## Node depths for internal nodes (parent of each edge)
+  ref_node_depth <- stats::setNames(d_ref[ref_tree$edge[,2]] / max_ref, ref_sig)
+  est_node_depth <- stats::setNames(d_est[dated_tree$edge[,2]] / max_est, est_sig)
+  common <- intersect(names(ref_node_depth), names(est_node_depth))
+  if (length(common) < 10) return(list(depth_r2 = NA_real_, depth_slope = NA_real_, depth_emd = NA_real_))
+
+  x <- ref_node_depth[common]
+  y <- est_node_depth[common]
+  ok <- is.finite(x) & is.finite(y)
+  x <- x[ok]; y <- y[ok]
+  if (length(x) < 10) return(list(depth_r2 = NA_real_, depth_slope = NA_real_, depth_emd = NA_real_))
+
+  fit <- stats::lm(y ~ x)
+  r2 <- summary(fit)$r.squared
+  slope <- stats::coef(fit)[2]
+  emd <- pcr_metric_wasserstein_1d(sort(x), sort(y))
+
+  list(depth_r2 = r2, depth_slope = unname(slope), depth_emd = emd)
+}
+
 pcr_rate_metrics <- function(ref_tree, dated_tree) {
   ref_df <- data.frame(sig = pcr_metric_edge_signature(ref_tree), ref_branch = ref_tree$edge.length, stringsAsFactors = FALSE)
   est_sig <- pcr_metric_edge_signature(dated_tree)
@@ -287,7 +431,7 @@ pcr_rate_metrics <- function(ref_tree, dated_tree) {
     parent_child_jump_mean = if (length(jump)) mean(jump) else NA_real_,
     parent_child_jump_q95 = if (length(jump)) as.numeric(stats::quantile(jump, 0.95, names = FALSE)) else NA_real_,
     rate_autocorr_spearman = autocorr,
-    rate_irregularity = stats::sd(merged$log_rate) + ifelse(length(jump), mean(jump), 0) + (2 * extreme_frac) + autocorr_penalty,
+    rate_irregularity = stats::sd(merged$log_rate) + (2 * extreme_frac),
     stringsAsFactors = FALSE
   )
   list(summary = summary, detail = merged)

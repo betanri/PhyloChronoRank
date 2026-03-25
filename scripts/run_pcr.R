@@ -21,6 +21,11 @@ source(file.path(script_dir, 'pcr_helpers.R'))
 
 pcr_read_tree_or_stop <- function(path, label) {
   tr <- try(ape::read.tree(path), silent = TRUE)
+  if (inherits(tr, 'multiPhylo') || inherits(tr, 'try-error') || !inherits(tr, 'phylo') ||
+      (inherits(tr, 'phylo') && length(tr$edge.length) == 0)) {
+    tr <- try(ape::read.nexus(path), silent = TRUE)
+    if (inherits(tr, 'multiPhylo')) tr <- tr[[1]]
+  }
   if (inherits(tr, 'try-error') || !inherits(tr, 'phylo')) {
     stop('Failed to read ', label, ' tree: ', path)
   }
@@ -68,16 +73,25 @@ if ('uncertainty-csv' %in% names(kv)) {
   if (!('candidate' %in% names(uncertainty))) stop('Uncertainty CSV must contain candidate')
 }
 
-rows <- list(); pulse_default_detail <- list(); pulse_burst_detail <- list(); gap_detail <- list(); rate_detail <- list()
+radiation_zones <- pcr_identify_radiation_zones(ref_tree, min_tips = min_tips, min_internal = 4L)
+rows <- list(); pulse_default_detail <- list(); pulse_burst_detail <- list(); gap_detail <- list(); rate_detail <- list(); internode_detail <- list()
 for (i in seq_len(nrow(cand))) {
   tr <- pcr_read_tree_or_stop(cand$tree_path[i], paste0('candidate ', cand$candidate[i]))
   p_overall <- pcr_score_pulse_panel(ref_tree, tr, panel, w_emd = 0.35, w_burst_loss = 0.55, w_centroid = 0.10)
   p_burst <- pcr_score_pulse_panel(ref_tree, tr, panel, w_emd = 0.20, w_burst_loss = 0.75, w_centroid = 0.05)
   rp <- pcr_rate_metrics(ref_tree, tr)
+  ic <- pcr_score_internode_concordance(ref_tree, tr, radiation_zones)
+  dc <- pcr_depth_concordance(ref_tree, tr)
   row <- data.frame(candidate = cand$candidate[i], tree_file = cand$tree_file[i], stringsAsFactors = FALSE)
   row$pulse_default_selector_error <- pcr_get_metric(p_overall$summary, 'selector_error')
   row$burst_loss <- pcr_get_metric(p_overall$summary, 'mean_burst_loss')
   row$pulse_burst_selector_error <- pcr_get_metric(p_burst$summary, 'selector_error')
+  row$internode_concordance <- ic$concordance_mean
+  row$spike_ratio <- ic$spike_ratio_mean
+  row$n_radiation_zones <- ic$n_zones
+  row$depth_r2 <- dc$depth_r2
+  row$depth_slope <- dc$depth_slope
+  row$depth_emd <- dc$depth_emd
   row$rate_irregularity <- pcr_get_metric(rp$summary, 'rate_irregularity')
   row$gap_mode <- NA_character_
   row$mean_relative_gap <- NA_real_
@@ -129,8 +143,23 @@ for (i in seq_len(nrow(cand))) {
     rd$candidate <- cand$candidate[i]
     rate_detail[[length(rate_detail)+1L]] <- rd
   }
+  if (is.data.frame(ic$detail) && nrow(ic$detail)) {
+    icd <- ic$detail
+    icd$candidate <- cand$candidate[i]
+    internode_detail[[length(internode_detail)+1L]] <- icd
+  }
 }
-summary_df <- do.call(rbind, rows)
+## Safe rbind: fill missing columns with NA
+.safe_rbind <- function(lst) {
+  all_cols <- unique(unlist(lapply(lst, names)))
+  lst2 <- lapply(lst, function(df) {
+    miss <- setdiff(all_cols, names(df))
+    for (m in miss) df[[m]] <- NA
+    df[, all_cols, drop = FALSE]
+  })
+  do.call(rbind, lst2)
+}
+summary_df <- .safe_rbind(rows)
 summary_df$rank_pulse_overall <- pcr_rank_low(summary_df$pulse_default_selector_error)
 summary_df$rank_burst_loss <- pcr_rank_low(summary_df$burst_loss)
 summary_df$rank_pulse_burst <- pcr_rank_low(summary_df$pulse_burst_selector_error)
@@ -138,7 +167,9 @@ summary_df$rank_pulse_family_mean <- rowMeans(cbind(summary_df$rank_burst_loss, 
 summary_df$rank_pulse_family <- pcr_rank_low(summary_df$rank_pulse_family_mean)
 summary_df$rank_mean_relative_gap <- pcr_rank_low(summary_df$mean_relative_gap)
 summary_df$rank_rate_irregularity <- pcr_rank_low(summary_df$rate_irregularity)
-core_mat <- cbind(summary_df$rank_pulse_family, summary_df$rank_mean_relative_gap, summary_df$rank_rate_irregularity)
+summary_df$rank_depth_r2 <- pcr_rank_low(1 - summary_df$depth_r2)  ## higher R² = better, so rank 1-R²
+summary_df$rank_internode_concordance <- pcr_rank_low(1 - summary_df$internode_concordance)  ## higher = better
+core_mat <- cbind(summary_df$rank_pulse_family, summary_df$rank_mean_relative_gap, summary_df$rank_rate_irregularity, summary_df$rank_depth_r2)
 summary_df$core_n_families_ranked <- rowSums(is.finite(core_mat))
 summary_df$rank_mean_core <- rowMeans(core_mat, na.rm = TRUE)
 summary_df$rank_mean_core_rank <- pcr_rank_low(summary_df$rank_mean_core)
@@ -150,6 +181,7 @@ if (length(pulse_default_detail)) write.csv(do.call(rbind, pulse_default_detail)
 if (length(pulse_burst_detail)) write.csv(do.call(rbind, pulse_burst_detail), file.path(outdir, 'pulse_burst_details.csv'), row.names = FALSE)
 if (length(gap_detail)) write.csv(do.call(rbind, gap_detail), file.path(outdir, 'gap_details.csv'), row.names = FALSE)
 if (length(rate_detail)) write.csv(do.call(rbind, rate_detail), file.path(outdir, 'rate_details.csv'), row.names = FALSE)
+if (length(internode_detail)) write.csv(do.call(rbind, internode_detail), file.path(outdir, 'internode_details.csv'), row.names = FALSE)
 lines <- c(
   'PhyloChronoRank summary',
   paste0('Reference tree: ', normalizePath(kv[['ref-tree']], winslash = '/', mustWork = TRUE)),

@@ -51,6 +51,10 @@
 ##   Output is reported for internal nodes only; tip ages are fixed at 0.
 ##############################################################
 
+# ---- null-coalesce operator (safe for R < 4.1) ----------------------------
+if (!exists("%||%", mode = "function"))
+  `%||%` <- function(a, b) if (!is.null(a)) a else b
+
 # ---- helper: build children lookup ----------------------------------------
 .reltime_children <- function(phy) {
   total <- Ntip(phy) + phy$Nnode
@@ -64,18 +68,17 @@
 # H[n] = tip-count-weighted MEAN substitution depth from n to its descendant tips.
 # Key: when computing the contribution of child c to parent p, we need the MEAN
 # path from c to its tips (H_sum[c] / ntip_s[c]), not the raw accumulated sum.
-.compute_H <- function(phy) {
+# ---- Arithmetic-mean H (used for CI variance computation only) -------------
+.compute_H_arithmetic <- function(phy) {
   n_tip <- Ntip(phy)
   total <- n_tip + phy$Nnode
-  H_sum  <- numeric(total)   # raw accumulated sum (divided later)
+  H_sum  <- numeric(total)
   ntip_s <- integer(total)
   ntip_s[seq_len(n_tip)] <- 1L
   e  <- phy$edge
   el <- phy$edge.length
   for (k in postorder(phy)) {
     p <- e[k, 1L]; c <- e[k, 2L]
-    # At this point ntip_s[c] is complete (all of c's subtree has been processed).
-    # Use the MEAN path from c to its tips as the contribution to p.
     H_c_mean <- if (c <= n_tip || ntip_s[c] == 0L) 0 else H_sum[c] / ntip_s[c]
     H_sum[p] <- H_sum[p] + (el[k] + H_c_mean) * ntip_s[c]
     ntip_s[p] <- ntip_s[p] + ntip_s[c]
@@ -86,6 +89,9 @@
   }
   list(H = H, ntip_s = ntip_s)
 }
+
+# Keep .compute_H as alias for backward compat (CI code calls it)
+.compute_H <- .compute_H_arithmetic
 
 # ---- core: compute v(H[n]) given v_b per edge (post-order) -----------------
 # v(H[p]) = sum_c (n_c/n_p)^2 * (v_b[c] + v(H[c]))
@@ -112,10 +118,300 @@
   vH
 }
 
-# ---- core: assign node ages (pre-order) ------------------------------------
-# Uses rev(postorder()) which is a valid topological order (parents before
-# children) for any rooted binary tree; no dependency on ape::preorder().
-.assign_node_ages <- function(phy, H, root_age) {
+# ---- core: MEGA-style node height computation and age assignment -----------
+# Reimplements MEGA's AnchorClockTree algorithm (Tamura et al. 2012):
+#   1. SetHa: compute ha0 (anchor height) for each node post-order
+#   2. ComputeHeightOfNode: geometric-mean height formula with rate-ratio cap
+#   3. RecomputeNodeHeightDown: propagate height adjustments to descendants
+#   4. Global time factor + calibration clamping
+#
+# This replaces the old arithmetic-mean .assign_node_ages which did not match
+# MEGA's output for trees with many calibrations.
+
+.assign_node_ages_mega <- function(phy, lower, upper, root_age,
+                                   max_rate_ratio = 1e10,
+                                   skip_recompute_down = FALSE) {
+  FP_CUTOFF <- 1e-12
+  n_tip     <- Ntip(phy)
+  total     <- n_tip + phy$Nnode
+  root_node <- n_tip + 1L
+  e  <- phy$edge
+  el <- phy$edge.length
+
+  # Build children list and parent lookup
+  ch <- vector("list", total)
+  parent_of <- integer(total)
+  for (k in seq_len(nrow(e))) {
+    p <- e[k, 1L]; c <- e[k, 2L]
+    ch[[p]] <- c(ch[[p]], c)
+    parent_of[c] <- p
+  }
+
+  # Branch length lookup: blen[c] = branch length from parent to c
+  blen <- numeric(total)
+  for (k in seq_len(nrow(e))) blen[e[k, 2L]] <- el[k]
+
+  # Identify anchored (calibrated) nodes
+  anchored <- logical(total)
+  for (nd in seq.int(n_tip + 1L, total)) {
+    if (lower[nd] > FP_CUTOFF || upper[nd] > FP_CUTOFF)
+      anchored[nd] <- TRUE
+  }
+
+  # Compute minh/maxh (will be set after time factor)
+  minh <- numeric(total)
+  maxh <- rep(Inf, total)
+
+  # ---- Step 1: SetHa (post-order) ------------------------------------------
+  # ha0[n] = max(anchored_child_heights) from below
+  # For tips: ha0 = 0 (h0)
+  # For internal: ha0 = max(ha0_or_minh of children)
+  ha0 <- numeric(total)  # tips = 0
+  for (k in postorder(phy)) {
+    p <- e[k, 1L]; c <- e[k, 2L]
+    if (c <= n_tip) {
+      child_h <- 0  # tip
+    } else if (anchored[c]) {
+      child_h <- minh[c]  # will be 0 initially, updated after time factor
+    } else {
+      child_h <- ha0[c]
+    }
+    ha0[p] <- max(ha0[p], child_h)
+  }
+
+  # ---- Step 2: Initial height computation (post-order, no calibration) ------
+  # Simple RelTime: height[p] from branch lengths
+  # First pass: compute raw heights using T[c] = T[p] * H[c] / (b + H[c])
+  # Actually MEGA computes height bottom-up using the geometric mean formula.
+  # height[nd] = distance from nd to tips (in relative time units)
+
+  height <- numeric(total)
+  rate <- rep(1, total)
+
+  # Post-order: compute initial heights
+  # For tips: height = 0
+  # For internal nodes with children c1, c2:
+  #   h01 = ha0[c1] (or minh[c1] if anchored)
+  #   h02 = ha0[c2] (or minh[c2] if anchored)
+  #   h1 = height[c1] + blen[c1]/rate[c1] - h01
+  #   h2 = height[c2] + blen[c2]/rate[c2] - h02
+  #   delta = |h01 - h02|
+  #   h = (-delta + sqrt(delta^2 + 4*h1*h2)) / 2 + max(h01, h02)
+
+  # BFS post-order
+  post_visit <- integer(0)
+  queue <- root_node
+  while (length(queue)) {
+    nd <- queue[1L]; queue <- queue[-1L]
+    post_visit <- c(post_visit, nd)
+    kids <- ch[[nd]]
+    for (kid in kids) if (kid > n_tip) queue <- c(queue, kid)
+  }
+  post_visit <- rev(post_visit)  # post-order
+
+  for (nd in post_visit) {
+    kids <- ch[[nd]]
+    if (is.null(kids) || length(kids) == 0) next
+    c1 <- kids[1]; c2 <- kids[2]
+
+    h01 <- if (c1 > n_tip && anchored[c1]) minh[c1] else if (c1 > n_tip) ha0[c1] else 0
+    h02 <- if (c2 > n_tip && anchored[c2]) minh[c2] else if (c2 > n_tip) ha0[c2] else 0
+
+    if (c1 <= n_tip) {
+      h1 <- blen[c1]  # tip: height=0, rate=1
+    } else if (rate[c1] < FP_CUTOFF) {
+      h1 <- height[c1] - h01
+    } else {
+      h1 <- height[c1] + blen[c1] / rate[c1] - h01
+    }
+
+    if (c2 <= n_tip) {
+      h2 <- blen[c2]
+    } else if (rate[c2] < FP_CUTOFF) {
+      h2 <- height[c2] - h02
+    } else {
+      h2 <- height[c2] + blen[c2] / rate[c2] - h02
+    }
+
+    h1 <- max(h1, 0)
+    h2 <- max(h2, 0)
+
+    if (h1 > FP_CUTOFF && h2 > FP_CUTOFF &&
+        max(h1, h2) / min(h1, h2) < max_rate_ratio) {
+      # Geometric mean formula
+      delta <- abs(h01 - h02)
+      h <- (-delta + sqrt(delta * delta + 4 * h1 * h2)) / 2 + max(h01, h02)
+    } else {
+      # Rate-ratio exceeded: constrained calculation
+      if (h1 > h2) {
+        h <- max(h1 / max_rate_ratio + h01, h02)
+      } else if (h1 < h2) {
+        h <- max(h2 / max_rate_ratio + h02, h01)
+      } else {
+        h <- max(h1 / max_rate_ratio + h01, h2 / max_rate_ratio + h02)
+      }
+    }
+
+    height[nd] <- h
+
+    # Compute rate as geometric mean of children's rates
+    r1 <- if (c1 <= n_tip) 1 else rate[c1]
+    r2 <- if (c2 <= n_tip) 1 else rate[c2]
+    rate[nd] <- sqrt(r1 * r2)
+  }
+
+  # ---- Step 3: Global time factor ------------------------------------------
+  # minRate[i] = lower[i] / height[i], maxRate[i] = upper[i] / height[i]
+  # FTimeFactor = midpoint of feasible range across all anchored nodes
+  r0 <- 0; r1 <- Inf
+  for (nd in seq.int(n_tip + 1L, total)) {
+    if (!anchored[nd] || height[nd] < FP_CUTOFF) next
+    if (lower[nd] > FP_CUTOFF)
+      r0 <- max(r0, lower[nd] / height[nd])
+    if (is.finite(upper[nd]) && upper[nd] > FP_CUTOFF)
+      r1 <- min(r1, upper[nd] / height[nd])
+  }
+
+  if (!is.finite(r1) || r1 < r0) {
+    # Constraints conflict — use root age
+    time_factor <- root_age / height[root_node]
+  } else {
+    time_factor <- (r0 + r1) / 2
+  }
+
+  # Set minh/maxh as calibration / time_factor
+  for (nd in seq.int(n_tip + 1L, total)) {
+    if (lower[nd] > FP_CUTOFF)
+      minh[nd] <- lower[nd] / time_factor
+    if (is.finite(upper[nd]) && upper[nd] > FP_CUTOFF)
+      maxh[nd] <- upper[nd] / time_factor
+  }
+
+  # ---- Step 4: Recompute with calibration clamping -------------------------
+  # Re-run SetHa with updated minh
+  ha0 <- numeric(total)
+  for (k in postorder(phy)) {
+    p <- e[k, 1L]; c <- e[k, 2L]
+    if (c <= n_tip) {
+      child_h <- 0
+    } else if (anchored[c]) {
+      child_h <- minh[c]
+    } else {
+      child_h <- ha0[c]
+    }
+    ha0[p] <- max(ha0[p], child_h)
+  }
+
+  # Re-run ComputeHeightOfNode with anchored heights
+  # Initialize from Step 2 heights (MEGA carries forward, doesn't start from zero)
+  height2 <- height
+  rate2 <- rate
+
+  .recompute_down <- function(nd, dh) {
+    if (abs(dh) < FP_CUTOFF) return()
+    p <- parent_of[nd]
+    if (p == 0) return()
+    denom <- height2[p] - dh - ha0[nd]
+    if (abs(denom) < FP_CUTOFF) return()
+    dh_new <- (height2[nd] - ha0[nd]) / denom * dh
+    # Clamp to bounds
+    if (maxh[nd] < Inf && height2[nd] + dh_new > maxh[nd])
+      dh_new <- maxh[nd] - height2[nd]
+    if (minh[nd] > FP_CUTOFF && height2[nd] + dh_new < minh[nd])
+      dh_new <- minh[nd] - height2[nd]
+    if (abs(dh_new) < FP_CUTOFF) return()
+    old_h <- height2[nd]
+    height2[nd] <- height2[nd] + dh_new
+    if (old_h > FP_CUTOFF) rate2[nd] <- rate2[nd] * old_h / height2[nd]
+    kids <- ch[[nd]]
+    if (!is.null(kids)) {
+      for (kid in kids) if (kid > n_tip) .recompute_down(kid, dh_new)
+    }
+  }
+
+  for (nd in post_visit) {
+    kids <- ch[[nd]]
+    if (is.null(kids) || length(kids) == 0) next
+    c1 <- kids[1]; c2 <- kids[2]
+
+    h01 <- if (c1 > n_tip && anchored[c1]) minh[c1] else if (c1 > n_tip) ha0[c1] else 0
+    h02 <- if (c2 > n_tip && anchored[c2]) minh[c2] else if (c2 > n_tip) ha0[c2] else 0
+
+    if (c1 <= n_tip) {
+      h1 <- blen[c1]
+    } else if (rate2[c1] < FP_CUTOFF) {
+      h1 <- height2[c1] - h01
+    } else {
+      h1 <- height2[c1] + blen[c1] / rate2[c1] - h01
+    }
+
+    if (c2 <= n_tip) {
+      h2 <- blen[c2]
+    } else if (rate2[c2] < FP_CUTOFF) {
+      h2 <- height2[c2] - h02
+    } else {
+      h2 <- height2[c2] + blen[c2] / rate2[c2] - h02
+    }
+
+    h1 <- max(h1, 0); h2 <- max(h2, 0)
+
+    if (h1 > FP_CUTOFF && h2 > FP_CUTOFF &&
+        max(h1, h2) / min(h1, h2) < max_rate_ratio) {
+      delta <- abs(h01 - h02)
+      h <- (-delta + sqrt(delta * delta + 4 * h1 * h2)) / 2 + max(h01, h02)
+    } else {
+      if (h1 > h2) h <- max(h1 / max_rate_ratio + h01, h02)
+      else if (h1 < h2) h <- max(h2 / max_rate_ratio + h02, h01)
+      else h <- max(h1 / max_rate_ratio + h01, h2 / max_rate_ratio + h02)
+    }
+
+    h0_old <- height2[nd]
+    height2[nd] <- h
+
+    r1c <- if (c1 <= n_tip) 1 else rate2[c1]
+    r2c <- if (c2 <= n_tip) 1 else rate2[c2]
+    rate2[nd] <- sqrt(r1c * r2c)
+
+    if (!skip_recompute_down && abs(height2[nd] - h0_old) > FP_CUTOFF) {
+      if (c1 > n_tip) .recompute_down(c1, height2[nd] - (h1 + h01))
+      if (c2 > n_tip) .recompute_down(c2, height2[nd] - (h2 + h02))
+    }
+
+    # Clamp to calibration bounds
+    if (maxh[nd] < Inf && height2[nd] > maxh[nd]) {
+      old_h <- height2[nd]
+      height2[nd] <- maxh[nd]
+      if (!skip_recompute_down) {
+        dh <- height2[nd] - old_h
+        if (c1 > n_tip) .recompute_down(c1, dh)
+        if (c2 > n_tip) .recompute_down(c2, dh)
+      }
+      if (old_h > FP_CUTOFF) rate2[nd] <- rate2[nd] * old_h / height2[nd]
+    } else if (minh[nd] > FP_CUTOFF && height2[nd] < minh[nd]) {
+      old_h <- height2[nd]
+      height2[nd] <- minh[nd]
+      if (!skip_recompute_down) {
+        dh <- height2[nd] - old_h
+        if (c1 > n_tip) .recompute_down(c1, dh)
+        if (c2 > n_tip) .recompute_down(c2, dh)
+      }
+      if (old_h > FP_CUTOFF) rate2[nd] <- rate2[nd] * old_h / height2[nd]
+    }
+  }
+
+  # ---- Step 5: Convert heights to ages using time factor --------------------
+  node_age <- numeric(total)
+  for (nd in seq.int(n_tip + 1L, total)) {
+    node_age[nd] <- height2[nd] * time_factor
+  }
+  # Root age = root_age (or calibrated)
+  node_age[root_node] <- root_age
+
+  node_age
+}
+
+# Backward-compatible wrapper
+.assign_node_ages <- function(phy, H, root_age, cal_ages = NULL) {
   n_tip     <- Ntip(phy)
   total     <- n_tip + phy$Nnode
   root_node <- n_tip + 1L
@@ -453,9 +749,11 @@ list(
   )
 }
 
-.reltime_prepare_bounds_context <- function(phy, calibration_df, root_age = NULL) {
+.reltime_prepare_bounds_context <- function(phy, calibration_df, root_age = NULL,
+                                             use_densities = FALSE) {
   bounds <- reltime_merge_calibration_bounds(phy, calibration_df)
   n_tip <- Ntip(phy)
+  total <- n_tip + phy$Nnode
   root_node <- n_tip + 1L
 
   root_row <- bounds[bounds$node == root_node, , drop = FALSE]
@@ -481,8 +779,8 @@ list(
     stop("root_age must be positive after root calibration handling.")
   }
 
-  lower <- numeric(n_tip + phy$Nnode)
-  upper <- rep(Inf, n_tip + phy$Nnode)
+  lower <- numeric(total)
+  upper <- rep(Inf, total)
   if (nrow(bounds)) {
     lower[bounds$node] <- bounds$age_min
     upper[bounds$node] <- bounds$age_max
@@ -491,27 +789,147 @@ list(
     upper[root_node] <- root_age
   }
 
+  # ---- Build density objects when requested --------------------------------
+  densities <- NULL
+  if (isTRUE(use_densities) && nrow(bounds)) {
+    densities <- vector("list", total)
+    for (i in seq_len(nrow(bounds))) {
+      nd <- bounds$node[i]
+      mn <- bounds$age_min[i]
+      mx <- bounds$age_max[i]
+      # Check if calibration_df has distribution info
+      has_dist <- "dist_type" %in% names(calibration_df)
+      if (has_dist) {
+        # Find matching calibration row(s) for this node
+        # Use the first match with a dist_type
+        cal_rows <- which(
+          calibration_df$taxonA %in% phy$tip.label &
+          calibration_df$taxonB %in% phy$tip.label
+        )
+        matched <- FALSE
+        for (ci in cal_rows) {
+          mrca <- ape::getMRCA(phy, c(
+            as.character(calibration_df$taxonA[ci]),
+            as.character(calibration_df$taxonB[ci])
+          ))
+          if (!is.null(mrca) && mrca == nd &&
+              !is.na(calibration_df$dist_type[ci]) &&
+              nchar(as.character(calibration_df$dist_type[ci])) > 0) {
+            dtype <- tolower(as.character(calibration_df$dist_type[ci]))
+            if (dtype == "normal") {
+              densities[[nd]] <- list(
+                type = "normal",
+                mean = as.numeric(calibration_df$dist_mean[ci]),
+                stddev = as.numeric(calibration_df$dist_stddev[ci])
+              )
+            } else if (dtype == "lognormal") {
+              densities[[nd]] <- list(
+                type = "lognormal",
+                offset = as.numeric(calibration_df$dist_offset[ci]),
+                mean = as.numeric(calibration_df$dist_mean[ci]),
+                stddev = as.numeric(calibration_df$dist_stddev[ci])
+              )
+            } else if (dtype == "exponential") {
+              densities[[nd]] <- list(
+                type = "exponential",
+                time = as.numeric(calibration_df$dist_time[ci]),
+                lambda = as.numeric(calibration_df$dist_lambda[ci])
+              )
+            } else {
+              # uniform or unknown → use bounds
+              densities[[nd]] <- list(type = "uniform", min = mn, max = mx)
+            }
+            matched <- TRUE
+            break
+          }
+        }
+        if (!matched) {
+          # Default: convert hard bounds to normal density
+          # Mode = midpoint, stddev so that bounds ≈ ±2σ
+          densities[[nd]] <- .bounds_to_normal(mn, mx)
+        }
+      } else {
+        # No dist_type column: auto-convert min/max to normal densities
+        densities[[nd]] <- .bounds_to_normal(mn, mx)
+      }
+    }
+    # Root always gets a tight density
+    if (is.null(densities[[root_node]])) {
+      densities[[root_node]] <- list(
+        type = "normal",
+        mean = root_age,
+        stddev = max(abs(root_age) * 0.01, 1e-6)
+      )
+    }
+  }
+
   list(
     bounds = bounds,
     root_age = root_age,
     root_var = root_var,
     lower = lower,
-    upper = upper
+    upper = upper,
+    densities = densities
   )
 }
 
-.run_reltime_with_bounds_context <- function(phy, ctx, eps = 1e-6) {
+# Convert hard min/max bounds to a calibration density.
+# For fixed calibrations (min == max): use normal with stddev = 5% of age.
+#   This allows the density approach to treat fixed points as "soft targets"
+#   rather than hard constraints, giving backbone branches room to breathe.
+# For interval calibrations: normal with mode = midpoint, stddev = (max-min)/4
+#   so that the 95% interval ≈ [min, max].
+# For min-only calibrations: exponential with rate lambda = 1/min, offset = min.
+.bounds_to_normal <- function(mn, mx) {
+  if (!is.finite(mx)) {
+    # Min-only calibration → exponential: peaks at offset, decays
+    list(type = "exponential", time = mn, lambda = 1 / max(mn, 1e-6))
+  } else if (abs(mx - mn) < 1e-10) {
+    # Fixed calibration point → normal with 5% stddev (soft target)
+    mid <- mean(c(mn, mx))
+    list(type = "normal", mean = mid, stddev = max(mid * 0.05, 1e-6))
+  } else {
+    mid <- mean(c(mn, mx))
+    sd <- (mx - mn) / 4
+    list(type = "normal", mean = mid, stddev = sd)
+  }
+}
+
+.run_reltime_with_bounds_context <- function(phy, ctx, eps = 1e-6,
+                                              use_densities = FALSE,
+                                              smooth_backbone = FALSE) {
   n_tip <- Ntip(phy)
 
   base <- .compute_H(phy)
   node_age_init <- .assign_node_ages(phy, base$H, ctx$root_age)
-  node_age <- .reltime_project_node_ages_qp(
-    phy = phy,
-    node_age_init = node_age_init,
-    lower = ctx$lower,
-    upper = ctx$upper,
-    eps = eps
-  )
+
+  if (isTRUE(use_densities) && !is.null(ctx$densities)) {
+    node_age <- .reltime_project_node_ages_density(
+      phy = phy,
+      node_age_init = node_age_init,
+      densities = ctx$densities,
+      eps = eps
+    )
+  } else {
+    node_age <- .reltime_project_node_ages_local(
+      phy = phy,
+      node_age_init = node_age_init,
+      lower = ctx$lower,
+      upper = ctx$upper,
+      eps = eps
+    )
+  }
+
+  # Optional: smooth near-zero backbone branches
+  if (isTRUE(smooth_backbone)) {
+    node_age <- .smooth_near_zero_branches(
+      node_age = node_age,
+      phy = phy,
+      lower = ctx$lower,
+      upper = ctx$upper,
+      eps = eps
+    )
+  }
 
   dated <- phy
   for (k in seq_len(nrow(phy$edge))) {
@@ -541,9 +959,15 @@ list(
 #' @param root_age       Optional root point estimate used for the initial profile.
 #' @param eps            Minimum internal branch duration enforced in the QP.
 #' @return               List with tree, node_age, bounds, and projection context.
-run_reltime_with_bounds <- function(phy, calibration_df, root_age = NULL, eps = 1e-6) {
-  ctx <- .reltime_prepare_bounds_context(phy, calibration_df, root_age = root_age)
-  .run_reltime_with_bounds_context(phy, ctx, eps = eps)
+run_reltime_with_bounds <- function(phy, calibration_df, root_age = NULL,
+                                    eps = 1e-6, use_densities = FALSE,
+                                    smooth_backbone = FALSE) {
+  ctx <- .reltime_prepare_bounds_context(phy, calibration_df,
+                                          root_age = root_age,
+                                          use_densities = use_densities)
+  .run_reltime_with_bounds_context(phy, ctx, eps = eps,
+                                    use_densities = use_densities,
+                                    smooth_backbone = smooth_backbone)
 }
 
 #' Compute Tao-style analytical CIs for a bounded RelTime run
@@ -553,6 +977,45 @@ run_reltime_with_bounds <- function(phy, calibration_df, root_age = NULL, eps = 
 #'                  [reltime_bootstrap_ci()].
 #' @param n_sites   Alignment length for CI variance calculations.
 #' @return          data.frame(node, age, ci_lo, ci_hi, se)
+#' Generic Tao-style analytical CIs for any dated tree
+#'
+#' Applies the Tao et al. (2020) delta-method variance to any phylogram +
+#' chronogram pair, regardless of the dating method used.  Works for chronos,
+#' treePL, RelTime, MCMCTree, etc.
+#'
+#' @param phy          Rooted phylogram (substitution branch lengths).
+#' @param dated_tree   Corresponding dated tree (time branch lengths).
+#' @param n_sites      Alignment length for Poisson branch-length variance.
+#' @param node_bounds  Optional data.frame with columns node, age_min, age_max
+#'                     for calibration-bound truncation of CIs.
+#' @return             data.frame(node, age, ci_lo, ci_hi, se)
+tao_analytical_ci <- function(phy, dated_tree, n_sites = 1000L,
+                              node_bounds = NULL) {
+  n_tip  <- Ntip(dated_tree)
+  n_node <- dated_tree$Nnode
+
+  ## Build node_age vector indexed by node number
+  node_age <- numeric(n_tip + n_node)
+  bt <- ape::branching.times(dated_tree)
+  for (nm in names(bt)) node_age[as.integer(nm)] <- bt[nm]
+
+  ## Build calibration bound lists
+  cal_min <- cal_max <- NULL
+  if (!is.null(node_bounds) && nrow(node_bounds) > 0L) {
+    cal_min <- as.list(stats::setNames(node_bounds$age_min, node_bounds$node))
+    cal_max <- as.list(stats::setNames(node_bounds$age_max, node_bounds$node))
+  }
+
+  reltime_ci(
+    phy      = phy,
+    node_age = node_age,
+    n_sites  = n_sites,
+    root_var = 0,
+    cal_min  = cal_min,
+    cal_max  = cal_max
+  )
+}
+
 reltime_tao_ci_from_bounds_run <- function(phy, rel_run, n_sites = 1000L) {
   bounds <- rel_run$bounds
   cal_min <- if (nrow(bounds)) {
@@ -607,15 +1070,19 @@ reltime_tao_ci_from_bounds_run <- function(phy, rel_run, n_sites = 1000L) {
 reltime_bootstrap_ci <- function(phy, calibration_df, root_age = NULL,
                                  B = 100L, n_sites = 1000L, eps = 1e-6,
                                  quiet = FALSE, trees = FALSE,
-                                 min_edge = 1e-12) {
+                                 min_edge = 1e-12, use_densities = FALSE,
+                                 smooth_backbone = TRUE) {
   B <- as.integer(B)
   if (!is.finite(B) || B < 1L) stop("B must be a positive integer.")
   if (!is.finite(n_sites) || n_sites <= 0) {
     stop("n_sites must be a positive finite number for RelTime bootstrap.")
   }
 
-  ctx <- .reltime_prepare_bounds_context(phy, calibration_df, root_age = root_age)
-  base_run <- .run_reltime_with_bounds_context(phy, ctx, eps = eps)
+  ctx <- .reltime_prepare_bounds_context(phy, calibration_df, root_age = root_age,
+                                          use_densities = use_densities)
+  base_run <- .run_reltime_with_bounds_context(phy, ctx, eps = eps,
+                                                use_densities = use_densities,
+                                                smooth_backbone = smooth_backbone)
 
   n_tip <- Ntip(phy)
   int_nodes <- seq.int(n_tip + 1L, n_tip + phy$Nnode)
@@ -627,7 +1094,9 @@ reltime_bootstrap_ci <- function(phy, calibration_df, root_age = NULL,
     if (!quiet) cat("\rRunning RelTime bootstrap:", i, "/", B)
     phy_boot <- try(.reltime_poisson_perturb_phy(phy, n_sites, min_edge = min_edge), silent = TRUE)
     if (inherits(phy_boot, "try-error")) next
-    run_i <- try(.run_reltime_with_bounds_context(phy_boot, ctx, eps = eps), silent = TRUE)
+    run_i <- try(.run_reltime_with_bounds_context(phy_boot, ctx, eps = eps,
+                                                    use_densities = use_densities,
+                                                    smooth_backbone = smooth_backbone), silent = TRUE)
     if (inherits(run_i, "try-error") || is.null(run_i)) next
     ages_i <- run_i$node_age[int_nodes]
     if (!all(is.finite(ages_i))) next
@@ -761,73 +1230,510 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
   do.call(rbind, merged)
 }
 
-# ---- project node ages onto full merged calibration bounds -----------------
-# Solves a quadratic program:
-#   minimize   sum_i (x_i - t0_i)^2
-#   subject to lower_i <= x_i <= upper_i
-#              x_parent - x_child >= eps
-# for internal nodes i only, with tip ages fixed at 0.
-.reltime_project_node_ages_qp <- function(phy, node_age_init, lower, upper, eps = 1e-6) {
-  if (!requireNamespace("quadprog", quietly = TRUE)) {
-    stop("Package quadprog is required for full-bound RelTime projection.")
+# ---- calibration density helpers -------------------------------------------
+# Supported distributions: uniform, normal, lognormal, exponential.
+# Each function returns log-density (unnormalised is fine for optimisation).
+
+.cal_density_log <- function(t, dist) {
+  type <- tolower(dist$type)
+  if (type == "uniform") {
+    lo <- dist$min %||% 0
+    hi <- dist$max %||% Inf
+    if (t >= lo && t <= hi) return(0)  # log(1/(hi-lo)) is constant
+    return(-Inf)
   }
+  if (type == "normal") {
+    mu <- dist$mean
+    sd <- dist$stddev
+    return(-0.5 * ((t - mu) / sd)^2)
+  }
+  if (type == "lognormal") {
+    # offset: hard minimum; distribution is on (t - offset)
+    off <- dist$offset %||% 0
+    if (t <= off) return(-Inf)
+    x <- t - off
+    mu <- dist$mean
+    sd <- dist$stddev
+    return(-log(x) - 0.5 * ((log(x) - mu) / sd)^2)
+  }
+  if (type == "exponential") {
+    # time = hard minimum (offset), lambda = rate
+    off <- dist$time %||% 0
+    lam <- dist$lambda
+    if (t < off) return(-Inf)
+    return(-lam * (t - off))
+  }
+  # fallback: uniform-like (no penalty)
+  0
+}
+
+# Mode of each density (used as the "target" for initial attraction)
+.cal_density_mode <- function(dist) {
+  type <- tolower(dist$type)
+  if (type == "uniform") {
+    lo <- dist$min %||% 0
+    hi <- dist$max %||% lo
+    return(mean(c(lo, hi)))
+  }
+  if (type == "normal") return(dist$mean)
+  if (type == "lognormal") {
+    off <- dist$offset %||% 0
+    mu <- dist$mean
+    sd <- dist$stddev
+    return(off + exp(mu - sd^2))
+  }
+  if (type == "exponential") return(dist$time %||% 0)
+  NA_real_
+}
+
+# Effective min/max bounds from density (where density > exp(-9) of mode)
+.cal_density_bounds <- function(dist) {
+  type <- tolower(dist$type)
+  if (type == "uniform") {
+    return(c(dist$min %||% 0, dist$max %||% Inf))
+  }
+  if (type == "normal") {
+    # ~4.2 sigma covers exp(-9) of mode
+    return(c(max(0, dist$mean - 4.2 * dist$stddev),
+             dist$mean + 4.2 * dist$stddev))
+  }
+  if (type == "lognormal") {
+    off <- dist$offset %||% 0
+    mu <- dist$mean
+    sd <- dist$stddev
+    # Approximate bounds
+    lo <- off + exp(mu - 4 * sd)
+    hi <- off + exp(mu + 4 * sd)
+    return(c(lo, hi))
+  }
+  if (type == "exponential") {
+    off <- dist$time %||% 0
+    lam <- dist$lambda
+    return(c(off, off + 9 / lam))
+  }
+  c(0, Inf)
+}
+
+# ---- project node ages with calibration densities --------------------------
+# Extension of the MEGA-style local rescaling that replaces hard clamping
+# with density-weighted attraction.
+#
+# For calibrated nodes, instead of snapping to min/max, the algorithm finds
+# the age within the feasible parent–child interval that maximises the
+# calibration density. Uncalibrated nodes are rescaled proportionally
+# (preserving RelTime branch structure) when a calibrated ancestor shifts.
+#
+# Steps:
+#   1. Propagate hard bounds from densities for hierarchical consistency
+#   2. Global scaling factor from density modes
+#   3. Pre-order density-guided placement + proportional subtree rescale
+#   4. Iterative refinement (coordinate descent on log-density)
+#   5. Enforce parent > child ordering
+.reltime_project_node_ages_density <- function(phy, node_age_init, densities,
+                                                eps = 1e-6, n_iter = 5L) {
   n_tip <- Ntip(phy)
-  int_nodes <- seq.int(n_tip + 1L, n_tip + phy$Nnode)
-  p <- length(int_nodes)
-  idx_of <- stats::setNames(seq_along(int_nodes), int_nodes)
+  total <- n_tip + phy$Nnode
+  root_node <- n_tip + 1L
+  ch <- .reltime_children(phy)
 
-  eq_cols <- list()
-  eq_b <- numeric(0)
-  ge_cols <- list()
-  ge_b <- numeric(0)
+  # Build parent lookup
+  par <- integer(total)
+  e <- phy$edge
+  for (k in seq_len(nrow(e))) par[e[k, 2L]] <- e[k, 1L]
 
-  add_eq <- function(v, b) {
-    eq_cols[[length(eq_cols) + 1L]] <<- v
-    eq_b <<- c(eq_b, b)
+  # ---- BFS pre-order of internal nodes ------------------------------------
+  visit <- integer(0)
+  queue <- root_node
+  while (length(queue)) {
+    nd <- queue[1L]; queue <- queue[-1L]
+    visit <- c(visit, nd)
+    kids <- ch[[nd]]
+    for (kid in kids) if (kid > n_tip) queue <- c(queue, kid)
   }
-  add_ge <- function(v, b) {
-    ge_cols[[length(ge_cols) + 1L]] <<- v
-    ge_b <<- c(ge_b, b)
-  }
 
-  for (nd in int_nodes) {
-    v <- numeric(p)
-    v[idx_of[[as.character(nd)]]] <- 1
-    lo <- lower[nd]
-    hi <- upper[nd]
-    if (is.finite(lo) && is.finite(hi) && abs(lo - hi) < 1e-10) {
-      add_eq(v, lo)
-    } else {
-      if (is.finite(lo)) add_ge(v, lo)
-      if (is.finite(hi)) add_ge(-v, -hi)
+  # ---- Derive hard bounds from densities ----------------------------------
+  lower <- numeric(total)
+  upper <- rep(Inf, total)
+  for (nd in visit) {
+    if (!is.null(densities[[nd]])) {
+      bds <- .cal_density_bounds(densities[[nd]])
+      lower[nd] <- bds[1]
+      upper[nd] <- bds[2]
     }
   }
 
-  for (k in seq_len(nrow(phy$edge))) {
-    pnd <- phy$edge[k, 1L]
-    cnd <- phy$edge[k, 2L]
-    v <- numeric(p)
-    v[idx_of[[as.character(pnd)]]] <- 1
-    if (cnd > n_tip) v[idx_of[[as.character(cnd)]]] <- -1
-    add_ge(v, eps)
+  # ---- Step 1: propagate bounds for hierarchical consistency ---------------
+  for (nd in visit) {
+    if (!is.finite(upper[nd])) next
+    for (kid in ch[[nd]])
+      if (kid > n_tip) upper[kid] <- min(upper[kid], upper[nd])
+  }
+  for (nd in rev(visit)) {
+    for (kid in ch[[nd]])
+      if (kid > n_tip && is.finite(lower[kid]) && lower[kid] > 0)
+        lower[nd] <- max(lower[nd], lower[kid])
   }
 
-  Amat <- do.call(cbind, c(eq_cols, ge_cols))
-  bvec <- c(eq_b, ge_b)
-  Dmat <- diag(2, p)
-  dvec <- 2 * node_age_init[int_nodes]
+  # ---- Step 2: global scaling from density modes --------------------------
+  node_age <- node_age_init
+  r0 <- 0; r1 <- Inf
+  for (nd in visit) {
+    if (node_age_init[nd] < 1e-12 || is.null(densities[[nd]])) next
+    bds <- .cal_density_bounds(densities[[nd]])
+    if (bds[1] > 0) r0 <- max(r0, bds[1] / node_age_init[nd])
+    if (is.finite(bds[2])) r1 <- min(r1, bds[2] / node_age_init[nd])
+  }
+  if (is.finite(r1) && r1 >= r0 && r0 > 0) {
+    mode_ratios <- numeric(0)
+    for (nd in visit) {
+      if (node_age_init[nd] < 1e-12 || is.null(densities[[nd]])) next
+      mr <- .cal_density_mode(densities[[nd]]) / node_age_init[nd]
+      if (is.finite(mr) && mr >= r0 && mr <= r1)
+        mode_ratios <- c(mode_ratios, mr)
+    }
+    f <- if (length(mode_ratios)) median(mode_ratios) else (r0 + r1) / 2
+    f <- max(r0, min(r1, f))
+    for (nd in visit) node_age[nd] <- node_age_init[nd] * f
+  }
 
-  sol <- quadprog::solve.QP(
-    Dmat = Dmat,
-    dvec = dvec,
-    Amat = Amat,
-    bvec = bvec,
-    meq = length(eq_b)
-  )
+  # Helper: find feasible range for node nd
+  .feasible_range <- function(nd) {
+    parent_age <- if (par[nd] > 0) node_age[par[nd]] else Inf
+    max_child_age <- 0
+    for (kid in ch[[nd]])
+      if (kid > n_tip) max_child_age <- max(max_child_age, node_age[kid])
+    lo <- max(lower[nd], max_child_age + eps)
+    hi <- min(upper[nd], parent_age - eps)
+    c(lo, hi)
+  }
 
-  out <- node_age_init
-  out[int_nodes] <- sol$solution
-  out
+  # Helper: rescale subtree below nd
+  .rescale_subtree <- function(nd, sf, skip_calibrated = FALSE) {
+    stack <- integer(0)
+    for (kid in ch[[nd]]) if (kid > n_tip) stack <- c(stack, kid)
+    while (length(stack)) {
+      cur <- stack[1L]; stack <- stack[-1L]
+      if (skip_calibrated && !is.null(densities[[cur]])) next
+      node_age[cur] <<- node_age[cur] * sf
+      for (kid in ch[[cur]]) if (kid > n_tip) stack <- c(stack, kid)
+    }
+  }
+
+  # ---- Step 3: pre-order density-guided placement -------------------------
+  for (nd in visit) {
+    if (is.null(densities[[nd]])) next
+    old_age <- node_age[nd]
+    rng <- .feasible_range(nd)
+    lo <- rng[1]; hi <- rng[2]
+    if (lo > hi) { lo <- lower[nd]; hi <- upper[nd] }
+    if (lo > hi) next
+
+    new_age <- .golden_section_max(
+      function(t) .cal_density_log(t, densities[[nd]]),
+      lo, hi
+    )
+
+    if (abs(new_age - old_age) > 1e-12 && old_age > 1e-12) {
+      sf <- new_age / old_age
+      node_age[nd] <- new_age
+      .rescale_subtree(nd, sf)
+    }
+  }
+
+  # ---- Step 4: iterative refinement (coordinate descent) ------------------
+  for (iter in seq_len(n_iter)) {
+    moved <- FALSE
+    for (nd in visit) {
+      if (is.null(densities[[nd]])) next
+      old_age <- node_age[nd]
+      rng <- .feasible_range(nd)
+      if (rng[1] > rng[2]) next
+
+      new_age <- .golden_section_max(
+        function(t) .cal_density_log(t, densities[[nd]]),
+        rng[1], rng[2]
+      )
+
+      if (abs(new_age - old_age) > eps * 0.1 && old_age > 1e-12) {
+        sf <- new_age / old_age
+        node_age[nd] <- new_age
+        .rescale_subtree(nd, sf, skip_calibrated = TRUE)
+        moved <- TRUE
+      }
+    }
+    if (!moved) break
+  }
+
+  # ---- Step 5: enforce parent > child + eps --------------------------------
+  for (nd in visit) {
+    for (kid in ch[[nd]]) {
+      if (kid > n_tip && node_age[kid] >= node_age[nd] - eps)
+        node_age[kid] <- node_age[nd] - eps
+    }
+  }
+
+  node_age
+}
+
+# Golden-section search for maximum of f on [a, b]
+.golden_section_max <- function(f, a, b, tol = 1e-8, max_iter = 100L) {
+  gr <- (sqrt(5) + 1) / 2
+  c <- b - (b - a) / gr
+  d <- a + (b - a) / gr
+  for (i in seq_len(max_iter)) {
+    if (abs(b - a) < tol) break
+    if (f(c) < f(d)) {
+      a <- c
+    } else {
+      b <- d
+    }
+    c <- b - (b - a) / gr
+    d <- a + (b - a) / gr
+  }
+  (a + b) / 2
+}
+
+# ---- post-processing: smooth near-zero backbone branches ------------------
+# After calibration projection, some backbone branches collapse because an
+# uncalibrated parent node gets pushed right on top of its calibrated child.
+# This happens when RelTime's initial age for the parent is BELOW the child's
+# calibrated age — the parent is forced upward to satisfy parent > child, but
+# lands barely above the child.
+#
+# Fix: for each near-zero internal branch where the parent is uncalibrated,
+# place the parent at the proportional midpoint between its calibrated child
+# and its nearest calibrated ancestor.  This preserves the tree's temporal
+# structure while giving backbone branches real duration.
+.smooth_near_zero_branches <- function(node_age, phy, lower, upper,
+                                        eps = 1e-6, threshold = 1e-5) {
+  n_tip <- Ntip(phy)
+  total <- n_tip + phy$Nnode
+  root_node <- n_tip + 1L
+  ch <- .reltime_children(phy)
+  e <- phy$edge
+
+  # Build parent lookup
+  par_of <- integer(total)
+  for (k in seq_len(nrow(e))) par_of[e[k, 2L]] <- e[k, 1L]
+
+  # Identify calibrated nodes (fixed-point: lower == upper)
+  is_calibrated <- logical(total)
+  for (nd in seq_len(total)) {
+    if (nd > n_tip && is.finite(lower[nd]) && is.finite(upper[nd]) &&
+        lower[nd] > 0 && abs(upper[nd] - lower[nd]) < 1e-10)
+      is_calibrated[nd] <- TRUE
+  }
+  # Root is always anchored
+  is_calibrated[root_node] <- TRUE
+
+  # Multiple passes to handle cascading near-zero chains
+  for (pass in 1:3) {
+    any_fixed <- FALSE
+
+    for (k in seq_len(nrow(e))) {
+      child <- e[k, 2L]
+      if (child <= n_tip) next
+      parent <- e[k, 1L]
+      branch_dur <- node_age[parent] - node_age[child]
+      if (branch_dur > threshold) next      # not near-zero
+      if (is_calibrated[parent]) next        # can't move calibrated parent
+
+      # Find nearest calibrated ancestor above parent
+      anc <- par_of[parent]
+      while (anc > 0 && !is_calibrated[anc]) anc <- par_of[anc]
+      anc_age <- if (anc > 0) node_age[anc] else node_age[root_node]
+
+      # Find the calibrated child age (floor)
+      cal_child_age <- node_age[child]
+
+      # Place parent proportionally between ancestor and child
+      # Use the initial RelTime proportion if available
+      room <- anc_age - cal_child_age
+      if (room < 2 * eps) next
+
+      # Position at the midpoint between ancestor and child, but
+      # respect other children's ages (parent must be > all children)
+      max_child_age <- 0
+      for (kid in ch[[parent]])
+        if (kid > n_tip) max_child_age <- max(max_child_age, node_age[kid])
+
+      # New parent age: midpoint of available range
+      new_lo <- max_child_age + eps
+      new_hi <- anc_age - eps
+      if (is.finite(upper[parent])) new_hi <- min(new_hi, upper[parent])
+      if (is.finite(lower[parent]) && lower[parent] > 0)
+        new_lo <- max(new_lo, lower[parent])
+
+      if (new_lo >= new_hi) next
+
+      new_parent_age <- (new_lo + new_hi) / 2
+
+      # Ensure the branch to child opens up meaningfully
+      if (new_parent_age - cal_child_age < threshold) next
+
+      node_age[parent] <- new_parent_age
+      any_fixed <- TRUE
+    }
+
+    if (!any_fixed) break
+  }
+
+  # Final pass: enforce parent > child + eps (might be violated by moves above)
+  # BFS pre-order
+  visit <- integer(0)
+  queue <- root_node
+  while (length(queue)) {
+    nd <- queue[1L]; queue <- queue[-1L]
+    visit <- c(visit, nd)
+    kids <- ch[[nd]]
+    for (kid in kids) if (kid > n_tip) queue <- c(queue, kid)
+  }
+  for (nd in visit) {
+    for (kid in ch[[nd]]) {
+      if (kid > n_tip && node_age[kid] >= node_age[nd] - eps)
+        node_age[kid] <- node_age[nd] - eps
+    }
+  }
+
+  node_age
+}
+
+# ---- project node ages onto full merged calibration bounds -----------------
+# MEGA-style local rescaling (Tamura et al. 2013, 2018; Tao et al. 2020):
+#   1. Propagate bounds hierarchically for consistency
+#   2. Try a single global scaling factor f (midpoint of feasible range)
+#   3. Pre-order clamp-and-proportional-rescale for remaining violations
+#   4. Enforce parent > child ordering
+#
+# Unlike the previous QP formulation, each calibration adjustment only
+# rescales the subtree below the clamped node, preserving relative branch
+# proportions and avoiding the artificial near-zero branches that QP
+# introduced at backbone nodes.
+.reltime_project_node_ages_local <- function(phy, node_age_init, lower, upper, eps = 1e-6) {
+  n_tip <- Ntip(phy)
+  total <- n_tip + phy$Nnode
+  root_node <- n_tip + 1L
+  ch <- .reltime_children(phy)
+  parent_of <- integer(total)
+  for (k in seq_len(nrow(phy$edge))) parent_of[phy$edge[k, 2L]] <- phy$edge[k, 1L]
+
+  # ---- BFS pre-order of internal nodes ------------------------------------
+  visit <- integer(0)
+  queue <- root_node
+  while (length(queue)) {
+    nd <- queue[1L]; queue <- queue[-1L]
+    visit <- c(visit, nd)
+    kids <- ch[[nd]]
+    for (kid in kids) if (kid > n_tip) queue <- c(queue, kid)
+  }
+
+  # ---- MEGA-style local rescaling (Tamura et al. 2012) --------------------
+  # 1. Start with RelTime relative ages scaled so root = root_age.
+  # 2. For each calibrated node (pre-order, root first): set its age to the
+  #    calibrated value, then proportionally rescale all descendant ages
+  #    that lie between this node and the next calibrated descendant(s).
+  #    The rescaling maps the interval [0, old_age] -> [0, new_age] for
+  #    descendants, preserving relative proportions within each segment.
+  # 3. Iterate until stable (calibrations can interact when nested).
+
+  node_age <- node_age_init
+
+  # Identify fixed-point calibrated nodes
+  is_cal <- logical(total)
+  cal_age <- rep(NA_real_, total)
+  for (nd in visit) {
+    if (is.finite(lower[nd]) && is.finite(upper[nd]) &&
+        lower[nd] > 0 && abs(upper[nd] - lower[nd]) < 1e-10) {
+      is_cal[nd] <- TRUE
+      cal_age[nd] <- lower[nd]
+    }
+  }
+
+  max_iter <- 50L
+  for (iter in seq_len(max_iter)) {
+    max_change <- 0
+
+    # Pre-order: at each calibrated node, fix age and rescale below
+    for (nd in visit) {
+      if (!is_cal[nd]) next
+
+      target <- cal_age[nd]
+      old_age <- node_age[nd]
+      if (abs(old_age) < 1e-15) {
+        node_age[nd] <- target
+        max_change <- max(max_change, abs(target))
+        next
+      }
+
+      sf <- target / old_age
+      if (abs(sf - 1) < 1e-12) next
+
+      max_change <- max(max_change, abs(target - old_age))
+      node_age[nd] <- target
+
+      # Rescale all descendants until hitting another calibrated node
+      stack <- integer(0)
+      for (kid in ch[[nd]]) if (kid > n_tip) stack <- c(stack, kid)
+      while (length(stack)) {
+        cur <- stack[1L]; stack <- stack[-1L]
+        if (is_cal[cur]) next  # stop at next calibrated node
+        node_age[cur] <- node_age[cur] * sf
+        for (kid in ch[[cur]]) if (kid > n_tip) stack <- c(stack, kid)
+      }
+    }
+
+    if (max_change < 1e-10) break
+  }
+
+  # ---- Feasibility clamping for uncalibrated nodes -------------------------
+  # After calibration enforcement, uncalibrated nodes between two calibrated
+  # nodes may still have ages outside the feasible range [cal_desc, cal_anc].
+  # For each uncalibrated node, find its nearest calibrated ancestor (above)
+  # and nearest calibrated descendant (below) and clamp its age to lie within
+  # that interval, preserving proportional structure.
+  # This matches MEGA's behavior: uncalibrated nodes are placed consistently
+  # with surrounding calibrations.
+
+  for (nd in visit) {
+    if (is_cal[nd]) next
+    if (nd == root_node) next
+
+    # Find nearest calibrated ancestor (walk up)
+    cal_anc_age <- node_age[root_node]  # default: root
+    p <- parent_of[nd]
+    while (p > 0) {
+      if (is_cal[p]) { cal_anc_age <- cal_age[p]; break }
+      p <- parent_of[p]
+    }
+
+    # Find nearest calibrated descendant (walk down) — take the max age
+    # among all calibrated descendants reachable without crossing another cal
+    cal_desc_age <- 0  # default: tips at age 0
+    stack <- integer(0)
+    for (kid in ch[[nd]]) if (kid > n_tip) stack <- c(stack, kid)
+    while (length(stack)) {
+      cur <- stack[1L]; stack <- stack[-1L]
+      if (is_cal[cur]) {
+        cal_desc_age <- max(cal_desc_age, cal_age[cur])
+      } else {
+        for (kid in ch[[cur]]) if (kid > n_tip) stack <- c(stack, kid)
+      }
+    }
+
+    # Clamp
+    if (node_age[nd] > cal_anc_age) node_age[nd] <- cal_anc_age - eps
+    if (node_age[nd] < cal_desc_age) node_age[nd] <- cal_desc_age + eps
+  }
+
+  # ---- Enforce parent > child + eps ----------------------------------------
+  for (nd in visit) {
+    for (kid in ch[[nd]]) {
+      if (kid > n_tip && node_age[kid] >= node_age[nd] - eps)
+        node_age[kid] <- node_age[nd] - eps
+    }
+  }
+
+  node_age
 }
 
 #' Run RelTime, then project the point estimates onto a full set of merged
@@ -842,12 +1748,16 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
 #' @param eps            Minimum internal branch duration enforced in the QP.
 #' @return               List with tree, ci, node_age, bounds, and initial ages.
 run_reltime_with_bounds_ci <- function(phy, calibration_df, root_age = NULL,
-                                       n_sites = 1000L, eps = 1e-6) {
+                                       n_sites = 1000L, eps = 1e-6,
+                                       use_densities = FALSE,
+                                       smooth_backbone = TRUE) {
   rel_run <- run_reltime_with_bounds(
     phy = phy,
     calibration_df = calibration_df,
     root_age = root_age,
-    eps = eps
+    eps = eps,
+    use_densities = use_densities,
+    smooth_backbone = smooth_backbone
   )
   rel_run$ci <- reltime_tao_ci_from_bounds_run(
     phy = phy,
