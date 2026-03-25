@@ -58,7 +58,7 @@ This workflow is easiest to read if you keep four layers separate:
   - for `chronos` only, which is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`); in workflows that compare those `chronos` models, the best-fitting model can be selected with `PHIIC` or penalized log-likelihood before candidates enter post-fit scoring
 - tuning layer
   - lambda, smoothing, and `nb.rate.cat` grids expose sensitivity to regularization settings; they are not meant to guarantee that one single setting must always be declared the winner by fit alone
-- post-fit layer
+- post-fit layer (see [2_PCR_POSTFIT_METRICS](../2_PCR_POSTFIT_METRICS/README.md))
   - PCR, run afterward with `scripts/run_pcr.R`, scores the finished candidate chronograms on a common biological diagnostic set
 
 That separation matters. A tree can look best by a fit criterion inside one method family and still lose the broader PCR comparison after all methods are placed on the same post-fit scale.
