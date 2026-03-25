@@ -1683,6 +1683,44 @@ if ("chronos" %in% methods) {
           tol = chronos_tol,
           attempt_timeout = chronos_attempt_timeout
         )
+        ## If discrete model fails, try progressively dropping calibrations
+        ## (chronos discrete init can fail with many fixed-point calibrations)
+        discrete_dropped_cals <- character(0)
+        if (!identical(run$status, "OK") && identical(mdl, "discrete")) {
+          cal_subset <- chronos_calib
+          max_drops <- min(nrow(chronos_calib) - 2L, ceiling(nrow(chronos_calib) * 0.6))
+          for (.drop_round in seq_len(max_drops)) {
+            found <- FALSE
+            ## Try dropping each remaining cal; keep first that works
+            for (.j in seq_len(nrow(cal_subset))) {
+              test_cal <- cal_subset[-.j, , drop = FALSE]
+              test_run <- run_chronos_one(phy = phy, calib = test_cal, model = mdl,
+                lambda = lam, nb_rate_cat = kcat, retries = 3L,
+                iter_max = chronos_iter_max, tol = chronos_tol,
+                attempt_timeout = chronos_attempt_timeout)
+              if (identical(test_run$status, "OK")) {
+                discrete_dropped_cals <- c(discrete_dropped_cals,
+                  sprintf("node=%d age=%.2f", cal_subset$node[.j], cal_subset$age.min[.j]))
+                cal_subset <- test_cal
+                run <- test_run
+                found <- TRUE
+                break
+              }
+            }
+            if (found) break
+            ## No single drop worked — remove shallowest cal and retry
+            shallow_idx <- which.min(cal_subset$age.min)
+            discrete_dropped_cals <- c(discrete_dropped_cals,
+              sprintf("node=%d age=%.2f (shallowest)", cal_subset$node[shallow_idx], cal_subset$age.min[shallow_idx]))
+            cal_subset <- cal_subset[-shallow_idx, , drop = FALSE]
+          }
+          if (identical(run$status, "OK") && length(discrete_dropped_cals)) {
+            cat(sprintf("  discrete model: succeeded after dropping %d calibration(s):\n",
+              length(discrete_dropped_cals)))
+            for (.dc in discrete_dropped_cals) cat("    -", .dc, "\n")
+            cat(sprintf("  Using %d / %d calibrations.\n", nrow(cal_subset), nrow(chronos_calib)))
+          }
+        }
         if (identical(run$status, "OK")) {
           ape::write.tree(run$tree, file = out_tree)
           chronos_trees_cache[[candidate]] <- run$tree  ## keep in-memory for post-selection CI
