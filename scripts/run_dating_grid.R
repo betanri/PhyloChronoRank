@@ -2055,12 +2055,15 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     ci_lambda <- if (nrow(src_row)) src_row$lambda[1L] else 1
     ci_nrc <- if (nrow(src_row) && "nb_rate_cat" %in% names(src_row)) src_row$nb_rate_cat[1L] else NA_integer_
 
-    ## Use cached in-memory chronos tree (preserves chronos class + attributes)
+    ## Use cached in-memory chronos tree but strip the call attribute so
+    ## chronos_ci() rebuilds it cleanly — the original call can cause the
+    ## bootstrap to return the starting ages unchanged (zero-width CIs).
     cached_tree <- chronos_trees_cache[[src_cand]]
     if (is.null(cached_tree)) {
       msg("  chronos CI skipped for ", ci_cand, " — no cached in-memory tree")
       next
     }
+    attr(cached_tree, "call") <- NULL
 
     msg("  chronos CI for ", ci_cand, " (", chronos_ci_reps, " reps)...")
     ci_ctrl <- ape::chronos.control()

@@ -450,13 +450,17 @@ chronosCI <-
     )
     for (j in seq_along(ok_idx)) {
         chr_j <- CHR[[ok_idx[[j]]]]
-        bt_j <- ape::branching.times(chr_j)
+        ## Use node.depth.edgelength instead of branching.times because
+        ## chronos() can produce trees where branching.times() names are
+        ## garbled and don't match internal node numbers.
+        dep_j <- ape::node.depth.edgelength(chr_j)
+        ages_j <- max(dep_j) - dep_j
         sig_j <- .chronos_signature_index(chr_j)
         node_by_sig_j <- stats::setNames(as.integer(names(sig_j)), sig_j)
         matched_nodes_j <- unname(node_by_sig_j[target_sig])
         keep_j <- is.finite(matched_nodes_j)
         if (any(keep_j)) {
-            BT[keep_j, j] <- bt_j[as.character(matched_nodes_j[keep_j])]
+            BT[keep_j, j] <- ages_j[matched_nodes_j[keep_j]]
         }
     }
     q_probs <- c(0.025, 0.25, 0.75, 0.975)
