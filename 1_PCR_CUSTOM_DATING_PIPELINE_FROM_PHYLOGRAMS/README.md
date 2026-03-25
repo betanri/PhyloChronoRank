@@ -9,9 +9,7 @@ This page documents `scripts/run_dating_grid.R`, the repo-local helper for gener
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` across a smoothing grid
 - `RelTime` via MEGA-CC (`megacc` binary required; freely available from [megasoftware.net](https://www.megasoftware.net))
-- optional uncertainty summaries: `chronos` bootstrap CIs through the vendored helper implementing the default parametric bootstrap of [Paradis et al. 2023, Confidence intervals in molecular dating by maximum likelihood](https://doi.org/10.1016/j.ympev.2022.107652), `treePL` bootstrap CIs via Poisson branch-length resampling, and `RelTime` analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
-
-For `treePL`, the default repo path is the recommended two-step run: a `prime` pass first, then the real optimized run using the optimizer hints from that pass, with `thorough` enabled by default and no explicit `opt` override unless you pass `--treepl-opt=...`.
+- optional uncertainty summaries: all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` additionally reports analytical delta-method CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 
 The main point is calibration consistency. The script first resolves one shared calibration table, maps pairwise calibrations onto MRCA nodes on the target phylogram, merges duplicate-node rows by interval intersection, drops empty intersections, and then passes that same resolved node-bound set to all three methods.
 
@@ -45,9 +43,7 @@ Operationally, all methods are exposed here through one R-driven workflow:
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
 - `RelTime` requires the `megacc` binary (MEGA-CC, freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms). The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file), grafts a temporary mock outgroup at the root (required because MEGA's RelTime cannot calibrate the root node directly), runs `megacc`, strips the outgroup from the output, and cleans tip labels
-- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos), implementing the parametric bootstrap of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)
-- `treePL` bootstrap CIs are computed by rerunning `treePL` on Poisson-perturbed branch-length replicates of the input phylogram
-- `RelTime` analytical CIs are parsed from MEGA's native NEXUS output, which implements the delta-method variance of [Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)
+- all three methods compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` additionally reports analytical delta-method CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 - all CI-annotated trees are written as FigTree-ready NEXUS files with `height_95%_HPD` node-bar annotations
 
 This repo can generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
@@ -313,47 +309,30 @@ Common patterns are:
 
 The practical rule is simple: do not force those layers into one synthetic winner if they are telling different stories. Report the fit preference, report the PCR preference, and explain the biological consequence of the difference.
 
-## RelTime: R Implementation With Backbone Smoothing
+## RelTime via MEGA-CC
 
-This pipeline includes a repo-local R reimplementation of the RelTime algorithm ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/); [Tamura, Tao, and Kumar 2018](https://pubmed.ncbi.nlm.nih.gov/29893954/)) that does not depend on MEGA or any external binary (but that is nonetheless an optional functionality of the PCR pipeline; see below). The R version follows the same core relative-rate formula — T[c] = T[parent] × H[c] / (b + H[c]) — and enforces calibration bounds via MEGA-style local rescaling ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/)). It additionally supports five calibration density types (uniform, normal, lognormal, exponential, and fixed-point), and computes confidence intervals via the Poisson branch-length bootstrap of [Paradis et al. (2023)](https://doi.org/10.1016/j.ympev.2022.107652) and optionally via the analytical delta-method variance of [Tao et al. (2020)](https://academic.oup.com/mbe/article/37/1/280/5602325).
+The pipeline uses MEGA-CC's RelTime implementation ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/); [Tamura, Tao, and Kumar 2018](https://pubmed.ncbi.nlm.nih.gov/29893954/)) as its RelTime engine. The `megacc` binary is required and is freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms.
 
-A known limitation of the RelTime formula is that it can produce near-zero or exactly zero-length internal branches when backbone branch lengths are short relative to subtree depths. This problem is inherent to the algorithm but is dramatically amplified by congruification-based calibration strategies that impose many fixed-point secondary calibrations derived from a reference timetree — a use case RelTime was not originally designed for ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/)). When dozens of nodes are locked to exact ages, uncalibrated nodes between them get squeezed into narrow feasible intervals, and the formula's tendency to collapse short backbone branches produces zero-duration internodes that appear as polytomies. To address this, the R implementation includes backbone smoothing (enabled by default): for each near-zero internal branch where the parent is uncalibrated, the smoother places that parent at the midpoint of the feasible interval between the nearest calibrated ancestor above and the calibrated child below, without modifying any calibrated node age.
+The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file) from the same shared calibration set used by `chronos` and `treePL`. Because MEGA's RelTime cannot constrain the root node directly — it requires a designated outgroup lineage external to all calibrated nodes — the pipeline excludes the root calibration and grafts a temporary single-lineage mock outgroup at the base of the tree before invoking `megacc`. Without this step, the root age is left unconstrained and deep-node confidence intervals can span the entire tree depth. After the run, the mock outgroup is stripped from the output tree, and tip labels are cleaned (MEGA adds quotes and replaces underscores with spaces).
 
-On an empirical 495-taxon fish phylogeny with 75 fixed-point calibrations from congruification, the R implementation with backbone smoothing produces 0 near-zero internal branches, while MEGA-CC (v10.2.6) on the same inputs produces several zero-length branches. Comparing node ages between the two implementations yields R² = 0.989 (slope = 1.001, n = 494 nodes). Because MEGA RelTime cannot calibrate the root node and is sensitive to root placement, the pipeline automatically grafts a temporary single-lineage mock outgroup at the base before running `megacc`, then strips it from the output tree. Because a single empirical dataset does not constitute a formal validation, the pipeline offers both implementations so users can compare them transparently:
-
-| | `RelTime` (R, default) | `RelTime_MEGA` (optional) |
-|---|---|---|
-| Binary required | None (pure R) | `megacc` (MEGA-CC) |
-| Backbone smoothing | Yes — near-zero branches resolved | No — can produce true-zero branches |
-| Calibration densities | Supported (normal, lognormal, exponential, uniform) | Supported natively by MEGA |
-| Confidence intervals | Yes — bootstrap ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)) and analytical ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)) | Yes — analytical delta-method CIs ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)), parsed from MEGA's native output |
-| Output trees | FigTree NEXUS with HPD node bars | FigTree NEXUS with HPD node bars |
-| Included by default | Yes | No — must add `reltime_mega` to `--methods` |
-
-By default, only the R RelTime with backbone smoothing is run. Users who want the MEGA-CC comparison add `reltime_mega` to `--methods`. The pipeline auto-generates all MEGA input files from the same shared calibration set. Because MEGA RelTime cannot constrain the root node directly — it requires a designated outgroup lineage external to all calibrated nodes — the pipeline excludes the root calibration and grafts a temporary single-lineage mock outgroup at the base of the tree before invoking `megacc`. Without this step, the root age is left unconstrained and deep-node confidence intervals can span the entire tree depth. After the run, the mock outgroup is stripped from the output tree. The R implementation computes confidence intervals via the Poisson branch-length bootstrap ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)), while the MEGA path extracts native analytical delta-method CIs from MEGA's NEXUS output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)). Both produce FigTree-ready NEXUS trees with `height_95%_HPD` node-bar annotations.
+Confidence intervals are computed two ways: (1) analytical delta-method CIs parsed from MEGA's native NEXUS output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)), and (2) Poisson branch-length bootstrap CIs ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)), where each replicate perturbs the phylogram's branch lengths, runs `megacc` on the perturbed tree, and collects node ages for percentile CIs. Both CI types produce FigTree-ready NEXUS trees with `height_95%_HPD` node-bar annotations.
 
 ### Usage
 
 ```bash
-# Default — R RelTime only (no MEGA binary needed):
-Rscript scripts/run_dating_grid.R \
-  --phylogram=tree.tre \
-  --calibrations-csv=cals.csv \
-  --outdir=out
-
-# With MEGA-CC comparison:
+# megacc must be on PATH or specified with --megacc-bin:
 Rscript scripts/run_dating_grid.R \
   --phylogram=tree.tre \
   --calibrations-csv=cals.csv \
   --outdir=out \
-  --methods=chronos,treepl,reltime,reltime_mega
+  --methods=chronos,treepl,reltime_mega
 
 # If megacc is not on PATH:
 Rscript scripts/run_dating_grid.R \
   --phylogram=tree.tre \
   --calibrations-csv=cals.csv \
   --outdir=out \
-  --methods=chronos,treepl,reltime,reltime_mega \
+  --methods=chronos,treepl,reltime_mega \
   --megacc-bin=/path/to/megacc
 ```
 
@@ -393,11 +372,9 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - all three methods use the same resolved calibration set after MRCA mapping and duplicate-node merging
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
-- `RelTime` is run with the repo-local helper in `scripts/reltime_helpers.R`, with backbone smoothing enabled by default to eliminate near-zero internal branches
-- `RelTime_MEGA`, when requested, runs MEGA-CC's own RelTime on the same tree and calibrations; its output tree is cleaned and registered as an additional candidate, and bootstrap CIs are computed by rerunning MEGA-CC on Poisson-perturbed branch lengths (same resampling design as the other methods)
-- the shared `chronos`, `treePL`, `RelTime`, and `RelTime_MEGA` bootstrap CI layer uses one branch-length resampling design; `chronos` uses the vendored default parametric bootstrap helper of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652), while `treePL`, `RelTime`, and `RelTime_MEGA` use repo-local reruns under the same resampling logic
-- `chronos` uncertainty is computed with the vendored bootstrap helper in `scripts/chronos_ci_helpers.R`, adapted from [josephwb/chronos](https://github.com/josephwb/chronos)
-- `uncertainty_summary_long.csv` combines only uncertainty summaries that are meant to live on the same comparison scale: extracted HPD widths, `chronos` bootstrap, `treePL` bootstrap, `RelTime` bootstrap, and `RelTime_MEGA` bootstrap (when requested)
+- `RelTime` is run via MEGA-CC (`megacc`); the pipeline auto-generates all input files, grafts a mock outgroup, runs `megacc`, strips the outgroup, and cleans tip labels
+- all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)); `RelTime` additionally reports Tao analytical CIs from MEGA's native output
+- `uncertainty_summary_long.csv` combines uncertainty summaries across all methods on the same comparison scale
 - the Tao-style analytical `RelTime` CI is reported separately only; on hard-bounded empirical trees it can live in a completely different numerical regime from the bootstrap widths because the analytical variance term can explode after bound projection compresses internal durations
 - `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
