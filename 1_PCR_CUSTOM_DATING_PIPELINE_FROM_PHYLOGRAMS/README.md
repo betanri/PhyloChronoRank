@@ -11,7 +11,7 @@ This page documents `scripts/run_dating_grid.R`, the repo-local helper for gener
 - `RelTime` via MEGA-CC (`megacc` binary required; freely available from [megasoftware.net](https://www.megasoftware.net))
 - optional uncertainty summaries: all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` additionally reports analytical delta-method CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 
-The main point is calibration consistency. The script first resolves one shared calibration table, maps pairwise calibrations onto MRCA nodes on the target phylogram, merges duplicate-node rows by interval intersection, drops empty intersections, and then passes that same resolved node-bound set to all three methods.
+The main point is calibration consistency: all three methods receive exactly the same age constraints. The script reads one shared calibration table, finds the tree node that corresponds to each calibration (MRCAs of the two taxa listed), combines any rows that map to the same node by keeping only the overlap of their age ranges, drops any calibrations that cannot be placed (taxa not found in the tree) or that produce contradictory constraints on the same node (e.g., one row says ≥10 Ma while another says ≤5 Ma), and then passes that single cleaned set of node-age bounds identically to chronos, treePL, and RelTime. The script reports any dropped calibrations at runtime and writes them to `*_calibration_bounds_dropped.csv` (see [Outputs](#outputs)). This ensures that any differences among the resulting chronograms come from the dating methods themselves, not from differences in calibration input.
 
 ## What You Get
 
@@ -221,7 +221,7 @@ The script writes:
 - `<prefix>_calibration_bounds_used.csv`
   - the final merged node-bound table shared by all methods
 - `<prefix>_calibration_bounds_dropped.csv`
-  - duplicate-node conflicts that collapsed to empty intervals and were dropped
+  - calibrations that were dropped during the shared merge step; the script also prints a summary of all drops at runtime (missing taxa, unmappable MRCAs, and conflicting-node intervals) so you can catch problems before the dating runs start
 - `<prefix>_run_metadata.txt`
   - a compact provenance summary
 
