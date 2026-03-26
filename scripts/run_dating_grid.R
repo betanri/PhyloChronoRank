@@ -21,7 +21,7 @@ usage <- function() {
       "[--methods=chronos,treepl,reltime]",
       "[--chronos-lambdas=0.01,0.1,1,10,100]",
       "[--treepl-smoothing=0.01,0.1,1,10,100]",
-      "[--chronos-discrete-k=5]",
+      "[--chronos-discrete-k=2,3,5]",
       "[--chronos-attempt-timeout=90]",
       "[--treepl-bin=/path/to/treePL]",
       "[--megacc-bin=/path/to/megacc]",
@@ -55,7 +55,7 @@ usage <- function() {
     "  --out-prefix            Prefix for output files. Default: target tree id.\n",
     "  --chronos-lambdas       Lambda grid. Default: 0.01,0.1,1,10,100.\n",
     "  --chronos-models        Clock models. Default: clock,correlated,relaxed,discrete.\n",
-    "  --chronos-discrete-k    nb.rate.cat grid for the discrete model. Default: 5.\n",
+    "  --chronos-discrete-k    nb.rate.cat grid for the discrete model. Default: 2,3,5.\n",
     "  --chronos-retries       Retries per chronos setting. Default: 2.\n",
     "  --chronos-attempt-timeout Maximum elapsed seconds allowed per chronos attempt. Default: 0 (no timeout).\n",
     "  --treepl-smoothing      Smoothing grid. Default: 0.01,0.1,1,10,100.\n",
@@ -1514,7 +1514,7 @@ chronos_models <- parse_chr_grid(kv[["chronos-models"]] %||% "clock,correlated,r
 chronos_models <- tolower(chronos_models)
 bad_models <- setdiff(chronos_models, c("clock", "correlated", "relaxed", "discrete"))
 if (length(bad_models)) stop("Unsupported chronos model(s): ", paste(bad_models, collapse = ", "))
-chronos_discrete_k <- parse_int_grid(kv[["chronos-discrete-k"]] %||% "5", "--chronos-discrete-k")
+chronos_discrete_k <- parse_int_grid(kv[["chronos-discrete-k"]] %||% "2,3,5", "--chronos-discrete-k")
 chronos_retries <- as.integer(kv[["chronos-retries"]] %||% "2")
 if (!is.finite(chronos_retries) || chronos_retries < 1L) stop("--chronos-retries must be >= 1.")
 chronos_attempt_timeout <- as.numeric(kv[["chronos-attempt-timeout"]] %||% "0")
