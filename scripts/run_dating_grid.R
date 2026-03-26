@@ -498,6 +498,84 @@ map_pairwise_calibrations_to_nodes <- function(phy, pair_df) {
   )
 }
 
+## ---------------------------------------------------------------------------
+## build_calibration_preserving_subset
+## Prunes a large phylogram to ~target_n tips while preserving:
+##   1. All calibration-defining taxa (tip pairs for each MRCA calibration)
+##   2. Phylogenetic diversity (tips spread across tree depth)
+##   3. Heterotachous extremes (tips on longest and shortest terminal branches)
+## ---------------------------------------------------------------------------
+build_calibration_preserving_subset <- function(phy, node_bounds, target_n = 200L) {
+  n_tip <- ape::Ntip(phy)
+  if (n_tip <= target_n) return(list(subset_phy = phy, subset_bounds = node_bounds,
+    n_original = n_tip, n_subset = n_tip))
+
+  ## 1. Calibration-defining tips: two tips per calibrated node that preserve MRCA
+  cal_tips <- character(0)
+  for (i in seq_len(nrow(node_bounds))) {
+    nd <- node_bounds$node[i]
+    kids <- phy$edge[phy$edge[, 1] == nd, 2]
+    for (k in kids) {
+      if (k <= n_tip) {
+        cal_tips <- union(cal_tips, phy$tip.label[k])
+      } else {
+        clade_tips <- sort(ape::extract.clade(phy, k)$tip.label)
+        cal_tips <- union(cal_tips, clade_tips[1])
+      }
+    }
+  }
+
+  ## 2. Heterotachous extremes: tips with longest and shortest terminal branches
+  tip_edges <- which(phy$edge[, 2] <= n_tip)
+  tip_bl <- phy$edge.length[tip_edges]
+  tip_ids <- phy$tip.label[phy$edge[tip_edges, 2]]
+  names(tip_bl) <- tip_ids
+  n_extreme <- max(10L, target_n %/% 10L)
+  extreme_long  <- names(sort(tip_bl, decreasing = TRUE))[seq_len(min(n_extreme, length(tip_bl)))]
+  extreme_short <- names(sort(tip_bl, decreasing = FALSE))[seq_len(min(n_extreme, length(tip_bl)))]
+  must_keep <- unique(c(cal_tips, extreme_long, extreme_short))
+
+  ## 3. Fill remaining slots with phylo-diversity-spread tips
+  remaining <- setdiff(phy$tip.label, must_keep)
+  n_add <- max(0L, target_n - length(must_keep))
+  if (n_add > 0 && length(remaining) > 0) {
+    ## Use node depth to spread tips across the tree
+    depths <- ape::node.depth.edgelength(phy)[seq_len(n_tip)]
+    names(depths) <- phy$tip.label
+    rem_depths <- depths[remaining]
+    ## Stratified: divide depth range into n_add bins, pick one per bin
+    breaks <- seq(min(rem_depths), max(rem_depths) + 1e-12, length.out = n_add + 1L)
+    selected <- character(0)
+    for (b in seq_len(n_add)) {
+      in_bin <- names(rem_depths[rem_depths >= breaks[b] & rem_depths < breaks[b + 1]])
+      in_bin <- setdiff(in_bin, selected)
+      if (length(in_bin)) selected <- c(selected, sample(in_bin, 1))
+    }
+    must_keep <- unique(c(must_keep, selected))
+  }
+
+  ## 4. Prune
+  tips_to_keep <- intersect(must_keep, phy$tip.label)
+  subset_phy <- ape::drop.tip(phy, setdiff(phy$tip.label, tips_to_keep))
+
+  ## 5. Remap calibrations
+  keep_cal <- logical(nrow(node_bounds))
+  new_nodes <- integer(nrow(node_bounds))
+  for (i in seq_len(nrow(node_bounds))) {
+    clade_tips <- ape::extract.clade(phy, node_bounds$node[i])$tip.label
+    sub_tips <- intersect(clade_tips, subset_phy$tip.label)
+    if (length(sub_tips) >= 2) {
+      new_nd <- ape::getMRCA(subset_phy, sub_tips)
+      if (!is.null(new_nd)) { new_nodes[i] <- new_nd; keep_cal[i] <- TRUE }
+    }
+  }
+  subset_bounds <- node_bounds[keep_cal, , drop = FALSE]
+  subset_bounds$node <- new_nodes[keep_cal]
+
+  list(subset_phy = subset_phy, subset_bounds = subset_bounds,
+       n_original = n_tip, n_subset = ape::Ntip(subset_phy))
+}
+
 build_chronos_calib_from_node_bounds <- function(phy, node_bounds) {
   ## Cap Inf age_max to a safe finite value so older ape versions don't choke.
   ## 10x the largest finite age bound is large enough to be effectively unconstrained.
@@ -1665,9 +1743,33 @@ chronos_runs_csv <- ""
 treepl_runs_csv <- ""
 reltime_run_csv <- ""
 
+## ---------------------------------------------------------------------------
+## Large-tree subset tuning (auto for >500 tips, override with --subset-tips)
+## When active: tune lambda/k/smooth grids on a ~200-tip subset, then rerun
+## only the winning settings on the full tree.
+## ---------------------------------------------------------------------------
+subset_threshold <- suppressWarnings(as.integer(kv[["subset-tips"]] %||% "500"))
+if (!is.finite(subset_threshold) || subset_threshold < 50L) subset_threshold <- 500L
+use_subset_tuning <- Ntip(phy) > subset_threshold
+
+if (use_subset_tuning) {
+  subset_target_n <- min(200L, Ntip(phy) %/% 2L)
+  msg("Large tree detected (", Ntip(phy), " tips > ", subset_threshold, "). ",
+      "Tuning grids on ~", subset_target_n, "-tip subset, then rerunning winners on full tree.")
+  sub <- build_calibration_preserving_subset(phy, node_bounds, target_n = subset_target_n)
+  msg("  Subset: ", sub$n_subset, " tips (", nrow(sub$subset_bounds), " calibrations retained)")
+  phy_tune <- sub$subset_phy
+  node_bounds_tune <- sub$subset_bounds
+} else {
+  phy_tune <- phy
+  node_bounds_tune <- node_bounds
+}
+
 if ("chronos" %in% methods) {
-  msg("Running chronos grid...")
-  chronos_calib <- build_chronos_calib_from_node_bounds(phy, node_bounds)
+  msg("Running chronos grid", if (use_subset_tuning) " (on subset)" else "", "...")
+  ## Use subset tree for grid tuning if large-tree mode is active
+  chronos_calib <- build_chronos_calib_from_node_bounds(phy_tune, node_bounds_tune)
+  chronos_phy_grid <- phy_tune  ## tree used for grid search
   chronos_rows <- list()
   chronos_trees_cache <- list()   ## cache in-memory chronos trees for post-selection CI
   row_i <- 0L
@@ -1694,7 +1796,7 @@ if ("chronos" %in% methods) {
           }
         } else {
         run <- run_chronos_one(
-          phy = phy,
+          phy = chronos_phy_grid,
           calib = chronos_calib,
           model = mdl,
           lambda = lam,
@@ -1716,7 +1818,7 @@ if ("chronos" %in% methods) {
             ## Try dropping each remaining cal; keep first that works
             for (.j in seq_len(nrow(cal_subset))) {
               test_cal <- cal_subset[-.j, , drop = FALSE]
-              test_run <- run_chronos_one(phy = phy, calib = test_cal, model = mdl,
+              test_run <- run_chronos_one(phy = chronos_phy_grid, calib = test_cal, model = mdl,
                 lambda = lam, nb_rate_cat = kcat, retries = 3L,
                 iter_max = chronos_iter_max, tol = chronos_tol,
                 attempt_timeout = chronos_attempt_timeout)
@@ -1793,7 +1895,10 @@ if ("treepl" %in% methods) {
   msg("Running treePL grid with binary: ", treepl_bin)
   treepl_rows <- list()
   treepl_input_tree <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl.tre"))
-  ape::write.tree(phy, file = treepl_input_tree)
+  ## Use subset tree for grid tuning if large-tree mode is active
+  treepl_phy_grid <- if (use_subset_tuning) phy_tune else phy
+  treepl_bounds_grid <- if (use_subset_tuning) node_bounds_tune else node_bounds
+  ape::write.tree(treepl_phy_grid, file = treepl_input_tree)
   for (i in seq_along(treepl_smoothing)) {
     smooth <- treepl_smoothing[i]
     smooth_tag <- fmt_token(smooth)
@@ -1828,7 +1933,7 @@ if ("treepl" %in% methods) {
     prime_lines <- character(0)
     if (isTRUE(treepl_prime)) {
       treepl_write_cfg(
-        prime_cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
+        prime_cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, treepl_bounds_grid,
         thorough = treepl_thorough, prime = TRUE,
         opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter
       )
@@ -1839,7 +1944,7 @@ if ("treepl" %in% methods) {
     }
 
     treepl_write_cfg(
-      cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, node_bounds,
+      cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, treepl_bounds_grid,
       thorough = treepl_thorough, prime = FALSE,
       opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
       extra_lines = prime_lines
@@ -2116,6 +2221,79 @@ if (nrow(uncertainty_df)) {
 candidates_df <- build_representative_candidates(all_df)
 if (!nrow(candidates_df)) {
   candidates_df <- full_candidates_df
+}
+
+## ---- Subset tuning: rerun winners on full tree if grid used a subset ----
+if (use_subset_tuning) {
+  msg("Rerunning ", nrow(candidates_df), " winning candidates on the full tree (", Ntip(phy), " tips)...")
+  full_chronos_calib <- build_chronos_calib_from_node_bounds(phy, node_bounds)
+  for (ri in seq_len(nrow(candidates_df))) {
+    cand <- candidates_df$candidate[ri]
+    cand_method <- candidates_df$method[ri]
+    if (identical(cand_method, "chronos")) {
+      src <- candidates_df$selected_from_candidate[ri] %||% cand
+      src_row <- all_df[all_df$candidate == src & all_df$status == "OK", , drop = FALSE]
+      if (!nrow(src_row)) next
+      mdl <- src_row$model[1]; lam <- src_row$lambda[1]; kcat <- src_row$nb_rate_cat[1]
+      full_tree_path <- file.path(outdir, "chronos", "trees",
+        paste0(prefix, "_", cand, "_fulltree.tre"))
+      if (!file.exists(full_tree_path)) {
+        full_run <- run_chronos_one(phy = phy, calib = full_chronos_calib,
+          model = mdl, lambda = lam, nb_rate_cat = if (is.finite(kcat)) kcat else NA_integer_,
+          retries = chronos_retries, iter_max = chronos_iter_max, tol = chronos_tol,
+          attempt_timeout = chronos_attempt_timeout)
+        if (identical(full_run$status, "OK")) {
+          ape::write.tree(full_run$tree, full_tree_path)
+          candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+          chronos_trees_cache[[cand]] <- full_run$tree
+          msg("  ", cand, ": rerun OK on full tree")
+        } else {
+          msg("  ", cand, ": rerun FAILED on full tree — keeping subset tree")
+        }
+      } else {
+        candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+        msg("  checkpoint: reusing full-tree ", cand)
+      }
+    } else if (identical(cand_method, "treePL")) {
+      src <- candidates_df$selected_from_candidate[ri] %||% cand
+      src_row <- all_df[all_df$candidate == src, , drop = FALSE]
+      smooth <- if (nrow(src_row)) src_row$smooth[1] else 0.01
+      full_tree_path <- file.path(outdir, "treepl", "trees",
+        paste0(prefix, "_", cand, "_fulltree.tre"))
+      if (!file.exists(full_tree_path)) {
+        treepl_input_full <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl.tre"))
+        if (!file.exists(treepl_input_full)) ape::write.tree(phy, treepl_input_full)
+        cfg_full <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.cfg"))
+        log_full <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.log"))
+        prime_cfg <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.prime.cfg"))
+        prime_log <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.prime.log"))
+        prime_lines <- character(0)
+        if (isTRUE(treepl_prime)) {
+          treepl_write_cfg(prime_cfg, treepl_input_full, full_tree_path, smooth, treepl_numsites,
+            node_bounds, thorough = treepl_thorough, prime = TRUE,
+            opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter)
+          run_treepl_one(treepl_bin, prime_cfg, prime_log, omp_threads = treepl_threads)
+          prime_lines <- treepl_parse_prime_lines(prime_log)
+          if (file.exists(full_tree_path)) unlink(full_tree_path)
+        }
+        treepl_write_cfg(cfg_full, treepl_input_full, full_tree_path, smooth, treepl_numsites,
+          node_bounds, thorough = treepl_thorough, prime = FALSE,
+          opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
+          extra_lines = prime_lines)
+        run_treepl_one(treepl_bin, cfg_full, log_full, omp_threads = treepl_threads)
+        if (file.exists(full_tree_path)) {
+          candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+          msg("  ", cand, ": rerun OK on full tree")
+        } else {
+          msg("  ", cand, ": rerun FAILED on full tree — keeping subset tree")
+        }
+      } else {
+        candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+        msg("  checkpoint: reusing full-tree ", cand)
+      }
+    }
+    ## RelTime MEGA always runs on full tree (not subset) — no rerun needed
+  }
 }
 
 ## ---- Post-selection CI computation (only for the 7 final trees) ----
