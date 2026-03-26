@@ -58,10 +58,12 @@ This workflow is easiest to read if you keep four layers separate:
 
 - dating / fit layer
   - `run_dating_grid.R` generates dated trees and method-specific run summaries for each candidate (`chronos`, `treePL`, `RelTime_MEGA`)
-- model-selection layer
-  - for `chronos` only, which is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`); in workflows that compare those `chronos` models, the best-fitting model can be selected with `PHIIC` or penalized log-likelihood before candidates enter post-fit scoring
+- model-selection layer (`chronos` only)
+  - `chronos` is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`). The best-fitting model is selected by `PHIIC` ([Paradis 2013](https://doi.org/10.1016/j.ympev.2013.02.008)) before candidates enter post-fit scoring. `treePL` and `RelTime_MEGA` each produce a single candidate — no model selection applies
 - tuning layer
-  - lambda, smoothing, and `nb.rate.cat` grids expose sensitivity to regularization settings; they are not meant to guarantee that one single setting must always be declared the winner by fit alone
+  - `chronos`: the `--chronos-lambdas` grid (default `0.01,0.1,1,10,100`) controls the smoothing penalty across all four clock models. For the `discrete` model only, `--chronos-discrete-k` (default `2,3,5`) additionally searches the number of rate categories. The best lambda (and k, for discrete) per model is selected by `PHIIC`
+  - `treePL`: the `--treepl-smoothing` grid (default `0.01,0.1,1,10,100`) controls the smoothing parameter. The best smoothing value is selected by treePL's internal cross-validation objective
+  - `RelTime_MEGA`: no tuning parameters — RelTime produces a single tree from the input phylogram and calibrations
 - post-fit layer (see [2_PCR_POSTFIT_METRICS](../2_PCR_POSTFIT_METRICS/README.md))
   - PCR, run afterward with `scripts/run_pcr.R`, scores the finished candidate chronograms on a common biological diagnostic set
 
