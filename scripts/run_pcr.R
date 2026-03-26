@@ -169,7 +169,22 @@ summary_df$rank_mean_relative_gap <- pcr_rank_low(summary_df$mean_relative_gap)
 summary_df$rank_rate_irregularity <- pcr_rank_low(summary_df$rate_irregularity)
 summary_df$rank_depth_r2 <- pcr_rank_low(1 - summary_df$depth_r2)  ## higher R² = better, so rank 1-R²
 summary_df$rank_internode_concordance <- pcr_rank_low(1 - summary_df$internode_concordance)  ## higher = better
-core_mat <- cbind(summary_df$rank_pulse_family, summary_df$rank_mean_relative_gap, summary_df$rank_rate_irregularity, summary_df$rank_depth_r2)
+
+## Adjusted burst loss: divide by concordance so trees that distort radiation
+## zones don't get credit for matching burst patterns (see action item B-C).
+adj_bl <- summary_df$burst_loss / pmax(summary_df$internode_concordance, 0.01)
+summary_df$adjusted_burst_loss <- adj_bl
+summary_df$rank_adjusted_burst_loss <- pcr_rank_low(adj_bl)
+
+## 5-axis composite: pulse_overall, adjusted_burst_loss, rate_irregularity,
+## internode_concordance, gap.  Replaces old 4-axis (pulse_family, gap, rate, depth_r2).
+core_mat <- cbind(
+  summary_df$rank_pulse_overall,
+  summary_df$rank_adjusted_burst_loss,
+  summary_df$rank_rate_irregularity,
+  summary_df$rank_internode_concordance,
+  summary_df$rank_mean_relative_gap
+)
 summary_df$core_n_families_ranked <- rowSums(is.finite(core_mat))
 summary_df$rank_mean_core <- rowMeans(core_mat, na.rm = TRUE)
 summary_df$rank_mean_core_rank <- pcr_rank_low(summary_df$rank_mean_core)

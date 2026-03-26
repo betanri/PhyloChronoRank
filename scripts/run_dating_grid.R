@@ -1682,6 +1682,17 @@ if ("chronos" %in% methods) {
           candidate <- paste0(candidate, "_k", as.integer(kcat))
         }
         out_tree <- file.path(outdir, "chronos", "trees", paste0(prefix, "_", candidate, ".tre"))
+        ## Checkpoint: skip if tree already exists from a previous interrupted run
+        if (file.exists(out_tree)) {
+          cached_tree <- tryCatch(ape::read.tree(out_tree), error = function(e) NULL)
+          if (!is.null(cached_tree) && inherits(cached_tree, "phylo")) {
+            run <- list(status = "OK", tree = cached_tree, error = NA_character_)
+            chronos_trees_cache[[candidate]] <- cached_tree
+            msg("  checkpoint: reusing ", candidate)
+          } else {
+            run <- list(status = "FAIL", tree = NULL, error = "cached tree unreadable")
+          }
+        } else {
         run <- run_chronos_one(
           phy = phy,
           calib = chronos_calib,
@@ -1693,6 +1704,7 @@ if ("chronos" %in% methods) {
           tol = chronos_tol,
           attempt_timeout = chronos_attempt_timeout
         )
+        }
         ## If discrete model fails, try progressively dropping calibrations
         ## (chronos discrete init can fail with many fixed-point calibrations)
         discrete_dropped_cals <- character(0)
@@ -1791,6 +1803,25 @@ if ("treepl" %in% methods) {
     log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".log"))
     prime_cfg_path <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", candidate, ".prime.cfg"))
     prime_log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".prime.log"))
+    ## Checkpoint: skip if tree already exists from a previous interrupted run
+    if (file.exists(out_tree)) {
+      cached_tree <- tryCatch(ape::read.tree(out_tree), error = function(e) NULL)
+      if (!is.null(cached_tree) && inherits(cached_tree, "phylo")) {
+        msg("  checkpoint: reusing ", candidate)
+        treepl_rows[[length(treepl_rows) + 1L]] <- data.frame(
+          candidate = candidate, method = "treePL", model = "treePL",
+          lambda = NA, nb_rate_cat = NA, smooth = smooth,
+          treepl_objective = NA_real_, status = "OK", exit_code = 0L,
+          tree_file = normalizePath(out_tree), ci_file = "", n_sites = NA,
+          cfg_file = cfg_path, log_file = log_path, error = NA_character_,
+          stringsAsFactors = FALSE)
+        candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
+          candidate = candidate, tree_file = normalizePath(out_tree),
+          method = "treePL", model = "treePL", lambda = NA, nb_rate_cat = NA,
+          smooth = smooth, stringsAsFactors = FALSE)
+        next
+      }
+    }
     if (file.exists(out_tree)) unlink(out_tree)
     if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
 
@@ -1970,6 +2001,16 @@ if ("reltime_mega" %in% methods) {
   mega_tao_ci_file  <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA_tao_ci.csv"))
   megacc_run_csv <- mega_summary_file
 
+  ## Checkpoint: skip MEGA if output tree already exists
+  mega_tree_file <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
+  if (file.exists(mega_tree_file) && file.exists(mega_tao_ci_file)) {
+    msg("  checkpoint: reusing MEGA RelTime from previous run")
+    mega_result <- list(
+      status = "OK",
+      tree_file = mega_tree_file,
+      ci = tryCatch(read.csv(mega_tao_ci_file), error = function(e) NULL)
+    )
+  } else {
   msg("Running MEGA-CC RelTime with Tao analytical CIs...")
   mega_result <- try(
     megacc_tao_ci(
@@ -1982,6 +2023,7 @@ if ("reltime_mega" %in% methods) {
     ),
     silent = TRUE
   )
+  }  ## end of MEGA checkpoint else
 
   if (!inherits(mega_result, "try-error") && mega_result$status == "OK") {
     has_ci <- !is.null(mega_result$ci) && is.data.frame(mega_result$ci) && nrow(mega_result$ci) > 0
@@ -2092,6 +2134,15 @@ for (ci_i in seq_len(nrow(candidates_df))) {
 
   ci_csv_out  <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_ci.csv"))
   ci_tree_out <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_with_CI.tre"))
+
+  ## Checkpoint: skip if CI CSV already exists from a previous interrupted run
+  if (file.exists(ci_csv_out)) {
+    msg("  checkpoint: reusing CI for ", ci_cand)
+    if (length(src_idx <- which(all_df$candidate == ci_cand)))
+      all_df$ci_file[src_idx[1L]] <- ci_csv_out
+    next
+  }
+
   ci_tree     <- try(ape::read.tree(ci_tree_f), silent = TRUE)
   if (inherits(ci_tree, "try-error")) next
 
