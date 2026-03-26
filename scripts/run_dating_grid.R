@@ -732,8 +732,15 @@ build_representative_candidates <- function(all_df) {
       )
       best <- z[ord[1L], , drop = FALSE]
       add_i <- add_i + 1L
+      ## Build descriptive candidate name including selected lambda and k
+      cand_name <- paste0("chronos_", mdl)
+      lam_str <- fmt_token(best$lambda[1L])
+      cand_name <- paste0(cand_name, "_lambda", lam_str)
+      if (identical(mdl, "discrete") && is.finite(best$nb_rate_cat[1L])) {
+        cand_name <- paste0(cand_name, "_k", best$nb_rate_cat[1L])
+      }
       reps[[add_i]] <- data.frame(
-        candidate = paste0("chronos_", mdl),
+        candidate = cand_name,
         tree_file = best$tree_file[1L],
         method = "chronos",
         model = mdl,
@@ -773,8 +780,11 @@ build_representative_candidates <- function(all_df) {
     )
     best <- treepl_df[ord[1L], , drop = FALSE]
     add_i <- add_i + 1L
+    ## Build descriptive candidate name including selected smoothing
+    smooth_str <- fmt_token(best$smooth[1L])
+    treepl_cand_name <- paste0("treePL_smooth", smooth_str)
     reps[[add_i]] <- data.frame(
-      candidate = "treePL",
+      candidate = treepl_cand_name,
       tree_file = best$tree_file[1L],
       method = "treePL",
       model = "treePL",
