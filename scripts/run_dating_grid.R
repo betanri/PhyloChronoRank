@@ -51,6 +51,9 @@ usage <- function() {
     "  --reference-tree-name   Optional named tree selector for the reference time tree.\n",
     "  --reference-tree-index  1-based fallback index for the reference tree. Default: 1.\n",
     "  --calibration-tag       If the calibration CSV has a candidate column, keep rows tagged with this value plus blank/all rows.\n",
+    "  --additional-calibrations-csv  Optional CSV with additional calibrations (e.g., fossil min-ages) to merge\n",
+    "                          with the primary calibration set (from --calibrations-csv or congruification).\n",
+    "                          Format: taxonA,taxonB,age_min[,age_max]. Min-only constraints leave age_max blank.\n",
     "  --root-age              Optional exact root age appended to the shared calibration set for all methods.\n",
     "  --out-prefix            Prefix for output files. Default: target tree id.\n",
     "  --chronos-lambdas       Lambda grid. Default: 0.01,0.1,1,10,100.\n",
@@ -1699,6 +1702,20 @@ if (has_csv) {
   ref_tree_copy <- file.path(outdir, paste0(prefix, "_reference_time_tree_used.tre"))
   ape::write.tree(ref_tree, file = ref_tree_copy)
   pair_df <- build_calib_pairs_congruif(phy, ref_tree)
+}
+
+## Merge additional manual calibrations (e.g., fossil min-age constraints)
+## with congruification-derived or CSV-supplied calibrations.
+if ("additional-calibrations-csv" %in% names(kv)) {
+  add_csv <- normalizePath(kv[["additional-calibrations-csv"]], winslash = "/", mustWork = TRUE)
+  add_df <- normalize_calibration_df(read.csv(add_csv, stringsAsFactors = FALSE), calibration_tag = calibration_tag)
+  if (!is.null(add_df) && nrow(add_df) > 0L) {
+    ## Ensure consistent columns; fill missing age_max with NA (min-only constraint)
+    for (col in setdiff(names(pair_df), names(add_df))) add_df[[col]] <- NA
+    for (col in setdiff(names(add_df), names(pair_df))) pair_df[[col]] <- NA
+    pair_df <- rbind(pair_df, add_df[, names(pair_df), drop = FALSE])
+    message(sprintf("  Appended %d additional calibration(s) from %s", nrow(add_df), basename(add_csv)))
+  }
 }
 
 if ("root-age" %in% names(kv)) {
