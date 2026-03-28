@@ -1235,9 +1235,20 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
   if (length(existing_ci_csv)) unlink(existing_ci_csv, force = TRUE)
   copied_ci <- FALSE
 
+  is_relaxed_exception <- function(ci_method, cand_name) {
+    identical(ci_method, "chronos") && grepl("^chronos_relaxed_", cand_name)
+  }
+
+  require_existing <- function(path, label, cand_name) {
+    if (!is.character(path) || length(path) != 1L || !nzchar(path) || !file.exists(path)) {
+      stop("Selected candidate ", cand_name, " is missing required ", label, " for MAIN_OUTPUT_TREES.")
+    }
+    path
+  }
+
   primary_tree_dst <- function(cand_name, ci_method) {
     if (identical(ci_method, "RelTime")) return(file.path(main_dir, "RelTime_with_bootstrap_CI.tre"))
-    if (identical(ci_method, "RelTime_MEGA")) return(file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre"))
+    if (identical(ci_method, "RelTime_MEGA")) return(file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre"))
     file.path(main_dir, paste0(cand_name, "_with_CI.tre"))
   }
 
@@ -1253,28 +1264,19 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
     fallback_ci_csv <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_ci.csv"))
     fallback_ci_tre <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_with_CI.tre"))
     hit_ci_file <- if ("ci_file" %in% names(hit)) hit$ci_file[1L] else ""
-    if (!(ci_method %in% c("RelTime", "RelTime_MEGA")) &&
-        ((nzchar(hit_ci_file) && file.exists(hit_ci_file)) || file.exists(fallback_ci_csv))) {
+    if (!(ci_method %in% c("RelTime", "RelTime_MEGA")) && !is_relaxed_exception(ci_method, cand_name)) {
       ci_csv_src <- if (nzchar(hit_ci_file) && file.exists(hit_ci_file)) hit_ci_file else fallback_ci_csv
-      ## CSV into ci/ subfolder
+      ci_csv_src <- require_existing(ci_csv_src, "CI CSV", cand_name)
       csv_dst <- file.path(ci_dir, paste0(cand_name, "_ci.csv"))
       copy_if_present(ci_csv_src, csv_dst)
       copied_ci <- TRUE
 
-      ## Keep only the CI-annotated primary tree in MAIN_OUTPUT_TREES.
-      ci_tree_src <- fallback_ci_tre
-      if (file.exists(ci_tree_src)) {
-        ci_dst <- primary_tree_dst(cand_name, ci_method)
-        copy_if_present(ci_tree_src, ci_dst)
-        candidates_df$tree_file[i] <- ci_dst
-      } else {
-        ## If the CSV exists but an annotated tree was not written, fall back to the plain tree.
-        plain_dst <- file.path(main_dir, paste0(cand_name, ".tre"))
-        copy_if_present(tree_src, plain_dst)
-        candidates_df$tree_file[i] <- plain_dst
-      }
+      ci_tree_src <- require_existing(fallback_ci_tre, "CI tree", cand_name)
+      ci_dst <- primary_tree_dst(cand_name, ci_method)
+      copy_if_present(ci_tree_src, ci_dst)
+      candidates_df$tree_file[i] <- ci_dst
     } else if (!(ci_method %in% c("RelTime", "RelTime_MEGA"))) {
-      ## Methods without a selected CI tree (for example chronos_relaxed here) stay plain.
+      ## chronos_relaxed remains the sole plain-tree exception in MAIN_OUTPUT_TREES.
       plain_dst <- file.path(main_dir, paste0(cand_name, ".tre"))
       copy_if_present(tree_src, plain_dst)
       candidates_df$tree_file[i] <- plain_dst
@@ -1292,30 +1294,34 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
       rt_dir <- file.path(outdir, "reltime")
       boot_ci_tre <- file.path(rt_dir, paste0(prefix, "_RelTime_with_bootstrap_CI.tre"))
       tao_ci_tre  <- file.path(rt_dir, paste0(prefix, "_RelTime_with_tao_CI.tre"))
-      if (nzchar(hit_ci_file) && file.exists(hit_ci_file)) {
-        csv_dst <- file.path(ci_dir, paste0(cand_name, "_ci.csv"))
-        copy_if_present(hit_ci_file, csv_dst)
-        copied_ci <- TRUE
-      }
-      if (file.exists(boot_ci_tre)) {
-        boot_dst <- file.path(main_dir, "RelTime_with_bootstrap_CI.tre")
-        copy_if_present(boot_ci_tre, boot_dst)
-        candidates_df$tree_file[i] <- boot_dst
-      }
-      if (file.exists(tao_ci_tre)) {
-        copy_if_present(tao_ci_tre, file.path(main_dir, "RelTime_with_tao_CI.tre"))
-      }
+      hit_ci_file <- require_existing(hit_ci_file, "bootstrap CI CSV", cand_name)
+      csv_dst <- file.path(ci_dir, paste0(cand_name, "_ci.csv"))
+      copy_if_present(hit_ci_file, csv_dst)
+      copied_ci <- TRUE
+      boot_ci_tre <- require_existing(boot_ci_tre, "bootstrap CI tree", cand_name)
+      boot_dst <- file.path(main_dir, "RelTime_with_bootstrap_CI.tre")
+      copy_if_present(boot_ci_tre, boot_dst)
+      candidates_df$tree_file[i] <- boot_dst
+      tao_ci_tre <- require_existing(tao_ci_tre, "Tao CI tree", cand_name)
+      copy_if_present(tao_ci_tre, file.path(main_dir, "RelTime_with_tao_CI.tre"))
     }
 
     ## -- RelTime MEGA: copy Tao CI-annotated tree --
     if (identical(ci_method, "RelTime_MEGA")) {
       mega_dir <- file.path(outdir, "reltime_mega")
+      mega_boot_csv <- file.path(outdir, "selected_ci", paste0(prefix, "_RelTime_MEGA_bootstrap_ci.csv"))
+      mega_boot_tre <- file.path(outdir, "selected_ci", paste0(prefix, "_RelTime_MEGA_with_bootstrap_CI.tre"))
       mega_ci_tre <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_with_tao_CI.tre"))
-      if (file.exists(mega_ci_tre)) {
-        mega_dst <- file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre")
-        copy_if_present(mega_ci_tre, mega_dst)
-        candidates_df$tree_file[i] <- mega_dst
-      }
+      mega_boot_csv <- require_existing(mega_boot_csv, "MEGA bootstrap CI CSV", cand_name)
+      copy_if_present(mega_boot_csv, file.path(ci_dir, paste0(cand_name, "_ci.csv")))
+      copied_ci <- TRUE
+      mega_boot_tre <- require_existing(mega_boot_tre, "MEGA bootstrap CI tree", cand_name)
+      mega_boot_dst <- file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre")
+      copy_if_present(mega_boot_tre, mega_boot_dst)
+      candidates_df$tree_file[i] <- mega_boot_dst
+      mega_ci_tre <- require_existing(mega_ci_tre, "MEGA Tao CI tree", cand_name)
+      mega_dst <- file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre")
+      copy_if_present(mega_ci_tre, mega_dst)
     }
   }
 
