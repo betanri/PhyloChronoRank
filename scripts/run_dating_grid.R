@@ -968,6 +968,19 @@ copy_if_present <- function(src, dst) {
   file.copy(src, dst, overwrite = TRUE)
 }
 
+tree_tip_count <- function(tree_path) {
+  if (!is.character(tree_path) || length(tree_path) != 1L || !nzchar(tree_path) || !file.exists(tree_path)) {
+    return(NA_integer_)
+  }
+  tr <- try(ape::read.tree(tree_path), silent = TRUE)
+  if (inherits(tr, "try-error") || !inherits(tr, "phylo")) return(NA_integer_)
+  as.integer(ape::Ntip(tr))
+}
+
+tree_has_expected_tips <- function(tree_path, expected_tips) {
+  is.finite(expected_tips) && identical(tree_tip_count(tree_path), as.integer(expected_tips))
+}
+
 ## In-memory version: takes phylo object + CI data.frame (with matching node numbers)
 ## and writes annotated NEXUS directly. Avoids write/read round-trip node reordering.
 annotate_tree_with_ci_from_objects <- function(tr, ci_df, tree_dst, centered = TRUE) {
@@ -2346,6 +2359,7 @@ if (!nrow(candidates_df)) {
 if (use_subset_tuning) {
   msg("Rerunning ", nrow(candidates_df), " winning candidates on the full tree (", Ntip(phy), " tips)...")
   full_chronos_calib <- build_chronos_calib_from_node_bounds(phy, node_bounds)
+  expected_full_tips <- as.integer(Ntip(phy))
   for (ri in seq_len(nrow(candidates_df))) {
     cand <- candidates_df$candidate[ri]
     cand_method <- candidates_df$method[ri]
@@ -2356,6 +2370,9 @@ if (use_subset_tuning) {
       mdl <- src_row$model[1]; lam <- src_row$lambda[1]; kcat <- src_row$nb_rate_cat[1]
       full_tree_path <- file.path(outdir, "chronos", "trees",
         paste0(prefix, "_", cand, "_fulltree.tre"))
+      if (file.exists(full_tree_path) && !tree_has_expected_tips(full_tree_path, expected_full_tips)) {
+        unlink(full_tree_path, force = TRUE)
+      }
       if (!file.exists(full_tree_path)) {
         full_run <- run_chronos_one(phy = phy, calib = full_chronos_calib,
           model = mdl, lambda = lam, nb_rate_cat = if (is.finite(kcat)) kcat else NA_integer_,
@@ -2363,11 +2380,16 @@ if (use_subset_tuning) {
           attempt_timeout = chronos_attempt_timeout)
         if (identical(full_run$status, "OK")) {
           ape::write.tree(full_run$tree, full_tree_path)
-          candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
-          chronos_trees_cache[[cand]] <- full_run$tree
-          msg("  ", cand, ": rerun OK on full tree")
+          if (tree_has_expected_tips(full_tree_path, expected_full_tips)) {
+            candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+            chronos_trees_cache[[cand]] <- full_run$tree
+            msg("  ", cand, ": rerun OK on full tree")
+          } else {
+            unlink(full_tree_path, force = TRUE)
+            msg("  ", cand, ": rerun produced a non-full tree — dropping from final outputs")
+          }
         } else {
-          msg("  ", cand, ": rerun FAILED on full tree — keeping subset tree")
+          msg("  ", cand, ": rerun FAILED on full tree — dropping from final outputs")
         }
       } else {
         candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
@@ -2379,9 +2401,12 @@ if (use_subset_tuning) {
       smooth <- if (nrow(src_row)) src_row$smooth[1] else 0.01
       full_tree_path <- file.path(outdir, "treepl", "trees",
         paste0(prefix, "_", cand, "_fulltree.tre"))
+      if (file.exists(full_tree_path) && !tree_has_expected_tips(full_tree_path, expected_full_tips)) {
+        unlink(full_tree_path, force = TRUE)
+      }
       if (!file.exists(full_tree_path)) {
-        treepl_input_full <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl.tre"))
-        if (!file.exists(treepl_input_full)) ape::write.tree(phy, treepl_input_full)
+        treepl_input_full <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl_full.tre"))
+        ape::write.tree(phy, treepl_input_full)
         cfg_full <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.cfg"))
         log_full <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.log"))
         prime_cfg <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.prime.cfg"))
@@ -2400,11 +2425,12 @@ if (use_subset_tuning) {
           opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
           extra_lines = prime_lines)
         run_treepl_one(treepl_bin, cfg_full, log_full, omp_threads = treepl_threads)
-        if (file.exists(full_tree_path)) {
+        if (tree_has_expected_tips(full_tree_path, expected_full_tips)) {
           candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
           msg("  ", cand, ": rerun OK on full tree")
         } else {
-          msg("  ", cand, ": rerun FAILED on full tree — keeping subset tree")
+          unlink(full_tree_path, force = TRUE)
+          msg("  ", cand, ": rerun FAILED on full tree — dropping from final outputs")
         }
       } else {
         candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
@@ -2412,6 +2438,14 @@ if (use_subset_tuning) {
       }
     }
     ## RelTime MEGA always runs on full tree (not subset) — no rerun needed
+  }
+
+  final_tip_counts <- vapply(candidates_df$tree_file, tree_tip_count, integer(1))
+  keep_full <- is.finite(final_tip_counts) & final_tip_counts == expected_full_tips
+  if (any(!keep_full)) {
+    dropped <- candidates_df$candidate[!keep_full]
+    msg("Dropping non-full candidates from final outputs: ", paste(dropped, collapse = ", "))
+    candidates_df <- candidates_df[keep_full, , drop = FALSE]
   }
 }
 
