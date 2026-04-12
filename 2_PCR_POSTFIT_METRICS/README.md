@@ -213,9 +213,10 @@ That is the key point of this first example: the choice to prefer `RelTime` came
 
 ### Quick takeaway
 
-- `RelTime` is the core PCR winner in this comparison
-- `RelTime` wins all three pulse summaries and also wins `rate irregularity`
-- `MCMCTree` wins the simple calibration-fit layer through lower `mean relative gap`
+- The 3-family core PCR rank is a **tie** (`RelTime` 1.50, `MCMCTree` 1.50)
+- `RelTime` wins Family 1 (radiation-zone fidelity): better `burst_loss` and `internode_concordance`
+- Family 2 (global chronogram fidelity) is tied: `RelTime` wins `depth_r2`, `MCMCTree` wins `tempo_redistribution`, `compression_score` is zero for both (excluded as zero-variance)
+- `MCMCTree` wins Family 3 (rate & calibration): lower `rate_irregularity` and lower `mean_relative_gap`
 - `MCMCTree` also has narrower extracted HPD bars, so it wins the optional precision layer on interval width
 - `Figure A` is the original visual rationale from the paper; `Figure B` is the quantitative post-fit follow-up
 
@@ -223,40 +224,49 @@ That is the key point of this first example: the choice to prefer `RelTime` came
 
 ![Syngnatharia paper figure showing the original visual choice](../examples/syngnatharia/Fig_S5_Burst_preservation.png)
 
-This is the original paper figure from [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931) that motivated the visual preference for `RelTime`. The RAxML phylogram on the left shows clustered branching bursts in several parts of the tree. In the middle panel, `MCMCTree` spreads many of those events out more evenly through time. In the right panel, `RelTime` better tracks the burst structure seen in the phylogram. That was the original rationale back then. This panel addresses the pulse issue only. It does not show the calibration-fit layer or the rate layer.
+This is the original paper figure from [Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931) that motivated the visual preference for `RelTime`. The RAxML phylogram on the left shows clustered branching bursts in several parts of the tree. In the middle panel, `MCMCTree` spreads many of those events out more evenly through time. In the right panel, `RelTime` better tracks the burst structure seen in the phylogram. That was the original rationale back then. This panel addresses the radiation-zone fidelity issue only. It does not show the global fidelity, rate, or calibration layers.
 
 ### Ranked post-fit results (lower is better)
 
-The core PCR rank shown below is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. Here the gap layer is informative because the comparison uses primary calibration information summarized from Table S2 rather than secondary congruified ages. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core winner, because interval width reflects method-dependent precision rather than the same chronogram-behavior axis captured by pulse, gap, and rate. In this example, that separate reporting appears in two places: the `uncertainty width` column in the table and the `Uncertainty width` panel in Figure B. The uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
+The core PCR rank is balanced across three families (radiation-zone fidelity, global chronogram fidelity, rate & calibration), each contributing one-third. Here the gap layer is informative because the comparison uses primary calibration information summarized from Table S2 rather than secondary congruified ages. The uncertainty-width layer is shown separately as an additional precision consideration, not folded into the core rank. The uncertainty widths are based on extracted HPD-width spreadsheets because the supplied Newick trees do not themselves contain embedded interval metadata.
 
-| candidate | burst loss (lower is better) | pulse preservation (burst; lower is better) | pulse preservation (overall; lower is better) | mean relative gap (lower is better) | rate irregularity (lower is better) | uncertainty width (mean HPD width, Ma; lower is better) | core overall mean rank (pulse = 1/3; lower is better) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `RelTime` | `0.1620` | `0.1874` | `0.2077` | `0.2689` | `1.1514` | `11.41` | `1.33` |
-| `MCMCTree` | `0.2396` | `0.2560` | `0.2600` | `0.2184` | `1.5531` | `6.24` | `1.67` |
+| candidate | burst loss | internode concordance | compression score | tempo redistribution | depth R² | rate irregularity | mean relative gap | uncertainty width (Ma) | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | `0.162` | `0.925` | `0.000` | `0.401` | `0.113` | `0.711` | `0.269` | `11.41` | `1.50` |
+| `MCMCTree` | `0.240` | `0.810` | `0.000` | `0.298` | `0.058` | `0.545` | `0.218` | `6.24` | `1.50` |
+
+Family breakdown:
+
+| candidate | Family 1 (radiation zone) | Family 2 (global) | Family 3 (rate + cal) | Core rank |
+| --- | ---: | ---: | ---: | ---: |
+| `RelTime` | `1.0` | `1.5` | `2.0` | `1.50` |
+| `MCMCTree` | `2.0` | `1.5` | `1.0` | `1.50` |
 
 ### Figure B: Post-fit comparison across metric families
 
 ![Syngnatharia post-fit evaluation metric families](../figures/syngnatharia_postfit_metric_family_values.png)
 
-Figure B shows the core PCR comparison and also displays `uncertainty width` as a separate optional precision layer. The three pulse panels are still averaged into one pulse-family contribution, and in the core PCR rank `pulse`, `mean relative gap`, and `rate irregularity` each contribute one-third.
+Figure B shows all seven core metrics grouped by family, plus `uncertainty width` as a separate optional precision layer. `compression_score` is zero for both candidates (no artificial near-polytomies detected in either chronogram), so it is excluded from the Family 2 average via zero-variance exclusion.
 
-That separation is deliberate. The RelTime literature does not support a simple story that wider intervals are automatically worse or are just a generic consequence of not using MCMC. Instead, broader RelTime intervals are often discussed as a precision-versus-coverage tradeoff: the analytical confidence-interval procedure explicitly propagates branch-length uncertainty and rate heterogeneity, which can yield wider intervals than other fast methods and, in some scenarios, wider intervals than Bayesian HPDs. Those broader intervals can improve coverage while reducing precision ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). That is why PCR reports interval width here as an additional consideration rather than treating it as a fourth co-equal family in the core rank.
+The uncertainty-width separation is deliberate. The RelTime literature does not support a simple story that wider intervals are automatically worse. Instead, broader RelTime intervals are often discussed as a precision-versus-coverage tradeoff: the analytical confidence-interval procedure explicitly propagates branch-length uncertainty and rate heterogeneity, which can yield wider intervals that improve coverage while reducing precision ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325); [Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). That is why PCR reports interval width separately rather than treating it as a fourth family.
 
 ### Interpretation for this example
 
-- `RelTime` is the core PCR winner because it leads all three pulse summaries and also leads `rate irregularity`, while losing only the simple calibration-fit layer
-- `MCMCTree` has the lower `mean relative gap`, so it stays closer to the calibration minima on average in this scoring
-- `MCMCTree` also has the narrower extracted HPD bars, so it wins the optional uncertainty-width layer on precision
-- the post-fit metrics therefore support, rather than reverse, the original visual rationale from Figure A: `RelTime` better preserves the branching bursts seen in the RAxML phylogram
-- this is exactly the kind of case where a visual choice made before these metrics existed can now be quantified explicitly instead of being left as impression only
+- The core PCR rank is a **tie** at 1.50: `RelTime` and `MCMCTree` win different families, with Family 2 split evenly
+- `RelTime` wins Family 1 (radiation-zone fidelity): it better preserves the burst structure and internode variability within radiation zones — consistent with the original visual rationale from Figure A
+- `MCMCTree` wins Family 3 (rate & calibration): it has lower rate dispersion across branches and stays closer to the calibration minima
+- Family 2 (global fidelity) is a wash: `RelTime` has a higher depth R² (better overall depth correlation), but `MCMCTree` has lower tempo redistribution (less reshuffling of backbone node depths)
+- `MCMCTree` also has narrower extracted HPD bars, so it wins the optional uncertainty-width layer
+- The tie quantifies what the visual rationale already suggested: `RelTime` is better at preserving burst structure, but `MCMCTree` is better at rate smoothness and calibration fit. Neither dominates the other across all dimensions
 
 ### Practical decision rule
 
-1. If you want the core PCR winner focused on chronogram behavior, choose `RelTime`.
-2. If you care most about preserving diversification bursts and smoother implied rate behavior, choose `RelTime`.
-3. If you care primarily about calibration fit and narrower interval estimates, `MCMCTree` wins `mean relative gap` and the optional uncertainty-width layer.
-4. Report the tradeoff explicitly: here the core chronogram-behavior layer favors `RelTime`, while the calibration-plus-precision side favors `MCMCTree`.
-5. The original visual choice to favor `RelTime` is supported quantitatively by the current core post-fit layer.
+1. The core PCR rank is a tie. Neither tree is clearly superior across all three families.
+2. If preserving radiation-zone burst structure is the priority, `RelTime` wins that family cleanly.
+3. If smooth rate behavior and calibration fidelity matter more, `MCMCTree` wins that family cleanly.
+4. If narrower intervals are important, `MCMCTree` wins the optional precision layer.
+5. Report the tradeoff explicitly: `RelTime` is the radiation-zone specialist, `MCMCTree` is the rate-and-calibration specialist, and neither wins overall.
+6. The original visual choice to favor `RelTime` ([Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931)) is supported by Family 1 but offset by Family 3 in the full 3-family framework.
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
@@ -270,9 +280,7 @@ That separation is deliberate. The RelTime literature does not support a simple 
 - `examples/syngnatharia/syngnatharia_HPD_summary.csv`
 - `examples/syngnatharia/syngnatharia_HPD_widths_extracted.csv`
 - `examples/syngnatharia/uncertainty_summary_long.csv`
-- `examples/syngnatharia/postfit_metrics/syngnatharia_postfit_metrics.csv`
-- `examples/syngnatharia/postfit_metrics/syngnatharia_fossil_gap_side_by_side.csv`
-- `examples/syngnatharia/postfit_metrics/syngnatharia_tableS2_method_audit.csv`
+- `examples/syngnatharia/pcr_rerun_3fam/summary_pcr_metrics.csv`
 - `figures/syngnatharia_postfit_metric_family_values.png`
 - `scripts/run_pcr.R`
 - `scripts/make_syngnatharia_postfit_figures.R`

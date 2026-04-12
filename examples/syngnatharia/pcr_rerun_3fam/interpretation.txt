@@ -1,0 +1,22 @@
+PhyloChronoRank summary
+Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre
+Candidates: 2
+Pulse panel clades: 41 (min_tips=8, min_events=4)
+Radiation zones: 18
+
+--- Family 1: Radiation-zone fidelity (1/3 weight) ---
+  Best burst loss: RelTime
+  Best internode concordance: RelTime
+
+--- Family 2: Global chronogram fidelity (1/3 weight) ---
+  Best compression score: RelTime
+  Best tempo redistribution: MCMCTree
+  Best depth R2: RelTime
+
+--- Family 3: Rate & Calibration (1/3 weight) ---
+  Best rate irregularity: MCMCTree
+  Best mean relative gap: MCMCTree
+
+Most precise by uncertainty width: MCMCTree
+
+Core overall winner (3-family balanced): RelTime
