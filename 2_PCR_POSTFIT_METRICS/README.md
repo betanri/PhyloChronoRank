@@ -38,7 +38,7 @@ Outside radiation zones, the backbone of the tree — the deep splits and the ov
 
 - `compression_score` — Detects places where the chronogram collapses well-separated phylogram branches into near-simultaneous splits that were not in the original tree. This flags artificial compression — a known artifact where prior specifications and clock model choices can systematically distort branch lengths ([Bromham et al. 2018](https://doi.org/10.1111/brv.12390)). A recurrent issue with some dating methods, particularly `RelTime`, where genuine divergence events get squeezed into near-polytomies.
 
-- `tempo_redistribution` — How much the dating method reshuffles the timing of non-burst nodes relative to the phylogram. Measured as the earth mover's distance between non-burst node-depth distributions in the phylogram vs. chronogram. Less redistribution is better: it means the dating method preserved the phylogram's temporal backbone rather than rearranging it.
+- `tempo_redistribution` — How much the dating method reshuffles the timing of non-burst nodes relative to the phylogram. Measured as the earth mover's distance between non-burst node-depth distributions in the phylogram vs. chronogram. Less redistribution is better: it means the dating method preserved the phylogram's temporal backbone rather than rearranging it. **Caveat:** Bayesian methods using constant-rate birth-death tree priors may score artificially well on this metric because the prior smooths backbone node depths toward uniform spacing, reducing the EMD independently of chronogram quality ([Louca & Pennell 2020](https://doi.org/10.1038/s41586-020-2176-1)). This should be considered when comparing Bayesian vs. non-Bayesian methods.
 
 - `depth_r2` — Overall correlation between node depths in the phylogram and chronogram. A high R² means the chronogram largely respects the relative ordering and spacing of divergence events encoded in the phylogram. Under realistic rate variation this will not be perfect, but a good dating method should not scramble the depth structure.
 
@@ -48,7 +48,7 @@ Outside radiation zones, the backbone of the tree — the deep splits and the ov
 
 For each branch, dividing the phylogram branch length (substitutions) by the chronogram branch duration (time) gives an implied evolutionary rate. This family evaluates whether those implied rates are biologically plausible and whether the chronogram respects its calibration constraints. Rate estimation and calibration fit are the two fundamental axes along which dating methods can fail independently of tree topology ([dos Reis et al. 2016](https://doi.org/10.1038/nrg.2015.8); [Ho & Duchêne 2014](https://doi.org/10.1111/mec.12953)).
 
-- `rate_irregularity` — The score rises when implied rates are too dispersed or produce too many outlier branches. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho & Duchêne 2014](https://doi.org/10.1111/mec.12953)). The metric penalizes erratic, unpatterned rate jumps that suggest overfitting or poor convergence rather than genuine biological rate heterogeneity.
+- `rate_irregularity` — The score rises when implied rates are too dispersed, jump sharply from parent to child branch, produce too many outlier branches, or lose the positive autocorrelation expected among closely related lineages. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho & Duchêne 2014](https://doi.org/10.1111/mec.12953)). The metric penalizes erratic, unpatterned rate jumps that suggest overfitting or poor convergence rather than genuine biological rate heterogeneity.
 
 - `mean_relative_gap` — For non-fixed calibration constraints (ranges, not point calibrations), measures how far estimated node ages sit from calibration interval boundaries relative to interval width. A chronogram that places calibrated nodes right at the edge of their prior ranges may be "rail-riding" — constrained by the prior rather than informed by the data ([Szöllősi et al. 2022](https://doi.org/10.1093/sysbio/syab084)). This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148)). It should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)). `NA` when all calibrations are fixed, in which case it drops from Family 3.
 
@@ -131,11 +131,13 @@ What it means: overall goodness-of-fit between relative node depths. Higher R² 
 ```text
 branch_rate = phylogram_branch_length / chronogram_branch_duration
 log_rate_sd = sd(log(branch_rate))
+parent_child_jump = mean(|log(child_rate) - log(parent_rate)|)
 extreme_rate_frac = fraction of branches with log(rate) outside 1.5 * IQR of log-rates
-rate_irregularity = log_rate_sd + 2 * extreme_rate_frac
+autocorr_penalty = 1 - max(Spearman_rho(parent_rate, child_rate), 0)
+rate_irregularity = log_rate_sd + parent_child_jump + 2 * extreme_rate_frac + autocorr_penalty
 ```
 
-What it means: the score rises when branchwise rates are more dispersed or produce more extreme outlier branches.
+What it means: the score rises when branchwise rates are more dispersed, jump more sharply from parent to child, produce more extreme outlier branches, or lose positive autocorrelation. The autocorrelation component is important because well-behaved relaxed clocks produce rates that are correlated between adjacent branches — a dating method that creates erratic parent-child rate jumps is likely imposing node placements that conflict with the molecular signal.
 
 `mean_relative_gap`
 
@@ -213,11 +215,10 @@ That is the key point of this first example: the choice to prefer `RelTime` came
 
 ### Quick takeaway
 
-- `RelTime` is the PCR winner in this comparison
-- The 3-family core rank is numerically tied (1.50 vs 1.50), but `RelTime` wins the two families that directly test chronogram fidelity to the phylogram (Families 1 and 2 on tree-structure metrics), while `MCMCTree` wins only the parametric family (Family 3: rate smoothness and calibration proximity)
+- `RelTime` is the core PCR winner in this comparison (1.33 vs 1.67)
 - `RelTime` wins Family 1 (radiation-zone fidelity): better `burst_loss` and `internode_concordance`
-- `RelTime` also wins `depth_r2` (overall depth correlation) in Family 2; `MCMCTree` wins `tempo_redistribution`; `compression_score` is zero for both (excluded as zero-variance)
-- `MCMCTree` wins Family 3 (rate & calibration): lower `rate_irregularity` and lower `mean_relative_gap`
+- Family 2 (global chronogram fidelity) is tied: `RelTime` wins `depth_r2`, `MCMCTree` wins `tempo_redistribution`, `compression_score` is zero for both (excluded as zero-variance)
+- Family 3 (rate & calibration) is tied: `RelTime` wins `rate_irregularity`, `MCMCTree` wins `mean_relative_gap`
 - `MCMCTree` also has narrower extracted HPD bars, so it wins the optional precision layer on interval width
 - `Figure A` is the original visual rationale from the paper; `Figure B` is the quantitative post-fit follow-up
 
@@ -233,15 +234,15 @@ The core PCR rank is balanced across three families (radiation-zone fidelity, gl
 
 | candidate | burst loss | internode concordance | compression score | tempo redistribution | depth R² | rate irregularity | mean relative gap | uncertainty width (Ma) | core rank |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `RelTime` | `0.162` | `0.925` | `0.000` | `0.401` | `0.113` | `0.711` | `0.269` | `11.41` | `1.50` |
-| `MCMCTree` | `0.240` | `0.810` | `0.000` | `0.298` | `0.058` | `0.545` | `0.218` | `6.24` | `1.50` |
+| `RelTime` | `0.162` | `0.925` | `0.000` | `0.401` | `0.113` | `1.151` | `0.269` | `11.41` | `1.33` |
+| `MCMCTree` | `0.240` | `0.810` | `0.000` | `0.298` | `0.058` | `1.553` | `0.218` | `6.24` | `1.67` |
 
 Family breakdown:
 
 | candidate | Family 1 (radiation zone) | Family 2 (global) | Family 3 (rate + cal) | Core rank |
 | --- | ---: | ---: | ---: | ---: |
-| `RelTime` | `1.0` | `1.5` | `2.0` | `1.50` |
-| `MCMCTree` | `2.0` | `1.5` | `1.0` | `1.50` |
+| `RelTime` | `1.0` | `1.5` | `1.5` | `1.33` |
+| `MCMCTree` | `2.0` | `1.5` | `1.5` | `1.67` |
 
 ### Figure B: Post-fit comparison across metric families
 
@@ -253,19 +254,19 @@ The uncertainty-width separation is deliberate. The RelTime literature does not 
 
 ### Interpretation for this example
 
-- `RelTime` is the PCR winner. Although the numerical rank is tied at 1.50, `RelTime` wins the metrics that directly evaluate how well the chronogram preserves the phylogram's branching structure — which is the core purpose of PCR
+- `RelTime` is the core PCR winner (1.33 vs 1.67)
 - `RelTime` wins Family 1 (radiation-zone fidelity): it better preserves the burst structure and internode variability within radiation zones — consistent with the original visual rationale from Figure A
-- `RelTime` also wins `depth_r2` in Family 2: the overall depth correlation between phylogram and chronogram is higher for `RelTime`, meaning it better preserves the relative ordering and spacing of divergence events
-- `MCMCTree` wins Family 3 (rate & calibration): it has lower rate dispersion across branches and stays closer to the calibration minima. These are desirable parametric properties, but they do not override the structural fidelity advantage of `RelTime`
+- Family 2 (global fidelity) is tied: `RelTime` has higher depth R² (better overall depth correlation), but `MCMCTree` has lower tempo redistribution (less reshuffling of backbone node depths). Note that `tempo_redistribution` may favor Bayesian methods whose birth-death tree priors smooth backbone node depths toward uniform spacing, artificially reducing the EMD — a concern documented in the molecular dating literature ([Mello & Kumar 2021](https://doi.org/10.1111/1755-0998.13249); [Louca & Pennell 2020](https://doi.org/10.1038/s41586-020-2176-1))
+- Family 3 (rate & calibration) is tied: `RelTime` wins `rate_irregularity` (lower rate dispersion and better parent-child rate autocorrelation), while `MCMCTree` wins `mean_relative_gap` (stays closer to calibration minima)
 - `MCMCTree` also has narrower extracted HPD bars, so it wins the optional uncertainty-width layer
 - The post-fit metrics support the original visual rationale from Figure A: `RelTime` better preserves the branching signal seen in the RAxML phylogram
 - This is exactly the kind of case where a visual choice made before these metrics existed can now be quantified explicitly instead of being left as impression only
 
 ### Practical decision rule
 
-1. If you want the tree that best preserves the phylogram's branching structure, choose `RelTime`. It wins radiation-zone fidelity and overall depth concordance.
+1. If you want the core PCR winner focused on chronogram behavior, choose `RelTime`. It wins radiation-zone fidelity and rate regularity.
 2. If you care primarily about calibration fit and narrower interval estimates, `MCMCTree` wins `mean relative gap` and the optional uncertainty-width layer.
-3. Report the tradeoff explicitly: `RelTime` is the better chronogram for structural fidelity, while `MCMCTree` has smoother rates and tighter calibration fit.
+3. Report the tradeoff explicitly: `RelTime` is the better chronogram for structural fidelity and rate smoothness, while `MCMCTree` stays closer to calibration minima and has narrower intervals.
 4. The original visual choice to favor `RelTime` ([Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931)) is supported quantitatively by the current post-fit framework.
 
 <details>

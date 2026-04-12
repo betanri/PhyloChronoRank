@@ -431,7 +431,7 @@ pcr_rate_metrics <- function(ref_tree, dated_tree) {
     parent_child_jump_mean = if (length(jump)) mean(jump) else NA_real_,
     parent_child_jump_q95 = if (length(jump)) as.numeric(stats::quantile(jump, 0.95, names = FALSE)) else NA_real_,
     rate_autocorr_spearman = autocorr,
-    rate_irregularity = stats::sd(merged$log_rate) + (2 * extreme_frac),
+    rate_irregularity = stats::sd(merged$log_rate) + (if (length(jump)) mean(jump) else 0) + (2 * extreme_frac) + autocorr_penalty,
     stringsAsFactors = FALSE
   )
   list(summary = summary, detail = merged)
