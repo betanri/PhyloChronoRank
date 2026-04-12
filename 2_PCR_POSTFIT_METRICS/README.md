@@ -28,7 +28,7 @@ The biological motivation is that substitution-rate bursts associated with speci
 
 - `burst_loss` — How much of the radiation-burst signal is destroyed during dating. If the phylogram shows tightly clustered speciation events (short internodes packed together, separated by longer quiet intervals) and the chronogram smears them into evenly spaced splits, the penalty is high. This measures loss of temporal clustering — the CV of inter-event spacing drops — not branch collapse to zero.
 
-- `internode_concordance` — Whether the relative ordering and spacing of internodes within radiation zones is preserved. A phylogram might show three rapid splits followed by a pause; a good chronogram should maintain that same internal tempo, not reshuffle the node sequence.
+- `internode_concordance` — Whether the variability of internal branch lengths within each radiation zone is preserved. Within a radiation zone, the phylogram might show a mix of very short and moderately short internodes (high CV); a good chronogram should maintain that same spread rather than making all internodes uniformly equal (low CV). This complements `burst_loss`: burst_loss measures whether the temporal clustering of node depths is smeared out, while internode_concordance measures whether the spread of individual branch lengths within the zone is preserved. Empirically, the two metrics share only ~15% of variance across datasets and can rank candidates in opposite directions (e.g., Gobiaria), confirming they capture different aspects of radiation-zone fidelity.
 
 ### Family 2 — Global Chronogram Fidelity (1/3)
 
@@ -88,7 +88,7 @@ concordance = min(cv_ref, cv_est) / max(cv_ref, cv_est)
 internode_concordance = mean(concordance) across matched radiation zones
 ```
 
-What it means: a ratio near 1 means the chronogram preserves the same coefficient of variation of internode distances as the phylogram within each radiation zone. Lower CV concordance means the dating method changed how evenly or unevenly the burst nodes are spaced.
+What it means: a ratio near 1 means the chronogram preserves the same coefficient of variation of internal branch lengths as the phylogram within each radiation zone. A low concordance value means the dating method changed how variable the internodes are — typically making them more uniform. This differs from `burst_loss`, which operates on cumulative node-depth gaps rather than individual branch lengths; the two share only ~15% of variance empirically.
 
 #### Family 2
 
