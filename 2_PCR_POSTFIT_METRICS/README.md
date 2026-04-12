@@ -26,7 +26,7 @@ This family asks whether a dated tree keeps the same branching rhythm seen in th
 
 The biological motivation is that substitution-rate bursts associated with speciation events are well documented: [Pagel et al. (2006)](https://doi.org/10.1126/science.1129647) showed that a large fraction of molecular divergence accumulates in punctuational bursts at cladogenesis rather than gradually along branches. The RCS (Relaxed Clock with Spikes) model formalizes this, showing that punctuated molecular evolution is detectable and should be preserved by dating methods ([Manceau et al. 2020](https://doi.org/10.1093/molbev/msaa144)). [Duchêne et al. (2022)](https://doi.org/10.1186/s12862-022-02024-5) showed that standard relaxed-clock models can fail to recover correct divergence times when molecular evolution is punctuated rather than gradual — exactly the failure mode these metrics are designed to catch.
 
-- `burst_loss` — How much of the radiation-burst signal is destroyed during dating. If the phylogram shows a clear cluster of near-simultaneous splits and the chronogram flattens them into a comb, the penalty is high.
+- `burst_loss` — How much of the radiation-burst signal is destroyed during dating. If the phylogram shows tightly clustered speciation events (short internodes packed together, separated by longer quiet intervals) and the chronogram smears them into evenly spaced splits, the penalty is high. This measures loss of temporal clustering — the CV of inter-event spacing drops — not branch collapse to zero.
 
 - `internode_concordance` — Whether the relative ordering and spacing of internodes within radiation zones is preserved. A phylogram might show three rapid splits followed by a pause; a good chronogram should maintain that same internal tempo, not reshuffle the node sequence.
 
@@ -71,12 +71,13 @@ Measures how wide the confidence or credible intervals are around estimated node
 `burst_loss`
 
 ```text
-burst_loss_clade = max(0, (burst_ref - burst_est) / (burst_ref + 1e-12))
+burstiness = sd(inter-event waits) / mean(inter-event waits)   # CV of spacing
+burst_loss_clade = max(0, (burstiness_ref - burstiness_est) / (burstiness_ref + 1e-12))
 mean_burst_loss = weighted mean across matched radiation-zone clades
 weight_clade = log(1 + n_tips) * sqrt(n_events)
 ```
 
-What it means: how much burstiness was flattened away in each matched radiation zone, with larger and more event-rich zones given more weight.
+What it means: how much temporal clustering was smeared away in each matched radiation zone. A burstiness CV near 1 or above means events are tightly clustered with quiet gaps between clusters; a CV near 0 means events are evenly spaced. `burst_loss` measures the fractional drop in that CV. Larger and more event-rich zones are given more weight.
 
 `internode_concordance`
 
