@@ -213,9 +213,10 @@ That is the key point of this first example: the choice to prefer `RelTime` came
 
 ### Quick takeaway
 
-- The 3-family core PCR rank is a **tie** (`RelTime` 1.50, `MCMCTree` 1.50)
+- `RelTime` is the PCR winner in this comparison
+- The 3-family core rank is numerically tied (1.50 vs 1.50), but `RelTime` wins the two families that directly test chronogram fidelity to the phylogram (Families 1 and 2 on tree-structure metrics), while `MCMCTree` wins only the parametric family (Family 3: rate smoothness and calibration proximity)
 - `RelTime` wins Family 1 (radiation-zone fidelity): better `burst_loss` and `internode_concordance`
-- Family 2 (global chronogram fidelity) is tied: `RelTime` wins `depth_r2`, `MCMCTree` wins `tempo_redistribution`, `compression_score` is zero for both (excluded as zero-variance)
+- `RelTime` also wins `depth_r2` (overall depth correlation) in Family 2; `MCMCTree` wins `tempo_redistribution`; `compression_score` is zero for both (excluded as zero-variance)
 - `MCMCTree` wins Family 3 (rate & calibration): lower `rate_irregularity` and lower `mean_relative_gap`
 - `MCMCTree` also has narrower extracted HPD bars, so it wins the optional precision layer on interval width
 - `Figure A` is the original visual rationale from the paper; `Figure B` is the quantitative post-fit follow-up
@@ -252,21 +253,20 @@ The uncertainty-width separation is deliberate. The RelTime literature does not 
 
 ### Interpretation for this example
 
-- The core PCR rank is a **tie** at 1.50: `RelTime` and `MCMCTree` win different families, with Family 2 split evenly
+- `RelTime` is the PCR winner. Although the numerical rank is tied at 1.50, `RelTime` wins the metrics that directly evaluate how well the chronogram preserves the phylogram's branching structure — which is the core purpose of PCR
 - `RelTime` wins Family 1 (radiation-zone fidelity): it better preserves the burst structure and internode variability within radiation zones — consistent with the original visual rationale from Figure A
-- `MCMCTree` wins Family 3 (rate & calibration): it has lower rate dispersion across branches and stays closer to the calibration minima
-- Family 2 (global fidelity) is a wash: `RelTime` has a higher depth R² (better overall depth correlation), but `MCMCTree` has lower tempo redistribution (less reshuffling of backbone node depths)
+- `RelTime` also wins `depth_r2` in Family 2: the overall depth correlation between phylogram and chronogram is higher for `RelTime`, meaning it better preserves the relative ordering and spacing of divergence events
+- `MCMCTree` wins Family 3 (rate & calibration): it has lower rate dispersion across branches and stays closer to the calibration minima. These are desirable parametric properties, but they do not override the structural fidelity advantage of `RelTime`
 - `MCMCTree` also has narrower extracted HPD bars, so it wins the optional uncertainty-width layer
-- The tie quantifies what the visual rationale already suggested: `RelTime` is better at preserving burst structure, but `MCMCTree` is better at rate smoothness and calibration fit. Neither dominates the other across all dimensions
+- The post-fit metrics support the original visual rationale from Figure A: `RelTime` better preserves the branching signal seen in the RAxML phylogram
+- This is exactly the kind of case where a visual choice made before these metrics existed can now be quantified explicitly instead of being left as impression only
 
 ### Practical decision rule
 
-1. The core PCR rank is a tie. Neither tree is clearly superior across all three families.
-2. If preserving radiation-zone burst structure is the priority, `RelTime` wins that family cleanly.
-3. If smooth rate behavior and calibration fidelity matter more, `MCMCTree` wins that family cleanly.
-4. If narrower intervals are important, `MCMCTree` wins the optional precision layer.
-5. Report the tradeoff explicitly: `RelTime` is the radiation-zone specialist, `MCMCTree` is the rate-and-calibration specialist, and neither wins overall.
-6. The original visual choice to favor `RelTime` ([Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931)) is supported by Family 1 but offset by Family 3 in the full 3-family framework.
+1. If you want the tree that best preserves the phylogram's branching structure, choose `RelTime`. It wins radiation-zone fidelity and overall depth concordance.
+2. If you care primarily about calibration fit and narrower interval estimates, `MCMCTree` wins `mean relative gap` and the optional uncertainty-width layer.
+3. Report the tradeoff explicitly: `RelTime` is the better chronogram for structural fidelity, while `MCMCTree` has smoother rates and tighter calibration fit.
+4. The original visual choice to favor `RelTime` ([Santaquiteria et al. 2024](https://www.journals.uchicago.edu/doi/10.1086/733931)) is supported quantitatively by the current post-fit framework.
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
