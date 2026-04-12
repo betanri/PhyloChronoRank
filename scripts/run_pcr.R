@@ -82,13 +82,16 @@ for (i in seq_len(nrow(cand))) {
   rp <- pcr_rate_metrics(ref_tree, tr)
   ic <- pcr_score_internode_concordance(ref_tree, tr, radiation_zones)
   dc <- pcr_depth_concordance(ref_tree, tr)
+  cs <- pcr_compression_score(ref_tree, tr)
+  tr_emd <- pcr_tempo_redistribution_nonburst(ref_tree, tr, radiation_zones)
   row <- data.frame(candidate = cand$candidate[i], tree_file = cand$tree_file[i], stringsAsFactors = FALSE)
   row$pulse_default_selector_error <- pcr_get_metric(p_overall$summary, 'selector_error')
   row$burst_loss <- pcr_get_metric(p_overall$summary, 'mean_burst_loss')
   row$pulse_burst_selector_error <- pcr_get_metric(p_burst$summary, 'selector_error')
   row$internode_concordance <- ic$concordance_mean
-  row$spike_ratio <- ic$spike_ratio_mean
   row$n_radiation_zones <- ic$n_zones
+  row$compression_score <- cs$compression_score
+  row$tempo_redistribution <- tr_emd
   row$depth_r2 <- dc$depth_r2
   row$depth_slope <- dc$depth_slope
   row$depth_emd <- dc$depth_emd
@@ -160,33 +163,66 @@ for (i in seq_len(nrow(cand))) {
   do.call(rbind, lst2)
 }
 summary_df <- .safe_rbind(rows)
-summary_df$rank_pulse_overall <- pcr_rank_low(summary_df$pulse_default_selector_error)
+## Per-metric ranks (all lower = better unless noted)
 summary_df$rank_burst_loss <- pcr_rank_low(summary_df$burst_loss)
-summary_df$rank_pulse_burst <- pcr_rank_low(summary_df$pulse_burst_selector_error)
-summary_df$rank_pulse_family_mean <- rowMeans(cbind(summary_df$rank_burst_loss, summary_df$rank_pulse_burst, summary_df$rank_pulse_overall), na.rm = TRUE)
-summary_df$rank_pulse_family <- pcr_rank_low(summary_df$rank_pulse_family_mean)
-summary_df$rank_mean_relative_gap <- pcr_rank_low(summary_df$mean_relative_gap)
-summary_df$rank_rate_irregularity <- pcr_rank_low(summary_df$rate_irregularity)
-summary_df$rank_depth_r2 <- pcr_rank_low(1 - summary_df$depth_r2)  ## higher R² = better, so rank 1-R²
 summary_df$rank_internode_concordance <- pcr_rank_low(1 - summary_df$internode_concordance)  ## higher = better
+summary_df$rank_compression_score <- pcr_rank_low(summary_df$compression_score)
+summary_df$rank_tempo_redistribution <- pcr_rank_low(summary_df$tempo_redistribution)
+summary_df$rank_depth_r2 <- pcr_rank_low(1 - summary_df$depth_r2)  ## higher = better
+summary_df$rank_rate_irregularity <- pcr_rank_low(summary_df$rate_irregularity)
+summary_df$rank_mean_relative_gap <- pcr_rank_low(summary_df$mean_relative_gap)
 
-## Adjusted burst loss: divide by concordance so trees that distort radiation
-## zones don't get credit for matching burst patterns (see action item B-C).
-adj_bl <- summary_df$burst_loss / pmax(summary_df$internode_concordance, 0.01)
-summary_df$adjusted_burst_loss <- adj_bl
-summary_df$rank_adjusted_burst_loss <- pcr_rank_low(adj_bl)
+## Zero-variance exclusion: when all candidates tie on a metric, ranks carry
+## no discriminatory power. Replace with NA so it drops from family averaging.
+.zv_nullify <- function(raw_col, rank_col) {
+  vals <- raw_col[is.finite(raw_col)]
+  if (length(unique(vals)) <= 1L) rep(NA_real_, length(rank_col)) else rank_col
+}
+summary_df$rank_burst_loss <- .zv_nullify(summary_df$burst_loss, summary_df$rank_burst_loss)
+summary_df$rank_internode_concordance <- .zv_nullify(summary_df$internode_concordance, summary_df$rank_internode_concordance)
+summary_df$rank_compression_score <- .zv_nullify(summary_df$compression_score, summary_df$rank_compression_score)
+summary_df$rank_tempo_redistribution <- .zv_nullify(summary_df$tempo_redistribution, summary_df$rank_tempo_redistribution)
+summary_df$rank_depth_r2 <- .zv_nullify(summary_df$depth_r2, summary_df$rank_depth_r2)
+summary_df$rank_rate_irregularity <- .zv_nullify(summary_df$rate_irregularity, summary_df$rank_rate_irregularity)
+summary_df$rank_mean_relative_gap <- .zv_nullify(summary_df$mean_relative_gap, summary_df$rank_mean_relative_gap)
 
-## 5-axis composite: pulse_overall, adjusted_burst_loss, rate_irregularity,
-## internode_concordance, gap.  Replaces old 4-axis (pulse_family, gap, rate, depth_r2).
-core_mat <- cbind(
-  summary_df$rank_pulse_overall,
-  summary_df$rank_adjusted_burst_loss,
+## ── 3-Family balanced scoring ──────────────────────────────────────────────
+## Family 1: Radiation-zone fidelity (1/3 weight)
+##   burst_loss, internode_concordance
+##   Both measure how well the chronogram preserves radiation-burst structure.
+## Family 2: Global chronogram fidelity (1/3 weight)
+##   compression_score, tempo_redistribution, depth_r2
+##   Outside bursts: artifact detection, backbone timing, overall depth correlation.
+## Family 3: Rate & Calibration (1/3 weight)
+##   rate_irregularity, mean_relative_gap (NA if all calibrations are fixed)
+##
+## Within each family: average the per-metric ranks to get one family rank.
+## Across families: average the three family ranks to get the final score.
+
+family_radiation <- rowMeans(cbind(
+  summary_df$rank_burst_loss,
+  summary_df$rank_internode_concordance
+), na.rm = TRUE)
+
+family_global <- rowMeans(cbind(
+  summary_df$rank_compression_score,
+  summary_df$rank_tempo_redistribution,
+  summary_df$rank_depth_r2
+), na.rm = TRUE)
+
+family_ratecal_mat <- cbind(
   summary_df$rank_rate_irregularity,
-  summary_df$rank_internode_concordance,
   summary_df$rank_mean_relative_gap
 )
-summary_df$core_n_families_ranked <- rowSums(is.finite(core_mat))
-summary_df$rank_mean_core <- rowMeans(core_mat, na.rm = TRUE)
+family_ratecal <- rowMeans(family_ratecal_mat, na.rm = TRUE)
+
+summary_df$family_radiation_score <- family_radiation
+summary_df$family_global_score <- family_global
+summary_df$family_ratecal_score <- family_ratecal
+
+family_mat <- cbind(family_radiation, family_global, family_ratecal)
+summary_df$core_n_families_ranked <- rowSums(is.finite(family_mat))
+summary_df$rank_mean_core <- rowMeans(family_mat, na.rm = TRUE)
 summary_df$rank_mean_core_rank <- pcr_rank_low(summary_df$rank_mean_core)
 if ('uncertainty_mean_width_ma' %in% names(summary_df)) {
   summary_df$rank_uncertainty_mean_width <- pcr_rank_low(summary_df$uncertainty_mean_width_ma)
@@ -202,14 +238,24 @@ lines <- c(
   paste0('Reference tree: ', normalizePath(kv[['ref-tree']], winslash = '/', mustWork = TRUE)),
   paste0('Candidates: ', nrow(summary_df)),
   paste0('Pulse panel clades: ', length(panel), ' (min_tips=', min_tips, ', min_events=', min_events, ')'),
+  paste0('Radiation zones: ', length(radiation_zones)),
   '',
-  pcr_best_candidate_label(summary_df$pulse_default_selector_error, summary_df$candidate, 'Best pulse preservation (overall): ', 'Pulse preservation (overall): not scored'),
-  pcr_best_candidate_label(summary_df$burst_loss, summary_df$candidate, 'Best burst loss: ', 'Burst loss: not scored'),
-  pcr_best_candidate_label(summary_df$pulse_burst_selector_error, summary_df$candidate, 'Best pulse preservation (burst): ', 'Pulse preservation (burst): not scored'),
-  pcr_best_candidate_label(summary_df$mean_relative_gap, summary_df$candidate, 'Best mean relative gap: ', 'Mean relative gap: not scored'),
-  pcr_best_candidate_label(summary_df$rate_irregularity, summary_df$candidate, 'Best rate irregularity: ', 'Rate irregularity: not scored'),
+  '--- Family 1: Radiation-zone fidelity (1/3 weight) ---',
+  pcr_best_candidate_label(summary_df$burst_loss, summary_df$candidate, '  Best burst loss: ', '  Burst loss: not scored'),
+  pcr_best_candidate_label(1 - summary_df$internode_concordance, summary_df$candidate, '  Best internode concordance: ', '  Internode concordance: not scored'),
+  '',
+  '--- Family 2: Global chronogram fidelity (1/3 weight) ---',
+  pcr_best_candidate_label(summary_df$compression_score, summary_df$candidate, '  Best compression score: ', '  Compression score: not scored'),
+  pcr_best_candidate_label(summary_df$tempo_redistribution, summary_df$candidate, '  Best tempo redistribution: ', '  Tempo redistribution: not scored'),
+  pcr_best_candidate_label(1 - summary_df$depth_r2, summary_df$candidate, '  Best depth R2: ', '  Depth R2: not scored'),
+  '',
+  '--- Family 3: Rate & Calibration (1/3 weight) ---',
+  pcr_best_candidate_label(summary_df$rate_irregularity, summary_df$candidate, '  Best rate irregularity: ', '  Rate irregularity: not scored'),
+  pcr_best_candidate_label(summary_df$mean_relative_gap, summary_df$candidate, '  Best mean relative gap: ', '  Mean relative gap: not scored (all calibrations fixed or no calibrations)'),
+  '',
   if ('rank_uncertainty_mean_width' %in% names(summary_df)) pcr_best_candidate_label(summary_df$uncertainty_mean_width_ma, summary_df$candidate, 'Most precise by uncertainty width: ', 'Uncertainty width: not scored') else 'Uncertainty width: not scored',
-  pcr_best_candidate_label(summary_df$rank_mean_core, summary_df$candidate, 'Core overall winner: ', 'Core overall winner: not scored')
+  '',
+  pcr_best_candidate_label(summary_df$rank_mean_core, summary_df$candidate, 'Core overall winner (3-family balanced): ', 'Core overall winner: not scored')
 )
 writeLines(lines, file.path(outdir, 'interpretation.txt'))
 message('Wrote PCR outputs to: ', outdir)

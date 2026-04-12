@@ -423,14 +423,19 @@ chronosCI <-
             cal[match(names(ages2), cal$node), 2:3] <- ages2
         } else {
             cal <- boot_cal_base
-        }
-        cal <- .chronos_remap_calibration_nodes(chronogram, rTR[[i]], cal)
-        cal <- .chronos_prepare_calibration_for_ape(cal)
-        if (is.null(cal) || !nrow(cal)) next
+	        }
+	        cal <- .chronos_remap_calibration_nodes(chronogram, rTR[[i]], cal)
+	        cal <- .chronos_prepare_calibration_for_ape(cal)
+	        if (is.null(cal) || !nrow(cal)) next
+	        age_start <- .chronos_remap_age_start(chronogram, rTR[[i]])
+	        if (!is.null(age_start)) {
+	            idx <- match(as.character(cal$node), names(age_start))
+	            cal$age.start <- as.numeric(age_start[idx])
+	        }
 
-        chr_try <- try(
-            ape::chronos(rTR[[i]], quiet = TRUE, model = model,
-                         calibration = cal, control = control),
+	        chr_try <- try(
+	            ape::chronos(rTR[[i]], quiet = TRUE, model = model,
+	                         calibration = cal, control = control),
             silent = TRUE
         )
         if (!inherits(chr_try, "try-error")) {
@@ -787,6 +792,27 @@ drawChronosCI <- function(CI, col95 = "#FF00004D", col50 = "#0000FF4D",
   )
   names(sig) <- as.character(int_nodes)
   sig
+}
+
+.chronos_node_ages <- function(phy) {
+  dep <- ape::node.depth.edgelength(phy)
+  ages <- max(dep) - dep
+  ages[seq_len(ape::Ntip(phy))] <- 0
+  ages
+}
+
+.chronos_remap_age_start <- function(source_phy, target_phy) {
+  if (!inherits(source_phy, "phylo") || !inherits(target_phy, "phylo")) return(NULL)
+  if (!setequal(source_phy$tip.label, target_phy$tip.label)) return(NULL)
+  src_sig <- .chronos_signature_index(source_phy)
+  tgt_sig <- .chronos_signature_index(target_phy)
+  src_nodes <- as.integer(names(src_sig))
+  src_ages <- .chronos_node_ages(source_phy)[src_nodes]
+  age_by_sig <- stats::setNames(as.numeric(src_ages), src_sig)
+  tgt_nodes <- as.integer(names(tgt_sig))
+  mapped <- unname(age_by_sig[tgt_sig])
+  if (!length(mapped) || all(!is.finite(mapped))) return(NULL)
+  stats::setNames(as.numeric(mapped), as.character(tgt_nodes))
 }
 
 .chronos_remap_calibration_nodes <- function(source_phy, target_phy, calibration) {

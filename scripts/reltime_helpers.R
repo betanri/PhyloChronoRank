@@ -1516,11 +1516,14 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
   par_of <- integer(total)
   for (k in seq_len(nrow(e))) par_of[e[k, 2L]] <- e[k, 1L]
 
-  # Identify calibrated nodes (fixed-point: lower == upper)
+  # Identify constrained nodes. Interval-bounded nodes also need protection
+  # here; otherwise the smoothing step can undo a valid lower/upper clamp
+  # applied during the main projection.
   is_calibrated <- logical(total)
   for (nd in seq_len(total)) {
-    if (nd > n_tip && is.finite(lower[nd]) && is.finite(upper[nd]) &&
-        lower[nd] > 0 && abs(upper[nd] - lower[nd]) < 1e-10)
+    if (nd > n_tip &&
+        ((is.finite(lower[nd]) && lower[nd] > 0) ||
+         (is.finite(upper[nd]) && upper[nd] < Inf)))
       is_calibrated[nd] <- TRUE
   }
   # Root is always anchored
@@ -1685,14 +1688,13 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
     if (max_change < 1e-10) break
   }
 
-  # ---- Feasibility clamping for uncalibrated nodes -------------------------
-  # After calibration enforcement, uncalibrated nodes between two calibrated
-  # nodes may still have ages outside the feasible range [cal_desc, cal_anc].
-  # For each uncalibrated node, find its nearest calibrated ancestor (above)
-  # and nearest calibrated descendant (below) and clamp its age to lie within
-  # that interval, preserving proportional structure.
-  # This matches MEGA's behavior: uncalibrated nodes are placed consistently
-  # with surrounding calibrations.
+  # ---- Feasibility clamping for non-fixed nodes ----------------------------
+  # After fixed-point calibration enforcement, nodes with interval bounds still
+  # need to be clamped explicitly. The previous implementation only respected
+  # surrounding fixed calibrations, which meant min/max interval bounds could
+  # silently be ignored. Here we intersect the local feasible interval implied
+  # by calibrated ancestors/descendants with the node's own [lower, upper]
+  # bounds and clamp into that range.
 
   for (nd in visit) {
     if (is_cal[nd]) next
@@ -1720,16 +1722,58 @@ reltime_merge_calibration_bounds <- function(phy, calibration_df) {
       }
     }
 
-    # Clamp
-    if (node_age[nd] > cal_anc_age) node_age[nd] <- cal_anc_age - eps
-    if (node_age[nd] < cal_desc_age) node_age[nd] <- cal_desc_age + eps
+    # Intersect ancestor/descendant feasibility with the node's own bounds.
+    lo <- cal_desc_age + eps
+    hi <- cal_anc_age - eps
+    if (is.finite(lower[nd]) && lower[nd] > 0) lo <- max(lo, lower[nd])
+    if (is.finite(upper[nd])) hi <- min(hi, upper[nd])
+
+    # If the interval collapses, honor the bound target as closely as possible
+    # and let the parent>child pass below clean up any tiny ordering issues.
+    if (lo > hi) {
+      if (is.finite(lower[nd]) && lower[nd] > 0 && lower[nd] >= cal_desc_age) {
+        node_age[nd] <- lower[nd]
+      } else if (is.finite(upper[nd]) && upper[nd] <= cal_anc_age) {
+        node_age[nd] <- upper[nd]
+      } else {
+        node_age[nd] <- max(min(node_age[nd], cal_anc_age - eps), cal_desc_age + eps)
+      }
+      next
+    }
+
+    if (node_age[nd] < lo) node_age[nd] <- lo
+    if (node_age[nd] > hi) node_age[nd] <- hi
   }
 
-  # ---- Enforce parent > child + eps ----------------------------------------
+  # ---- Enforce parent > child + eps without breaking lower bounds ----------
+  # First push ancestors upward so constrained descendants cannot be dragged
+  # below their own minima by a too-young parent.
+  for (nd in rev(visit)) {
+    if (nd == root_node) next
+    p <- parent_of[nd]
+    if (p <= 0) next
+    needed_parent_age <- node_age[nd] + eps
+    if (is.finite(lower[p]) && lower[p] > 0) {
+      needed_parent_age <- max(needed_parent_age, lower[p])
+    }
+    if (node_age[p] < needed_parent_age) {
+      node_age[p] <- needed_parent_age
+    }
+  }
+
+  # Final cleanup: only lower a child if doing so does not violate the child's
+  # own lower bound; otherwise raise the parent just enough to open the branch.
   for (nd in visit) {
     for (kid in ch[[nd]]) {
-      if (kid > n_tip && node_age[kid] >= node_age[nd] - eps)
-        node_age[kid] <- node_age[nd] - eps
+      if (kid <= n_tip) next
+      if (node_age[kid] < node_age[nd] - eps) next
+      kid_lower <- if (is.finite(lower[kid]) && lower[kid] > 0) lower[kid] else -Inf
+      target_child <- node_age[nd] - eps
+      if (target_child >= kid_lower) {
+        node_age[kid] <- target_child
+      } else {
+        node_age[nd] <- kid_lower + eps
+      }
     }
   }
 

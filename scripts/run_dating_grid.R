@@ -24,6 +24,7 @@ usage <- function() {
       "[--chronos-discrete-k=2,3,5]",
       "[--chronos-ci-models=clock,correlated,discrete,relaxed]",
       "[--chronos-attempt-timeout=90]",
+      "[--chronos-age-start-tree=SEED_DATED_TREE.tre]",
       "[--treepl-bin=/path/to/treePL]",
       "[--megacc-bin=/path/to/megacc]",
       "[--root-age=123.4]",
@@ -63,6 +64,7 @@ usage <- function() {
     "  --chronos-ci-models     Which selected chronos models get bootstrap CIs. Default: clock,correlated,discrete,relaxed.\n",
     "  --chronos-retries       Retries per chronos setting. Default: 2.\n",
     "  --chronos-attempt-timeout Maximum elapsed seconds allowed per chronos attempt. Default: 0 (no timeout).\n",
+    "  --chronos-age-start-tree Optional dated tree used only to seed chronos starting ages.\n",
     "  --treepl-smoothing      Smoothing grid. Default: 0.01,0.1,1,10,100.\n",
     "  --treepl-bin            treePL executable. Default: TREEPL_BIN env, PATH treePL, then ../treePL.\n",
     "  --treepl-numsites       numsites value written to treePL configs. Default: 1000.\n",
@@ -173,7 +175,7 @@ bind_rows_fill <- function(lst) {
   cols <- unique(unlist(lapply(lst, names), use.names = FALSE))
   padded <- lapply(lst, function(df) {
     miss <- setdiff(cols, names(df))
-    for (nm in miss) df[[nm]] <- NA
+    for (nm in miss) df[[nm]] <- rep(NA, nrow(df))
     df[, cols, drop = FALSE]
   })
   do.call(rbind, padded)
@@ -296,14 +298,19 @@ read_any_tree <- function(path) {
 }
 
 load_tree_from_file <- function(path, tree_name = "", tree_index = 1L) {
-  x <- try(read_named_newick(path), silent = TRUE)
-  if (!inherits(x, "try-error")) {
-    if (nzchar(tree_name)) {
-      if (!(tree_name %in% names(x))) stop("Named tree not found: ", tree_name)
-      return(list(tree = x[[tree_name]], tree_id = tree_name))
+  ## NEXUS files may contain lines like "Dimensions NTax=..." that fool the
+  ## named-Newick reader into fabricating bogus one-tip trees.  Only try the
+  ## named-Newick path for non-NEXUS files.
+  if (!is_nexus_file(path)) {
+    x <- try(read_named_newick(path), silent = TRUE)
+    if (!inherits(x, "try-error")) {
+      if (nzchar(tree_name)) {
+        if (!(tree_name %in% names(x))) stop("Named tree not found: ", tree_name)
+        return(list(tree = x[[tree_name]], tree_id = tree_name))
+      }
+      if (tree_index < 1L || tree_index > length(x)) stop("Tree index out of range.")
+      return(list(tree = x[[tree_index]], tree_id = names(x)[tree_index]))
     }
-    if (tree_index < 1L || tree_index > length(x)) stop("Tree index out of range.")
-    return(list(tree = x[[tree_index]], tree_id = names(x)[tree_index]))
   }
 
   y <- read_any_tree(path)
@@ -594,16 +601,36 @@ build_calibration_preserving_subset <- function(phy, node_bounds, target_n = 200
   ## 5. Remap calibrations
   keep_cal <- logical(nrow(node_bounds))
   new_nodes <- integer(nrow(node_bounds))
+  new_taxonA <- rep(NA_character_, nrow(node_bounds))
+  new_taxonB <- rep(NA_character_, nrow(node_bounds))
   for (i in seq_len(nrow(node_bounds))) {
     clade_tips <- ape::extract.clade(phy, node_bounds$node[i])$tip.label
     sub_tips <- intersect(clade_tips, subset_phy$tip.label)
     if (length(sub_tips) >= 2) {
       new_nd <- ape::getMRCA(subset_phy, sub_tips)
-      if (!is.null(new_nd)) { new_nodes[i] <- new_nd; keep_cal[i] <- TRUE }
+      if (!is.null(new_nd)) {
+        kids <- subset_phy$edge[subset_phy$edge[, 1] == new_nd, 2]
+        if (length(kids) >= 2) {
+          pick_tip <- function(node_id) {
+            if (node_id <= ape::Ntip(subset_phy)) {
+              subset_phy$tip.label[node_id]
+            } else {
+              sort(ape::extract.clade(subset_phy, node_id)$tip.label)[1]
+            }
+          }
+          new_nodes[i] <- new_nd
+          new_taxonA[i] <- pick_tip(kids[1])
+          new_taxonB[i] <- pick_tip(kids[2])
+          keep_cal[i] <- nzchar(new_taxonA[i]) && nzchar(new_taxonB[i]) &&
+            !identical(new_taxonA[i], new_taxonB[i])
+        }
+      }
     }
   }
   subset_bounds <- node_bounds[keep_cal, , drop = FALSE]
   subset_bounds$node <- new_nodes[keep_cal]
+  if ("taxonA" %in% names(subset_bounds)) subset_bounds$taxonA <- new_taxonA[keep_cal]
+  if ("taxonB" %in% names(subset_bounds)) subset_bounds$taxonB <- new_taxonB[keep_cal]
 
   list(subset_phy = subset_phy, subset_bounds = subset_bounds,
        n_original = n_tip, n_subset = ape::Ntip(subset_phy))
@@ -623,10 +650,63 @@ build_chronos_calib_from_node_bounds <- function(phy, node_bounds) {
   )
 }
 
+tree_node_ages <- function(tr) {
+  d <- ape::node.depth.edgelength(tr)
+  ages <- max(d) - d
+  ages[seq_len(ape::Ntip(tr))] <- 0
+  ages
+}
+
+map_tree_node_ages_by_clade <- function(source_tree, target_tree) {
+  if (!inherits(source_tree, "phylo") || !inherits(target_tree, "phylo")) return(NULL)
+  if (ape::Ntip(source_tree) != ape::Ntip(target_tree)) return(NULL)
+  if (!setequal(source_tree$tip.label, target_tree$tip.label)) return(NULL)
+
+  src_int <- seq.int(ape::Ntip(source_tree) + 1L, ape::Ntip(source_tree) + source_tree$Nnode)
+  tgt_int <- seq.int(ape::Ntip(target_tree) + 1L, ape::Ntip(target_tree) + target_tree$Nnode)
+  src_age <- tree_node_ages(source_tree)
+
+  src_key <- vapply(src_int, function(nd) {
+    paste(descendant_tip_labels(source_tree, nd), collapse = "\r")
+  }, character(1))
+  tgt_key <- vapply(tgt_int, function(nd) {
+    paste(descendant_tip_labels(target_tree, nd), collapse = "\r")
+  }, character(1))
+
+  idx <- match(tgt_key, src_key)
+  if (anyNA(idx)) return(NULL)
+
+  out <- rep(NA_real_, ape::Ntip(target_tree) + target_tree$Nnode)
+  out[seq_len(ape::Ntip(target_tree))] <- 0
+  out[tgt_int] <- src_age[src_int[idx]]
+  out
+}
+
+build_seeded_chronos_calib_from_node_bounds <- function(phy, node_bounds, age_start_tree = NULL) {
+  calib <- build_chronos_calib_from_node_bounds(phy, node_bounds)
+  if (is.null(age_start_tree) || !inherits(age_start_tree, "phylo")) return(calib)
+
+  seed_age <- tryCatch(
+    map_tree_node_ages_by_clade(age_start_tree, phy),
+    error = function(e) NULL
+  )
+  if (is.null(seed_age)) return(calib)
+
+  total <- ape::Ntip(phy) + phy$Nnode
+  lower <- rep(0, total)
+  upper <- rep(Inf, total)
+  lower[node_bounds$node] <- node_bounds$age_min
+  upper[node_bounds$node] <- node_bounds$age_max
+  seed_age <- .reltime_project_node_ages_local(phy, seed_age, lower, upper)
+  calib$age.start <- seed_age[node_bounds$node]
+  calib
+}
+
 fit_score_chronos <- function(tr) {
   ph <- attr(tr, "PHIIC")
-  if (is.list(ph) && is.finite(ph$PHIIC)) return(ph$PHIIC)
-  pl <- attr(tr, "ploglik")
+  phiic <- if (is.list(ph)) scalar_num_or_na(ph$PHIIC) else scalar_num_or_na(ph)
+  if (is.finite(phiic)) return(phiic)
+  pl <- scalar_num_or_na(attr(tr, "ploglik"))
   if (is.finite(pl)) return(-pl)
   Inf
 }
@@ -638,6 +718,12 @@ write_chronos_helper_script <- function(path) {
     "out_file <- args[2]",
     "suppressPackageStartupMessages(library(ape))",
     "`%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a",
+    "scalar_num_or_na <- function(x) {",
+    "  if (is.null(x) || length(x) != 1L) return(NA_real_)",
+    "  x <- suppressWarnings(as.numeric(x))",
+    "  if (!is.finite(x)) return(NA_real_)",
+    "  x",
+    "}",
     "if (!is.null(params$seed) && is.finite(params$seed)) set.seed(as.integer(params$seed))",
     "ctrl <- ape::chronos.control()",
     "ctrl$iter.max <- as.integer(params$iter_max)",
@@ -663,9 +749,9 @@ write_chronos_helper_script <- function(path) {
     "  res <- list(ok = FALSE, error = 'chronos returned an invalid tree.')",
     "} else {",
     "  ph <- attr(tr, 'PHIIC')",
-    "  phiic <- if (is.list(ph) && is.finite(ph$PHIIC)) ph$PHIIC else NA_real_",
-    "  ploglik <- attr(tr, 'ploglik') %||% NA_real_",
-    "  fit_score <- if (is.finite(phiic)) phiic else Inf",
+    "  phiic <- if (is.list(ph)) scalar_num_or_na(ph$PHIIC) else scalar_num_or_na(ph)",
+    "  ploglik <- scalar_num_or_na(attr(tr, 'ploglik'))",
+    "  fit_score <- if (is.finite(phiic)) phiic else if (is.finite(ploglik)) -ploglik else Inf",
     "  res <- list(ok = TRUE, tree = tr, phiic = phiic, ploglik = ploglik, fit_score = fit_score)",
     "}",
     "saveRDS(res, out_file)"
@@ -771,8 +857,11 @@ run_chronos_one <- function(phy, calib, model, lambda, nb_rate_cat = NA_integer_
 
       res <- list(
         tree = tr,
-        phiic = if (is.list(attr(tr, "PHIIC"))) attr(tr, "PHIIC")$PHIIC else NA_real_,
-        ploglik = attr(tr, "ploglik") %||% NA_real_,
+        phiic = {
+          ph <- attr(tr, "PHIIC")
+          if (is.list(ph)) scalar_num_or_na(ph$PHIIC) else scalar_num_or_na(ph)
+        },
+        ploglik = scalar_num_or_na(attr(tr, "ploglik")),
         fit_score = fit_score_chronos(tr),
         attempt = attempt
       )
@@ -972,8 +1061,10 @@ tree_tip_count <- function(tree_path) {
   if (!is.character(tree_path) || length(tree_path) != 1L || !nzchar(tree_path) || !file.exists(tree_path)) {
     return(NA_integer_)
   }
-  tr <- try(ape::read.tree(tree_path), silent = TRUE)
-  if (inherits(tr, "try-error") || !inherits(tr, "phylo")) return(NA_integer_)
+  tr <- try(read_any_tree(tree_path), silent = TRUE)
+  if (inherits(tr, "try-error")) return(NA_integer_)
+  if (inherits(tr, "multiPhylo")) tr <- tr[[1L]]
+  if (!inherits(tr, "phylo")) return(NA_integer_)
   as.integer(ape::Ntip(tr))
 }
 
@@ -1224,7 +1315,7 @@ build_representative_uncertainty <- function(candidates_df, uncertainty_df) {
   bind_rows_fill(out)
 }
 
-copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
+copy_representative_ci_files <- function(outdir, candidates_df, all_df, require_ci = TRUE) {
   if (!nrow(candidates_df) || is.null(all_df) || !nrow(all_df)) {
     return(list(ci_dir = "", main_tree_dir = "", candidates_df = candidates_df))
   }
@@ -1259,6 +1350,19 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
     tree_src <- candidates_df$tree_file[i]
     cand_name <- candidates_df$candidate[i]
     ci_method <- candidates_df$method[i]
+
+    if (!isTRUE(require_ci)) {
+      plain_dst <- if (identical(ci_method, "RelTime")) {
+        file.path(main_dir, "RelTime.tre")
+      } else if (identical(ci_method, "RelTime_MEGA")) {
+        file.path(main_dir, "RelTime_MEGA.tre")
+      } else {
+        file.path(main_dir, paste0(cand_name, ".tre"))
+      }
+      copy_if_present(tree_src, plain_dst)
+      candidates_df$tree_file[i] <- plain_dst
+      next
+    }
 
     ## -- Bootstrap / main CI file (skip RelTime — handled below) --
     fallback_ci_csv <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_ci.csv"))
@@ -1379,23 +1483,8 @@ write_mega_mao <- function(mao_path) {
   writeLines(lines, mao_path)
 }
 
-write_mega_outgroup <- function(outgroup_path, phy) {
-  ## Identify outgroup: tips descended from the smaller root child
-  root_node <- Ntip(phy) + 1L
-  kids <- phy$edge[phy$edge[, 1] == root_node, 2]
-  count_tips <- function(nd) {
-    if (nd <= Ntip(phy)) return(1L)
-    length(extract.clade(phy, nd)$tip.label)
-  }
-  n_tips <- vapply(kids, count_tips, integer(1))
-  ## Outgroup = side with fewer taxa
-  og_kid <- kids[which.min(n_tips)]
-  if (og_kid <= Ntip(phy)) {
-    og_tips <- phy$tip.label[og_kid]
-  } else {
-    og_tips <- extract.clade(phy, og_kid)$tip.label
-  }
-  writeLines(paste0(og_tips, "=outgroup"), outgroup_path)
+write_mega_outgroup <- function(outgroup_path, outgroup_tip = "MOCK_OUTGROUP_FOR_MEGA") {
+  writeLines(paste0(outgroup_tip, "=outgroup"), outgroup_path)
 }
 
 write_mega_calibrations <- function(cal_path, node_bounds, root_node = NULL) {
@@ -1413,11 +1502,19 @@ write_mega_calibrations <- function(cal_path, node_bounds, root_node = NULL) {
   lines <- character(nrow(nb))
   for (i in seq_len(nrow(nb))) {
     tag <- paste0("cal_", nb$node[i])
-    lines[i] <- sprintf(
-      "!MRCA='%s' TaxonA='%s' TaxonB='%s' MinTime=%.11f MaxTime=%.11f calibrationName='%s';",
-      tag, nb$taxonA[i], nb$taxonB[i],
-      nb$age_min[i], nb$age_max[i], tag
-    )
+    if (is.finite(nb$age_max[i])) {
+      lines[i] <- sprintf(
+        "!MRCA='%s' TaxonA='%s' TaxonB='%s' MinTime=%.11f MaxTime=%.11f calibrationName='%s';",
+        tag, nb$taxonA[i], nb$taxonB[i],
+        nb$age_min[i], nb$age_max[i], tag
+      )
+    } else {
+      lines[i] <- sprintf(
+        "!MRCA='%s' TaxonA='%s' TaxonB='%s' MinTime=%.11f calibrationName='%s';",
+        tag, nb$taxonA[i], nb$taxonB[i],
+        nb$age_min[i], tag
+      )
+    }
   }
   writeLines(lines, cal_path)
 }
@@ -1429,33 +1526,38 @@ write_mega_input_tree <- function(tree_path, phy) {
   ape::write.tree(phy, file = tree_path)
 }
 
-run_megacc_reltime <- function(megacc_bin, phy, node_bounds, work_dir, prefix) {
-  dir.create(work_dir, recursive = TRUE, showWarnings = FALSE)
-
-  mao_path      <- file.path(work_dir, "reltime_blens.mao")
-  tree_path     <- file.path(work_dir, paste0(prefix, "_phylogram_for_mega.nwk"))
-  outgroup_path <- file.path(work_dir, "outgroup.txt")
-  cal_path      <- file.path(work_dir, "mega_calibrations.txt")
-  out_prefix    <- file.path(work_dir, paste0(prefix, "_mega_reltime"))
-  log_path      <- file.path(work_dir, paste0(prefix, "_mega_reltime.log"))
-
-  ## Graft a mock outgroup tip sister to the entire ingroup so MEGA can
-  ## treat it as the single outgroup.  This gives the root node a proper
-  ## outgroup branch, avoiding the near-polytomy collapse at the root.
-  mock_tip <- "MOCK_OUTGROUP_FOR_MEGA"
+add_mock_mega_outgroup <- function(phy, mock_tip = "MOCK_OUTGROUP_FOR_MEGA") {
   d <- node.depth.edgelength(phy)
   root_depth <- max(d)
   nwk <- sub(";$", "", ape::write.tree(phy))
   new_nwk <- paste0("(", nwk, ":0.001,", mock_tip, ":",
                     format(root_depth + 0.001, scientific = FALSE), ");")
-  phy_mega <- ape::read.tree(text = new_nwk)
+  ape::read.tree(text = new_nwk)
+}
+
+run_megacc_reltime <- function(megacc_bin, phy, node_bounds, work_dir, prefix) {
+  dir.create(work_dir, recursive = TRUE, showWarnings = FALSE)
+
+  ## MEGA-CC is fragile with long/deep file paths on some empirical trees.
+  ## Run from a short temp directory, then copy artifacts back into work_dir.
+  mega_work <- tempfile(pattern = paste0("megacc_", prefix, "_"), tmpdir = tempdir())
+  dir.create(mega_work, recursive = TRUE, showWarnings = FALSE)
+
+  mao_path      <- file.path(mega_work, "reltime_blens.mao")
+  tree_path     <- file.path(mega_work, paste0(prefix, "_phylogram_for_mega.nwk"))
+  outgroup_path <- file.path(mega_work, "outgroup.txt")
+  cal_path      <- file.path(mega_work, "mega_calibrations.txt")
+  out_prefix    <- file.path(mega_work, paste0(prefix, "_mega_reltime"))
+  log_path      <- file.path(mega_work, paste0(prefix, "_mega_reltime.log"))
+  mock_tip      <- "MOCK_OUTGROUP_FOR_MEGA"
 
   write_mega_mao(mao_path)
+  ## Add a synthetic outgroup so the original ingroup root becomes calibratable
+  ## in MEGA.  This matches the established pipeline behavior used in older
+  ## example outputs.
+  phy_mega <- add_mock_mega_outgroup(phy, mock_tip = mock_tip)
   write_mega_input_tree(tree_path, phy_mega)
-  ## Outgroup = the mock tip only
-  writeLines(paste0(mock_tip, "=outgroup"), outgroup_path)
-  ## Write calibrations using original phy node numbering; the MRCA pairs
-  ## reference tip names that exist in phy_mega too, so MEGA can find them.
+  write_mega_outgroup(outgroup_path, outgroup_tip = mock_tip)
   write_mega_calibrations(cal_path, node_bounds)
 
   ## Run megacc
@@ -1468,6 +1570,13 @@ run_megacc_reltime <- function(megacc_bin, phy, node_bounds, work_dir, prefix) {
     stderr = log_path
   ))
 
+  ## Copy staged MEGA artifacts back to the requested work_dir for debugging
+  ## and for downstream Tao-CI parsing.
+  staged_files <- list.files(mega_work, all.files = FALSE, full.names = TRUE, no.. = TRUE)
+  if (length(staged_files)) {
+    invisible(file.copy(staged_files, work_dir, overwrite = TRUE, recursive = TRUE))
+  }
+
   ## Parse output tree and drop the mock outgroup
   exact_tree_file <- paste0(out_prefix, "_exactTimes.nwk")
   if (file.exists(exact_tree_file)) {
@@ -1475,9 +1584,7 @@ run_megacc_reltime <- function(megacc_bin, phy, node_bounds, work_dir, prefix) {
     ## Fix MEGA's label mangling: strip quotes and restore underscores
     mega_tree$tip.label <- gsub("^'|'$", "", mega_tree$tip.label)
     mega_tree$tip.label <- gsub(" ", "_", mega_tree$tip.label)
-    ## Drop mock outgroup
-    mock_idx <- match(mock_tip, mega_tree$tip.label)
-    if (!is.na(mock_idx)) {
+    if (mock_tip %in% mega_tree$tip.label) {
       mega_tree <- ape::drop.tip(mega_tree, mock_tip)
     }
     ## Write cleaned tree
@@ -1686,6 +1793,10 @@ if (!is.finite(chronos_attempt_timeout) || chronos_attempt_timeout < 0) {
 }
 chronos_iter_max <- as.integer(kv[["chronos-iter-max"]] %||% "10000")
 chronos_tol <- as.numeric(kv[["chronos-tol"]] %||% "1e-8")
+chronos_allow_cal_drop <- !identical(
+  tolower(kv[["chronos-allow-cal-drop"]] %||% "TRUE"),
+  "false"
+)
 
 treepl_smoothing <- parse_num_grid(kv[["treepl-smoothing"]] %||% "0.01,0.1,1,10,100", "--treepl-smoothing")
 treepl_numsites <- as.integer(kv[["treepl-numsites"]] %||% "1000")
@@ -1702,10 +1813,11 @@ ci_sites <- as.integer(kv[["ci-sites"]] %||% kv[["reltime-sites"]] %||% "1000")
 if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
 chronos_ci_type <- kv[["chronos-ci-type"]] %||% "parametric"
 chronos_ci_reps <- as.integer(kv[["chronos-ci-reps"]] %||% "100")
-if (!is.finite(chronos_ci_reps) || chronos_ci_reps < 1L) stop("--chronos-ci-reps must be >= 1.")
+if (!is.finite(chronos_ci_reps) || chronos_ci_reps < 0L) stop("--chronos-ci-reps must be >= 0.")
+chronos_age_start_tree_path <- kv[["chronos-age-start-tree"]] %||% ""
 reltime_bootstrap_reps <- as.integer(kv[["reltime-bootstrap-reps"]] %||% "100")
-if (!is.finite(reltime_bootstrap_reps) || reltime_bootstrap_reps < 1L) {
-  stop("--reltime-bootstrap-reps must be >= 1.")
+if (!is.finite(reltime_bootstrap_reps) || reltime_bootstrap_reps < 0L) {
+  stop("--reltime-bootstrap-reps must be >= 0.")
 }
 treepl_bootstrap_reps <- as.integer(kv[["treepl-bootstrap-reps"]] %||% "0")
 if (!is.finite(treepl_bootstrap_reps) || treepl_bootstrap_reps < 0L) {
@@ -1732,6 +1844,14 @@ phy_loaded <- load_tree_from_file(phy_file, tree_name = phy_tree_name, tree_inde
 phy <- ape::ladderize(phy_loaded$tree)
 if (is.null(phy$edge.length) || any(!is.finite(phy$edge.length)) || any(phy$edge.length <= 0)) {
   stop("Target phylogram must have strictly positive branch lengths.")
+}
+chronos_age_start_tree <- NULL
+if (nzchar(chronos_age_start_tree_path)) {
+  chronos_seed_loaded <- load_tree_from_file(
+    normalizePath(chronos_age_start_tree_path, winslash = "/", mustWork = TRUE),
+    tree_index = 1L
+  )
+  chronos_age_start_tree <- ape::ladderize(chronos_seed_loaded$tree)
 }
 
 outdir <- kv[["outdir"]]
@@ -1874,7 +1994,11 @@ if (use_subset_tuning) {
 if ("chronos" %in% methods) {
   msg("Running chronos grid", if (use_subset_tuning) " (on subset)" else "", "...")
   ## Use subset tree for grid tuning if large-tree mode is active
-  chronos_calib <- build_chronos_calib_from_node_bounds(phy_tune, node_bounds_tune)
+  chronos_calib <- build_seeded_chronos_calib_from_node_bounds(
+    phy_tune,
+    node_bounds_tune,
+    age_start_tree = chronos_age_start_tree
+  )
   chronos_phy_grid <- phy_tune  ## tree used for grid search
   chronos_rows <- list()
   chronos_trees_cache <- list()   ## cache in-memory chronos trees for post-selection CI
@@ -1944,7 +2068,7 @@ if ("chronos" %in% methods) {
         ## If discrete model fails, try progressively dropping calibrations
         ## (chronos discrete init can fail with many fixed-point calibrations)
         discrete_dropped_cals <- character(0)
-        if (!identical(run$status, "OK") && identical(mdl, "discrete")) {
+        if (!identical(run$status, "OK") && identical(mdl, "discrete") && isTRUE(chronos_allow_cal_drop)) {
           cal_subset <- chronos_calib
           max_drops <- min(nrow(chronos_calib) - 2L, ceiling(nrow(chronos_calib) * 0.6))
           for (.drop_round in seq_len(max_drops)) {
@@ -2364,7 +2488,11 @@ if (!nrow(candidates_df)) {
 ## ---- Subset tuning: rerun winners on full tree if grid used a subset ----
 if (use_subset_tuning) {
   msg("Rerunning ", nrow(candidates_df), " winning candidates on the full tree (", Ntip(phy), " tips)...")
-  full_chronos_calib <- build_chronos_calib_from_node_bounds(phy, node_bounds)
+  full_chronos_calib <- build_seeded_chronos_calib_from_node_bounds(
+    phy,
+    node_bounds,
+    age_start_tree = chronos_age_start_tree
+  )
   expected_full_tips <- as.integer(Ntip(phy))
   for (ri in seq_len(nrow(candidates_df))) {
     cand <- candidates_df$candidate[ri]
@@ -2417,8 +2545,9 @@ if (use_subset_tuning) {
         log_full <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.log"))
         prime_cfg <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.prime.cfg"))
         prime_log <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.prime.log"))
-        prime_lines <- character(0)
-        if (isTRUE(treepl_prime)) {
+        subset_prime_log <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, ".prime.log"))
+        prime_lines <- treepl_parse_prime_lines(subset_prime_log)
+        if (isTRUE(treepl_prime) && !length(prime_lines)) {
           treepl_write_cfg(prime_cfg, treepl_input_full, full_tree_path, smooth, treepl_numsites,
             node_bounds, thorough = treepl_thorough, prime = TRUE,
             opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter)
@@ -2478,11 +2607,17 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     } else {
       msg("  MEGA RelTime bootstrap CI (", reltime_bootstrap_reps, " reps)...")
       mega_boot_res <- try({
+        mega_tree_f <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
+        mega_tree <- ape::read.tree(mega_tree_f)
         ## Determine root age: from --root-age, or from congruification root calibration
         mega_root_age <- if (is.finite(root_age)) root_age else {
           root_nd <- ape::Ntip(phy) + 1L
           root_row <- node_bounds[node_bounds$node == root_nd, , drop = FALSE]
-          if (nrow(root_row)) mean(c(root_row$age_min[1], root_row$age_max[1])) else NULL
+          if (nrow(root_row)) {
+            mean(c(root_row$age_min[1], root_row$age_max[1]))
+          } else {
+            max(ape::node.depth.edgelength(mega_tree))
+          }
         }
         boot_result <- reltime_bootstrap_ci(
           phy = phy,
@@ -2493,8 +2628,6 @@ for (ci_i in seq_len(nrow(candidates_df))) {
         )
         boot_ci <- boot_result$ci
         boot_r_tree <- boot_result$tree
-        mega_tree_f <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
-        mega_tree <- ape::read.tree(mega_tree_f)
         ## Remap CI nodes from R tree to MEGA tree via descendant tip-set hashing
         n_m <- ape::Ntip(mega_tree)
         int_r <- (ape::Ntip(boot_r_tree) + 1L):(ape::Ntip(boot_r_tree) + boot_r_tree$Nnode)
@@ -2670,7 +2803,8 @@ uncertainty_csv <- file.path(outdir, "uncertainty_summary_long.csv")
 if (nrow(selected_uncertainty_df)) {
   write.csv(selected_uncertainty_df, uncertainty_csv, row.names = FALSE)
 }
-selected_ci_paths <- copy_representative_ci_files(outdir, candidates_df, all_df)
+plain_main_outputs <- chronos_ci_reps <= 0L && treepl_bootstrap_reps <= 0L && reltime_bootstrap_reps <= 0L
+selected_ci_paths <- copy_representative_ci_files(outdir, candidates_df, all_df, require_ci = !plain_main_outputs)
 if (!is.null(selected_ci_paths$candidates_df)) {
   candidates_df <- selected_ci_paths$candidates_df
 }

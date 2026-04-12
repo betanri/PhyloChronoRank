@@ -2,7 +2,7 @@ pcr_rank_low <- function(x) {
   if (all(!is.finite(x))) return(rep(NA_real_, length(x)))
   out <- rep(NA_real_, length(x))
   ok <- is.finite(x)
-  out[ok] <- rank(x[ok], ties.method = 'min')
+  out[ok] <- rank(x[ok], ties.method = 'average')
   out
 }
 
@@ -437,6 +437,120 @@ pcr_rate_metrics <- function(ref_tree, dated_tree) {
   list(summary = summary, detail = merged)
 }
 
+## Calibration-induced node compression:
+## Detect near-polytomies in the chronogram that are NOT supported by the phylogram.
+## Returns fraction of near-zero chronogram internodes not backed by short phylogram internodes.
+pcr_compression_score <- function(ref_tree, dated_tree, quantile_threshold = 0.05) {
+  n_ref <- ape::Ntip(ref_tree)
+  n_est <- ape::Ntip(dated_tree)
+  if (n_ref != n_est || n_ref < 10) return(list(compression_score = NA_real_, compression_locality = NA_real_, n_compressed = 0L, n_total_internal = 0L))
+
+  ## Get internal branch lengths
+  int_edges_ref <- which(ref_tree$edge[,2] > n_ref)
+  int_edges_est <- which(dated_tree$edge[,2] > n_est)
+  ref_int_bl <- ref_tree$edge.length[int_edges_ref]
+  est_int_bl <- dated_tree$edge.length[int_edges_est]
+  ref_int_bl <- ref_int_bl[is.finite(ref_int_bl)]
+  est_int_bl <- est_int_bl[is.finite(est_int_bl)]
+  if (length(ref_int_bl) < 5 || length(est_int_bl) < 5) return(list(compression_score = NA_real_, compression_locality = NA_real_, n_compressed = 0L, n_total_internal = 0L))
+
+  ## Define thresholds
+  est_total_depth <- max(ape::node.depth.edgelength(dated_tree))
+  est_near_zero <- est_total_depth * 0.001  ## 0.1% of tree depth
+  ref_short_threshold <- as.numeric(stats::quantile(ref_int_bl, quantile_threshold, names = FALSE))
+
+  ## Match internal edges by tip-set signature
+  ref_sig <- pcr_metric_edge_signature(ref_tree)
+  est_sig <- pcr_metric_edge_signature(dated_tree)
+  ref_int_df <- data.frame(sig = ref_sig[int_edges_ref], bl = ref_tree$edge.length[int_edges_ref], stringsAsFactors = FALSE)
+  est_int_df <- data.frame(sig = est_sig[int_edges_est], bl = dated_tree$edge.length[int_edges_est], stringsAsFactors = FALSE)
+  matched <- merge(est_int_df, ref_int_df, by = 'sig', suffixes = c('_est', '_ref'))
+  matched <- matched[is.finite(matched$bl_est) & is.finite(matched$bl_ref), , drop = FALSE]
+  if (nrow(matched) < 5) return(list(compression_score = NA_real_, compression_locality = NA_real_, n_compressed = 0L, n_total_internal = nrow(matched)))
+
+  ## Near-zero in chronogram but NOT short in phylogram
+  compressed <- matched$bl_est <= est_near_zero & matched$bl_ref > ref_short_threshold
+  n_compressed <- sum(compressed)
+  score <- n_compressed / nrow(matched)
+
+  list(compression_score = score, compression_locality = NA_real_, n_compressed = n_compressed, n_total_internal = nrow(matched))
+}
+
+## Tempo redistribution on non-burst nodes:
+## EMD between phylogram and chronogram event-time distributions,
+## computed ONLY on nodes outside radiation zones.
+pcr_tempo_redistribution_nonburst <- function(ref_tree, dated_tree, radiation_zones) {
+  n <- ape::Ntip(ref_tree)
+  if (n != ape::Ntip(dated_tree) || n < 10) return(NA_real_)
+
+  ## Collect all tips inside any radiation zone
+  zone_tips <- character(0)
+  for (z in radiation_zones) zone_tips <- union(zone_tips, z$tips)
+
+  ## Get relative event times for ALL internal nodes
+  ref_ev_all <- pcr_metric_event_times_relative(ref_tree)
+  est_ev_all <- pcr_metric_event_times_relative(dated_tree)
+
+  if (!length(zone_tips)) {
+    return(pcr_metric_wasserstein_1d(ref_ev_all, est_ev_all))
+  }
+
+  ## Identify which internal nodes are INSIDE radiation zones
+  d_ref <- ape::node.depth.edgelength(ref_tree)
+  d_est <- ape::node.depth.edgelength(dated_tree)
+  max_ref <- max(d_ref[seq_len(n)])
+  max_est <- max(d_est[seq_len(n)])
+  if (max_ref <= 0 || max_est <= 0) return(NA_real_)
+
+  ## Mark radiation zone nodes in ref
+  zone_nodes_ref <- integer(0)
+  for (z in radiation_zones) {
+    nd <- z$node
+    if (is.finite(nd)) {
+      queue <- nd
+      while (length(queue)) {
+        current <- queue[1]; queue <- queue[-1]
+        children <- ref_tree$edge[ref_tree$edge[,1] == current, 2]
+        children <- children[children > n]
+        zone_nodes_ref <- c(zone_nodes_ref, children)
+        queue <- c(queue, children)
+      }
+      zone_nodes_ref <- c(zone_nodes_ref, nd)
+    }
+  }
+  zone_nodes_ref <- unique(zone_nodes_ref)
+
+  ## Non-burst internal nodes in ref
+  all_int_ref <- (n + 1L):(n + ref_tree$Nnode)
+  nonburst_ref <- setdiff(all_int_ref, zone_nodes_ref)
+  if (length(nonburst_ref) < 5) return(NA_real_)
+
+  ## Get normalized depths for non-burst ref nodes
+  ref_depths <- d_ref[nonburst_ref] / max_ref
+
+  ## Match non-burst ref nodes to est nodes by edge signature
+  ref_sig <- pcr_metric_edge_signature(ref_tree)
+  est_sig <- pcr_metric_edge_signature(dated_tree)
+  ## Build node->signature map: for each internal node, find the edge where it is the child
+  ref_child_to_edge <- stats::setNames(seq_len(nrow(ref_tree$edge)), ref_tree$edge[,2])
+  est_child_to_edge <- stats::setNames(seq_len(nrow(dated_tree$edge)), dated_tree$edge[,2])
+
+  ref_node_sig <- character(length(nonburst_ref))
+  for (j in seq_along(nonburst_ref)) {
+    nd <- nonburst_ref[j]
+    eidx <- ref_child_to_edge[as.character(nd)]
+    ref_node_sig[j] <- if (!is.na(eidx)) ref_sig[eidx] else NA_character_
+  }
+
+  ## Find matching est depths
+  est_sig_map <- stats::setNames(d_est[dated_tree$edge[,2]] / max_est, est_sig)
+  matched_est_depths <- est_sig_map[ref_node_sig]
+  keep <- !is.na(ref_node_sig) & is.finite(ref_depths) & is.finite(matched_est_depths)
+  if (sum(keep) < 5) return(NA_real_)
+
+  pcr_metric_wasserstein_1d(sort(ref_depths[keep]), sort(matched_est_depths[keep]))
+}
+
 pcr_gap_metrics <- function(dated_tree, calibrations, tol = 1e-4) {
   age_by_node <- pcr_metric_node_ages(dated_tree)
   detail <- calibrations
@@ -462,13 +576,17 @@ pcr_gap_metrics <- function(dated_tree, calibrations, tol = 1e-4) {
   all_point <- all(is_point)
   any_point <- any(is_point)
   gap_mode <- if (all_point) 'point_calibration_slack' else if (any_point) 'mixed_point_and_window' else 'minimum_window_gap'
+  ## Non-fixed calibrations: only window constraints are informative for gap scoring
+  nonfixed <- !is_point
+  mean_rel_gap_nonfixed <- pcr_mean_if_any(detail$ghost_relmin[nonfixed])
   summary <- data.frame(
     fossil_n_calibrations = nrow(detail),
+    fossil_n_nonfixed = sum(nonfixed),
     fossil_n_missing_node_age = sum(!is.finite(detail$node_age)),
     ghost_sum_ma = sum(detail$ghost_gap_ma, na.rm = TRUE),
     ghost_mean_ma = pcr_mean_if_any(detail$ghost_gap_ma),
     ghost_median_ma = pcr_median_if_any(detail$ghost_gap_ma),
-    mean_relative_gap = pcr_mean_if_any(detail$ghost_relmin),
+    mean_relative_gap = mean_rel_gap_nonfixed,
     relative_gap_median = pcr_median_if_any(detail$ghost_relmin),
     window_position_mean = pcr_mean_if_any(detail$window_position),
     window_position_median = pcr_median_if_any(detail$window_position),

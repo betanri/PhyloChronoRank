@@ -2,7 +2,7 @@
 
 `PCR Postfit Metrics` is a post-fit evaluation framework for phylogeneticists who already have a set of competing chronograms and need to decide which one is the most biologically defensible.
 
-In simple terms, the core idea is that divergence-time estimation is hard: the resulting chronogram can shift substantially with clock-model choice, tree priors, calibration priors, and other analytical decisions ([Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Warnock et al. 2015](https://doi.org/10.1098/rspb.2014.1013); [dos Reis et al. 2016](https://doi.org/10.1038/nrg.2015.8)). A practical response is to compare a defensible set of alternative chronograms after they have been estimated, rather than betting everything on a single, computationally intensive "gold-standard" analysis and then treating that one tree as settled.
+In simple terms, the core idea is that divergence-time estimation is hard: the resulting chronogram can shift substantially with clock-model choice, tree priors, calibration priors, and other analytical decisions ([Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [dos Reis et al. 2016](https://doi.org/10.1038/nrg.2015.8); [Bromham et al. 2018](https://doi.org/10.1111/brv.12390)). A practical response is to compare a defensible set of alternative chronograms after they have been estimated, rather than betting everything on a single, computationally intensive "gold-standard" analysis and then treating that one tree as settled.
 
 It is method-agnostic. The candidates can come from `BEAST`, `MCMCTree`, `MrBayes`, `chronos`, `treePL`, `RelTime`, or any other dating workflow.
 
@@ -10,85 +10,153 @@ PCR starts from finished chronograms. If you need to generate a set of chronogra
 
 ## What it evaluates
 
-`PhyloChronoRank (PCR)` uses three core metric families. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying ideas each family is trying to capture.
-All reported PCR scores are oriented so that lower is better.
+`PhyloChronoRank (PCR)` uses three core metric families grouped by scope — what part of the tree they evaluate. This prevents double-counting between families while allowing complementary metrics within each family to reinforce one another:
 
-- `pulse preservation`: asks whether a dated tree keeps the same branching rhythm seen in the source phylogram. In practice, this means preserving clustered speciation bursts and quiet intervals instead of smearing them into evenly spaced splits. In this workflow, the pulse family is reported three ways: `burst loss` is the standalone burst-flattening submetric, `pulse preservation (burst)` is the burst-priority composite selector, and `pulse preservation (overall)` is the balanced composite selector. This follows the literature on extracting diversification tempo from phylogenies and on distinguishing burst-like from unusually regular branching patterns ([Nee et al. 1992](https://doi.org/10.1073/pnas.89.17.8322); [Pybus and Harvey 2000](https://doi.org/10.1098/rspb.2000.1278); [Ford et al. 2009](https://doi.org/10.1093/sysbio/syp018)).
+- **Family 1** evaluates radiation zones (cladogenetic bursts)
+- **Family 2** evaluates global tree structure outside bursts
+- **Family 3** evaluates the dating method's parametric behavior (rates and calibration fit)
 
-- `gap burden`: asks how much extra unseen lineage history the dated tree implies relative to the calibration evidence. This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148); [O'Connor and Wills 2016](https://doi.org/10.1093/sysbio/syw039)). Lower is usually better, but it should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)). In PCR, this should be treated as a core metric only when the calibrations are primary evidence. With secondary or congruified ages, the same calculation becomes calibration slack against inherited ages rather than an independent biological diagnostic.
+Within each family, per-metric ranks are averaged; across families, the three family averages are averaged. This ensures no single scope dominates regardless of metric count per family ([Garland et al. 1993](https://doi.org/10.2307/2992183)). These are implementation-level diagnostics rather than named published indices; the citations below support the underlying biological ideas each family is trying to capture. All PCR scores are oriented so that lower is better. Ties use `average` ranking to preserve the rank-sum invariant. When all candidates produce the same raw value on a metric (zero variance), that metric is excluded via `NA` so it cannot dilute discriminatory metrics.
 
-- `rate irregularity`: for each branch, divides the phylogram branch length (substitutions) by the chronogram branch duration (time) to get an implied evolutionary rate. The score rises when those implied rates are too dispersed, jump sharply from parent to child branch, produce too many outlier branches, or lose the positive autocorrelation expected among closely related lineages. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation and autocorrelation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho 2009](https://doi.org/10.1098/rsbl.2008.0729); [Tao et al. 2019](https://doi.org/10.1093/molbev/msz014)).
+### Family 1 — Radiation-Zone Fidelity (1/3)
 
-- `uncertainty width` (optional precision layer): measures how wide the confidence or credible intervals are around estimated node ages. Narrower intervals indicate greater precision, though precision and accuracy are distinct properties. Frequentist confidence intervals and Bayesian credibility intervals arise from different statistical frameworks and are not directly commensurable ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Bromham 2019](https://doi.org/10.1016/j.tree.2019.01.017); [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325); [Tao et al. 2020b](https://academic.oup.com/mbe/article/37/6/1819/5771370)), so they are usually reported side by side rather than collapsed into one score ([Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). PhyloChronoRank scores this layer only when intervals derive from comparable methodology across candidates. The analytical delta-method `RelTime` CI of [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325) is kept as a supplemental diagnostic because it can diverge sharply from bootstrap widths after bound projection.
+**Metrics:** `burst_loss`, `internode_concordance`
+
+This family asks whether a dated tree keeps the same branching rhythm seen in the source phylogram within rapid radiations. In practice, this means preserving the clustered speciation bursts — short internodes packed together — instead of smearing them into evenly spaced splits.
+
+The biological motivation is that substitution-rate bursts associated with speciation events are well documented: [Pagel et al. (2006)](https://doi.org/10.1126/science.1129647) showed that a large fraction of molecular divergence accumulates in punctuational bursts at cladogenesis rather than gradually along branches. The RCS (Relaxed Clock with Spikes) model formalizes this, showing that punctuated molecular evolution is detectable and should be preserved by dating methods ([Manceau et al. 2020](https://doi.org/10.1093/molbev/msaa144)). [Duchêne et al. (2022)](https://doi.org/10.1186/s12862-022-02024-5) showed that standard relaxed-clock models can fail to recover correct divergence times when molecular evolution is punctuated rather than gradual — exactly the failure mode these metrics are designed to catch.
+
+- `burst_loss` — How much of the radiation-burst signal is destroyed during dating. If the phylogram shows a clear cluster of near-simultaneous splits and the chronogram flattens them into a comb, the penalty is high.
+
+- `internode_concordance` — Whether the relative ordering and spacing of internodes within radiation zones is preserved. A phylogram might show three rapid splits followed by a pause; a good chronogram should maintain that same internal tempo, not reshuffle the node sequence.
+
+### Family 2 — Global Chronogram Fidelity (1/3)
+
+**Metrics:** `compression_score`, `tempo_redistribution`, `depth_r2`
+
+Outside radiation zones, the backbone of the tree — the deep splits and the overall pacing of divergence events — should be largely preserved from phylogram to chronogram, modulated by rate variation. Different relaxed-clock models accommodate rate heterogeneity in different ways ([Lartillot et al. 2016](https://doi.org/10.1098/rstb.2015.0132); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193)), and model choice directly affects how faithfully backbone timing is recovered. This family checks whether the dating method introduced global distortions.
+
+- `compression_score` — Detects places where the chronogram collapses well-separated phylogram branches into near-simultaneous splits that were not in the original tree. This flags artificial compression — a known artifact where prior specifications and clock model choices can systematically distort branch lengths ([Bromham et al. 2018](https://doi.org/10.1111/brv.12390)). A recurrent issue with some dating methods, particularly `RelTime`, where genuine divergence events get squeezed into near-polytomies.
+
+- `tempo_redistribution` — How much the dating method reshuffles the timing of non-burst nodes relative to the phylogram. Measured as the earth mover's distance between non-burst node-depth distributions in the phylogram vs. chronogram. Less redistribution is better: it means the dating method preserved the phylogram's temporal backbone rather than rearranging it.
+
+- `depth_r2` — Overall correlation between node depths in the phylogram and chronogram. A high R² means the chronogram largely respects the relative ordering and spacing of divergence events encoded in the phylogram. Under realistic rate variation this will not be perfect, but a good dating method should not scramble the depth structure.
+
+### Family 3 — Rate & Calibration (1/3)
+
+**Metrics:** `rate_irregularity`, `mean_relative_gap`
+
+For each branch, dividing the phylogram branch length (substitutions) by the chronogram branch duration (time) gives an implied evolutionary rate. This family evaluates whether those implied rates are biologically plausible and whether the chronogram respects its calibration constraints. Rate estimation and calibration fit are the two fundamental axes along which dating methods can fail independently of tree topology ([dos Reis et al. 2016](https://doi.org/10.1038/nrg.2015.8); [Ho & Duchêne 2014](https://doi.org/10.1111/mec.12953)).
+
+- `rate_irregularity` — The score rises when implied rates are too dispersed or produce too many outlier branches. This follows the penalized-likelihood and relaxed-clock literature on among-lineage rate variation ([Sanderson 2002](https://doi.org/10.1093/oxfordjournals.molbev.a003974); [Lepage et al. 2007](https://doi.org/10.1093/molbev/msm193); [Ho & Duchêne 2014](https://doi.org/10.1111/mec.12953)). The metric penalizes erratic, unpatterned rate jumps that suggest overfitting or poor convergence rather than genuine biological rate heterogeneity.
+
+- `mean_relative_gap` — For non-fixed calibration constraints (ranges, not point calibrations), measures how far estimated node ages sit from calibration interval boundaries relative to interval width. A chronogram that places calibrated nodes right at the edge of their prior ranges may be "rail-riding" — constrained by the prior rather than informed by the data ([Szöllősi et al. 2022](https://doi.org/10.1093/sysbio/syab084)). This is the same general idea as ghost-lineage and stratigraphic-congruence measures ([Huelsenbeck 1994](https://doi.org/10.1017/S009483730001294X); [Wills 1999](https://doi.org/10.1080/106351599260148)). It should be interpreted carefully: fossils usually provide minimum ages, not true lineage origins, so a tree that minimizes this too aggressively can simply be too young overall ([Parham et al. 2012](https://doi.org/10.1093/sysbio/syr107)). `NA` when all calibrations are fixed, in which case it drops from Family 3.
+
+### Uncertainty Width (Optional Precision Layer)
+
+Measures how wide the confidence or credible intervals are around estimated node ages. Narrower intervals indicate greater precision, though precision and accuracy are distinct properties. Frequentist confidence intervals and Bayesian credibility intervals arise from different statistical frameworks and are not directly commensurable ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Bromham 2019](https://doi.org/10.1016/j.tree.2019.01.017); [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325); [Tao et al. 2020b](https://academic.oup.com/mbe/article/37/6/1819/5771370)), so they are usually reported side by side rather than collapsed into one score ([Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). PhyloChronoRank scores this layer only when intervals derive from comparable methodology across candidates. The analytical delta-method `RelTime` CI of [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325) is kept as a supplemental diagnostic because it can diverge sharply from bootstrap widths after bound projection.
+
+### Scoring Procedure
+
+1. Rank candidates per metric (lower = better, except `internode_concordance` and `depth_r2` where higher = better).
+2. Zero-variance exclusion: if all candidates tie on a metric, it carries no discriminatory power and is set to `NA`.
+3. Average ranks within each family (`na.rm = TRUE`).
+4. Average the three family scores for the final composite rank.
 
 <details>
 <summary><strong>Compact formulas used in the current implementation</strong></summary>
 
-`burst loss`
+#### Family 1
+
+`burst_loss`
 
 ```text
 burst_loss_clade = max(0, (burst_ref - burst_est) / (burst_ref + 1e-12))
-mean_burst_loss = weighted mean across matched clades
+mean_burst_loss = weighted mean across matched radiation-zone clades
 weight_clade = log(1 + n_tips) * sqrt(n_events)
 ```
 
-What it means: how much burstiness was flattened away in each matched clade, with larger and more event-rich clades given more weight.
+What it means: how much burstiness was flattened away in each matched radiation zone, with larger and more event-rich zones given more weight.
 
-`pulse preservation (overall)`
-
-```text
-local_error = 0.35 * mean_emd + 0.55 * mean_burst_loss + 0.10 * mean_centroid_shift
-global_error = 0.35 * global_emd + 0.65 * global_burst_loss
-pulse_overall = 0.80 * local_error + 0.20 * global_error + 0.20 * (1 - coverage)
-```
-
-What it means: a balanced pulse composite combining local clade rhythm, whole-tree rhythm, and how much of the reference pulse panel was actually matched. Here `emd` is the Earth Mover's Distance between relative event-time distributions, and `coverage = matched_clades / panel_clades`.
-
-`pulse preservation (burst)`
+`internode_concordance`
 
 ```text
-local_error_burst = 0.20 * mean_emd + 0.75 * mean_burst_loss + 0.05 * mean_centroid_shift
-pulse_burst = 0.80 * local_error_burst + 0.20 * global_error + 0.20 * (1 - coverage)
+cv_ref = internode CV in the reference phylogram subclade
+cv_est = internode CV in the candidate chronogram subclade
+concordance = min(cv_ref, cv_est) / max(cv_ref, cv_est)
+internode_concordance = mean(concordance) across matched radiation zones
 ```
 
-What it means: the same pulse family, but with extra weight placed on keeping burst structure.
+What it means: a ratio near 1 means the chronogram preserves the same coefficient of variation of internode distances as the phylogram within each radiation zone. Lower CV concordance means the dating method changed how evenly or unevenly the burst nodes are spaced.
 
-`gap layer`
+#### Family 2
+
+`compression_score`
 
 ```text
-relative_gap_i = (node_age_i - age_min_i) / age_min_i
-mean_relative_gap = mean(relative_gap_i)
+est_near_zero = 0.1% of chronogram total depth
+ref_short_threshold = 5th percentile of phylogram internal branch lengths
+compressed = branches where chronogram_bl <= est_near_zero AND phylogram_bl > ref_short_threshold
+compression_score = n_compressed / n_total_matched_internal
 ```
 
-What it means: the average amount of extra inferred lineage history beyond the calibration minima, scaled by the minimum ages. Use it as a core metric only when the calibration ages are primary evidence. With secondary or congruified ages, report it separately as calibration slack or omit it from the core rank.
+What it means: fraction of internal branches that the chronogram collapsed to near-zero length even though the phylogram shows non-trivial branch lengths there. Higher = more artificial compression.
 
-`rate irregularity`
+`tempo_redistribution`
 
 ```text
-branch_rate = phylogram_branch_length / dated_branch_duration
-rate_irregularity = sd(log_rate) + mean_parent_child_jump + 2 * extreme_rate_frac + autocorr_penalty
-autocorr_penalty = 1 - max(rate_autocorr_spearman, 0)
+Exclude all internal nodes inside radiation zones (BFS traversal from zone roots).
+ref_depths = normalized depths of remaining non-burst internal nodes in phylogram
+est_depths = normalized depths of matching nodes in chronogram (matched by tip-set signature)
+tempo_redistribution = Wasserstein-1 distance between sorted ref_depths and sorted est_depths
 ```
 
-What it means: the score rises when branchwise rates are more dispersed, jump more sharply from parent to child, produce more extreme outlier branches, or lose positive autocorrelation.
+What it means: earth mover's distance between backbone (non-burst) node-depth distributions. Lower = the dating method preserved the phylogram's temporal backbone rather than rearranging it.
 
-`uncertainty width` (optional precision layer)
+`depth_r2`
 
 ```text
-mean_interval_width = mean(width_i)
-median_interval_width = median(width_i)
+Match all internal nodes between phylogram and chronogram by tip-set signature.
+Normalize depths to [0, 1] within each tree.
+depth_r2 = R² from lm(chronogram_depth ~ phylogram_depth)
 ```
 
-What it means: lower values indicate narrower confidence or credible intervals and therefore greater precision. In the Syngnatharia example, these widths come from extracted HPD bars in the published figure rather than from interval metadata embedded in the Newick trees, but PCR can also summarize widths directly from annotated Newick trees when those intervals are present in embedded metadata.
+What it means: overall goodness-of-fit between relative node depths. Higher R² = the chronogram respects the phylogram's depth structure.
 
-`overall family-balanced rank`
+#### Family 3
+
+`rate_irregularity`
 
 ```text
-pulse_family_rank = mean(rank(burst_loss), rank(pulse_burst), rank(pulse_overall))
-overall_mean_rank = mean(pulse_family_rank, available_nonpulse_family_ranks)
+branch_rate = phylogram_branch_length / chronogram_branch_duration
+log_rate_sd = sd(log(branch_rate))
+extreme_rate_frac = fraction of branches with log(rate) outside 1.5 * IQR of log-rates
+rate_irregularity = log_rate_sd + 2 * extreme_rate_frac
 ```
 
-What it means: when pulse, gap, and rate are all used, each contributes `1/3` of the final rank. When gap is omitted because it is not independently informative, pulse and rate each contribute `1/2`.
+What it means: the score rises when branchwise rates are more dispersed or produce more extreme outlier branches.
+
+`mean_relative_gap`
+
+```text
+For each non-fixed (window) calibration:
+  ghost_gap = node_age - age_min
+  relative_gap = ghost_gap / age_min
+mean_relative_gap = mean(relative_gap) across non-fixed calibrations only
+```
+
+What it means: the average amount of extra inferred lineage history beyond the calibration minima, scaled by the minimum ages. Fixed (point) calibrations are excluded because there is no window to evaluate. With secondary or congruified ages, report it separately as calibration slack or omit it from the core rank.
+
+#### Overall scoring
+
+```text
+family_radiation = mean(rank_burst_loss, rank_internode_concordance)
+family_global = mean(rank_compression_score, rank_tempo_redistribution, rank_depth_r2)
+family_ratecal = mean(rank_rate_irregularity, rank_mean_relative_gap)
+overall_rank = mean(family_radiation, family_global, family_ratecal)
+```
+
+What it means: each family contributes exactly `1/3` of the final rank. Within each family, metrics contribute equally. If a metric is `NA` (zero variance or not computable), it drops from its family average. If an entire family is `NA`, the overall score averages across the remaining families.
 
 </details>
 

@@ -320,14 +320,35 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
 
   boot_age <- matrix(NA_real_, nrow = length(int_nodes), ncol = B)
   boot_trees <- if (isTRUE(trees)) vector("list", B) else NULL
-  ok <- logical(B)
-  rep_seeds <- sample.int(.Machine$integer.max, B)
+  ## Some empirical datasets have a low bootstrap convergence rate in treePL
+  ## even when the selected full-tree solution is stable. Allow a much larger
+  ## retry budget so CI generation can complete without changing the target B.
+  max_attempts <- max(as.integer(B * 20L), as.integer(B + 100L))
+  rep_seeds <- sample.int(.Machine$integer.max, max_attempts)
+  n_ok <- 0L
+  attempt_i <- 0L
+
+  record_bootstrap_success <- function(res_i) {
+    if (!is.list(res_i) || !isTRUE(res_i$ok) || n_ok >= B) return(FALSE)
+    n_ok <<- n_ok + 1L
+    boot_age[, n_ok] <<- res_i$ages
+    if (isTRUE(trees)) boot_trees[[n_ok]] <<- res_i$tree
+    TRUE
+  }
 
   if (jobs <= 1L || .Platform$OS.type != "unix") {
-    for (i in seq_len(B)) {
-      if (!quiet) cat("\rRunning treePL bootstrap:", i, "/", B)
+    while (n_ok < B && attempt_i < max_attempts) {
+      attempt_i <- attempt_i + 1L
+      if (!quiet) {
+        cat(
+          "\rRunning treePL bootstrap:",
+          n_ok + 1L, "/", B,
+          " (attempt ", attempt_i, ")",
+          sep = ""
+        )
+      }
       res_i <- .treepl_bootstrap_one(
-        i = i,
+        i = attempt_i,
         phy = phy,
         ref_sig = ref_sig,
         treepl_bin = treepl_bin,
@@ -346,59 +367,72 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
         prefix = prefix,
         quiet = TRUE,
         return_tree = trees,
-        seed = rep_seeds[i]
+        seed = rep_seeds[attempt_i]
       )
-      if (!isTRUE(res_i$ok)) next
-      boot_age[, i] <- res_i$ages
-      ok[i] <- TRUE
-      if (isTRUE(trees)) boot_trees[[i]] <- res_i$tree
+      record_bootstrap_success(res_i)
     }
   } else {
     if (!quiet) {
       cat("Running treePL bootstrap in parallel with ", jobs, " workers\n", sep = "")
     }
-    res_list <- parallel::mclapply(
-      seq_len(B),
-      function(i) {
-        .treepl_bootstrap_one(
-          i = i,
-          phy = phy,
-          ref_sig = ref_sig,
-          treepl_bin = treepl_bin,
-          smooth = smooth,
-          numsites = numsites,
-          node_bounds = node_bounds,
-          prime_lines = prime_lines,
-          thorough = thorough,
-          opt = opt,
-          plsimaniter = plsimaniter,
-          pliter = pliter,
-          omp_threads = omp_threads,
-          min_edge = min_edge,
-          n_sites = n_sites,
-          workdir = workdir,
-          prefix = prefix,
-          quiet = TRUE,
-          return_tree = trees,
-          seed = rep_seeds[i]
+    while (n_ok < B && attempt_i < max_attempts) {
+      batch_n <- min(as.integer(jobs), max_attempts - attempt_i)
+      batch_ids <- seq.int(attempt_i + 1L, length.out = batch_n)
+      attempt_i <- max(batch_ids)
+      res_list <- parallel::mclapply(
+        batch_ids,
+        function(i) {
+          .treepl_bootstrap_one(
+            i = i,
+            phy = phy,
+            ref_sig = ref_sig,
+            treepl_bin = treepl_bin,
+            smooth = smooth,
+            numsites = numsites,
+            node_bounds = node_bounds,
+            prime_lines = prime_lines,
+            thorough = thorough,
+            opt = opt,
+            plsimaniter = plsimaniter,
+            pliter = pliter,
+            omp_threads = omp_threads,
+            min_edge = min_edge,
+            n_sites = n_sites,
+            workdir = workdir,
+            prefix = prefix,
+            quiet = TRUE,
+            return_tree = trees,
+            seed = rep_seeds[i]
+          )
+        },
+        mc.cores = jobs,
+        mc.preschedule = FALSE,
+        mc.set.seed = FALSE
+      )
+      for (res_i in res_list) {
+        record_bootstrap_success(res_i)
+        if (n_ok >= B) break
+      }
+      if (!quiet) {
+        cat(
+          "\rRunning treePL bootstrap:",
+          min(n_ok + 1L, B), "/", B,
+          " (attempt ", attempt_i, ")",
+          sep = ""
         )
-      },
-      mc.cores = jobs,
-      mc.preschedule = FALSE,
-      mc.set.seed = FALSE
-    )
-    for (i in seq_along(res_list)) {
-      res_i <- res_list[[i]]
-      if (!is.list(res_i) || !isTRUE(res_i$ok)) next
-      boot_age[, i] <- res_i$ages
-      ok[i] <- TRUE
-      if (isTRUE(trees)) boot_trees[[i]] <- res_i$tree
+      }
     }
   }
   if (!quiet) cat("\n")
-  if (!any(ok)) stop("treePL bootstrap produced no successful replicates")
+  if (n_ok < B) {
+    stop(
+      "treePL bootstrap produced only ", n_ok,
+      " successful replicates out of ", attempt_i,
+      " attempts."
+    )
+  }
 
-  boot_ok <- boot_age[, ok, drop = FALSE]
+  boot_ok <- boot_age[, seq_len(n_ok), drop = FALSE]
   qfun <- function(probs) {
     apply(
       boot_ok,
@@ -426,9 +460,10 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
     tree = dated_tree,
     ci = ci_df,
     bounds = node_bounds,
-    bootstrap_ok = ok,
-    n_bootstrap_ok = sum(ok)
+    bootstrap_ok = rep(TRUE, n_ok),
+    n_bootstrap_ok = n_ok,
+    n_bootstrap_attempts = attempt_i
   )
-  if (isTRUE(trees)) out$trees <- boot_trees[ok]
+  if (isTRUE(trees)) out$trees <- boot_trees[seq_len(n_ok)]
   out
 }
