@@ -1,0 +1,22 @@
+PhyloChronoRank summary
+Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree
+Candidates: 6
+Pulse panel clades: 29 (min_tips=8, min_events=4)
+Radiation zones: 13
+
+--- Family 1: Radiation-zone fidelity (1/3 weight) ---
+  Best burst loss: RelTime
+  Best internode concordance: chronos_clock
+
+--- Family 2: Global chronogram fidelity (1/3 weight) ---
+  Best compression score: chronos_discrete
+  Best tempo redistribution: RelTime
+  Best depth R2: RelTime
+
+--- Family 3: Rate & Calibration (1/3 weight) ---
+  Best rate irregularity: chronos_clock
+  Mean relative gap: not scored (all calibrations fixed or no calibrations)
+
+Most precise by uncertainty width: chronos_correlated
+
+Core overall winner (3-family balanced): chronos_clock
