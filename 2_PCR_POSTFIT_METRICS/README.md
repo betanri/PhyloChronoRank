@@ -368,102 +368,214 @@ This comparison illustrates a practical point: **when using secondary/congruifie
 
 </details>
 
-## Example 3: Unpublished vertebrate dataset (derived outputs only)
+## Example 3: Unpublished vertebrate dataset (581 tips)
 
-### Quick takeaway
+This large phylogenomic dataset (581 tips, 113 radiation zones) compares six dating methods under sparse (18 congruified calibrations) and dense (57 congruified calibrations) schemes. All calibrations are secondary/congruified ages, so `mean_relative_gap` is NA and Family 3 = rate irregularity only. Raw trees and calibration table are withheld because the dataset is unpublished.
 
-- `chronos_clock` is the core PCR winner in this comparison
-- `treePL` and `RelTime` land in the next mean-rank tier for opposite reasons
-- `RelTime` dominates the pulse and gap layers but is the worst tree on `rate irregularity`
-- the optional uncertainty layer is available here for all six trees on one shared bootstrap scale
-- `chronos_correlated`, `chronos_relaxed`, and `chronos_discrete` are all much worse on pulse, gap, and rate
-- the raw trees and calibration table are not distributed here because this dataset is unpublished
+### Scheme 1: Sparse calibrations (18 congruified ages, 6 candidates)
 
-### Selected candidates
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | 0.081 | 0.906 | 0.041 | 0.392 | 0.189 | 1.320 | 1.0 | 4.3 | 1.0 | **2.11** |
+| `chronos_clock` | 0.160 | 0.876 | 0.012 | 0.338 | 0.086 | 1.500 | 2.5 | 4.2 | 3.0 | 3.22 |
+| `chronos_discrete` | 0.160 | 0.876 | 0.012 | 0.338 | 0.086 | 1.498 | 3.5 | 4.8 | 2.0 | 3.44 |
+| `treePL` | 0.169 | 0.891 | 0.005 | 0.339 | 0.087 | 1.795 | 3.0 | 4.0 | 4.0 | 3.67 |
+| `chronos_correlated` | 0.346 | 0.479 | 0.000 | 0.270 | 0.125 | 3.600 | 6.0 | 1.8 | 5.0 | 4.28 |
+| `chronos_relaxed` | 0.330 | 0.480 | 0.000 | 0.305 | 0.140 | 3.607 | 5.0 | 1.8 | 6.0 | 4.28 |
 
-This example uses `57` calibrations and compares six selected chronograms:
+**Winner: `RelTime` (2.11).** RelTime dominates both radiation-zone preservation (burst loss = 0.081, best internode concordance = 0.906) and rate behavior (rate irregularity = 1.320), giving it the best Family 1 and Family 3 scores. Its Family 2 (global fidelity) is the weakest among the top-4, but the 3-family balance still puts it clearly ahead. `chronos_clock` (3.22) and `chronos_discrete` (3.44) are close runners-up. The non-clock `chronos` models (`correlated`, `relaxed`) have good global fidelity (low tempo redistribution, low compression) but terrible radiation-zone and rate scores.
 
-- `chronos_clock` with `lambda = 1`
-- `chronos_correlated` with `lambda = 0.1`
-- `chronos_relaxed` with `lambda = 0.1`
-- `chronos_discrete` with `lambda = 0.1` and `nb_rate_cat = 5`
-- `treePL` with best `smooth = 100`
-- `RelTime`, projected onto the same merged full calibration bounds used by the local `chronos` and `treePL` pipelines
+### Scheme 2: Dense calibrations (57 congruified ages, 6 unique candidates)
 
-Only derived outputs are shown in this repository. The raw input trees and calibration table are withheld because the dataset is unpublished.
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_discrete` | 0.161 | 0.885 | 0.007 | 0.309 | 0.092 | 1.593 | 3.5 | 4.7 | 1.0 | **3.06** |
+| `RelTime` | 0.130 | 0.897 | 0.031 | 0.353 | 0.151 | 1.638 | 1.5 | 4.8 | 3.5 | 3.28 |
+| `chronos_clock` | 0.161 | 0.885 | 0.009 | 0.308 | 0.091 | 1.593 | 4.0 | 5.0 | 2.0 | 3.67 |
+| `treePL` | 0.161 | 0.883 | 0.005 | 0.309 | 0.093 | 1.859 | 4.5 | 4.3 | 5.0 | 4.61 |
+| `chronos_correlated` | 0.337 | 0.492 | 0.000 | 0.277 | 0.127 | 3.631 | 7.0 | 2.2 | 6.0 | 5.06 |
+| `chronos_relaxed` | 0.320 | 0.494 | 0.000 | 0.282 | 0.129 | 3.635 | 6.0 | 2.2 | 7.0 | 5.06 |
 
-### Figure A: Relative tree-shape comparison across the selected chronograms
+Note: two identical `RelTime` entries (differing only in CI method) are collapsed to one row.
 
-![Unpublished vertebrate tree panel](../figures/unpublished_vertebrate_tree_panel.png)
+**Winner: `chronos_discrete` (3.06), with RelTime a close second (3.28).** With 57 calibrations, the top-4 candidates compress into a tight range (3.06–4.61). `chronos_discrete` edges ahead because it has the best rate irregularity (1.593, tied with `chronos_clock`) while scoring well enough on Families 1–2. RelTime still has the best burst loss (0.130) and internode concordance (0.897), but its slight rate penalty (1.638) and higher compression score (0.031) push it to second. The correlated/relaxed pair remain at the bottom.
 
-This panel compares the reference phylogram and the five originally selected chronograms after scaling each tree to its own maximum root-to-tip depth. The point is to show relative branching tempo, not absolute branch-length units. Tip labels are hidden, and the raw trees are not distributed. The added `RelTime` benchmark appears in the quantitative comparison below rather than in this legacy tree panel.
+### Figure B: Vertebrate — sparse calibrations
 
-### Ranked post-fit results (lower is better)
+![Vertebrate post-fit sparse](../figures/vertebrate_postfit_FEW.png)
 
-The core PCR rank is family-balanced across `pulse`, `mean relative gap`, and `rate irregularity`, so pulse contributes one-third of the final score. The optional uncertainty-width layer is reported separately as a precision check and is not folded into the core rank.
+### Figure C: Vertebrate — dense calibrations
 
-The shared uncertainty table here uses one bootstrap comparison scale. The four `chronos` rows come from the vendored parametric bootstrap helper of [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652), while `treePL` and `RelTime` come from repo-local bootstrap reruns under the same branch-length resampling design. The [Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325) analytical `RelTime` CI is supplemental and not reported in the table because, on these hard-bounded empirical trees, it can live in a completely different numerical universe from the bootstrap widths after bound projection compresses internal durations.
+![Vertebrate post-fit dense](../figures/vertebrate_postfit_MANY.png)
 
-| candidate | burst loss (lower is better) | pulse preservation (burst; lower is better) | pulse preservation (overall; lower is better) | mean relative gap (lower is better) | rate irregularity (lower is better) | uncertainty width (mean CI width, Ma; lower is better) | core overall mean rank (pulse = 1/3; lower is better) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `chronos_clock` | `0.1606` | `0.2106` | `0.2233` | `0.1235` | `1.5915` | `30.04` | `1.67` |
-| `treePL` | `0.1646` | `0.2209` | `0.2332` | `0.1548` | `1.7128` | `11.14` | `2.67` |
-| `RelTime` | `0.0449` | `0.1164` | `0.1539` | `0.0072` | `6.3142` | `6.17` | `2.67` |
-| `chronos_discrete` | `0.3468` | `0.3172` | `0.2909` | `0.4129` | `3.5759` | `23.33` | `4.00` |
-| `chronos_correlated` | `0.3547` | `0.3268` | `0.2989` | `0.3951` | `3.6171` | `18.68` | `4.33` |
-| `chronos_relaxed` | `0.3635` | `0.3302` | `0.3009` | `0.4377` | `3.6971` | `22.43` | `5.67` |
+### Interpretation
 
-### Figure B: Post-fit comparison across metric families
-
-![Unpublished vertebrate post-fit metric families](../figures/unpublished_vertebrate_postfit_metric_family_values.png)
-
-Figure B uses the same family-balanced rule as the table. The three pulse panels are shown separately for transparency, but together they count as one pulse family. `Uncertainty width` is shown separately as an optional precision layer.
-
-### Interpretation for this example
-
-- `chronos_clock` is the core PCR winner in this comparison
-- `treePL` and `RelTime` share the next mean-rank tier, but for opposite reasons
-- `RelTime` is the strongest tree on all three pulse summaries and also has the smallest `mean relative gap`
-- `treePL` has the cleanest `rate irregularity` in the set while staying close to `chronos_clock` on the pulse layer
-- `chronos_discrete` is a weak candidate, and `chronos_correlated` and `chronos_relaxed` are no better
-- `chronos_correlated` and `chronos_relaxed` both score poorly across the full post-fit layer, especially on `rate irregularity` and `mean relative gap`
-- the bundled uncertainty layer is available here for all six trees, with `treePL` intermediate on the shared bootstrap precision layer
-- `RelTime` is the pulse-plus-gap specialist and also the narrowest candidate on the shared bootstrap precision layer
-- the supplemental Tao-style `RelTime` CI file is not mixed into the table because on this hard-bounded point tree it lives in a completely different numerical regime from the bootstrap widths
-- in this dataset, the post-fit layer supports `chronos_clock` as the best balanced tree, `treePL` as the rate-friendlier close alternative, and `RelTime` as the pulse-plus-gap specialist
-
-### Practical decision rule
-
-1. If you want one core PCR winner in this comparison, choose `chronos_clock`.
-2. If you want the closest balanced alternative under the current bundled outputs, `treePL` is the next-best point-estimate candidate.
-3. If your priority is preserving branching tempo and staying closest to the calibration minima, consider `RelTime`, but report its poor `rate irregularity` explicitly.
-4. If you discuss uncertainty in the bundled release, note that the shared table compares `chronos`, `treePL`, and `RelTime` bootstrap widths, while the Tao-style `RelTime` CI is kept supplemental only.
-5. If you report multiple candidate chronograms, the main contrast is `chronos_clock` as the balanced winner, `treePL` as the close rate-friendlier alternative, and `RelTime` as the pulse-plus-gap alternative.
+- With 18 calibrations, `RelTime` wins clearly (2.11) by dominating Families 1 and 3
+- With 57 calibrations, `chronos_discrete` edges ahead (3.06 vs 3.28) in a tighter field — the top-4 are separated by only 1.5 rank points
+- The non-clock `chronos` models are consistently the weakest in both schemes, despite having the best global fidelity (low EMD, low compression). Their poor internode concordance (~0.48) and high rate irregularity (~3.6) sink them
+- All calibrations are secondary/congruified; `mean_relative_gap` is NA
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
-- `examples/unpublished_vertebrate/postfit_metrics/summary_unpublished_vertebrate_postfit_metrics.csv`
-- `examples/unpublished_vertebrate/postfit_metrics/uncertainty_summary_long.csv`
-- `figures/unpublished_vertebrate_tree_panel.png`
-- `figures/unpublished_vertebrate_postfit_metric_family_values.png`
-- `scripts/chronos_ci_helpers.R`
-- `scripts/reltime_helpers.R`
-- `scripts/build_uncertainty_examples.R`
-- `scripts/make_unpublished_vertebrate_postfit_figure.R`
+- `5_DATASETS_FEW_CALS/vertebrate/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `5_DATASETS_MANY_CALS/vertebrate/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `figures/vertebrate_postfit_FEW.png`
+- `figures/vertebrate_postfit_MANY.png`
+- `scripts/run_pcr.R`
+- `scripts/make_all_postfit_figures.R`
 
 </details>
+
+## Example 4: Unpublished Gobiaria dataset (495 tips)
+
+This goby-dominated percomorph dataset (495 tips, 74 radiation zones) compares six methods under sparse (24 congruified calibrations) and dense (75 congruified calibrations) schemes. All calibrations are secondary/congruified, so `mean_relative_gap` is NA.
+
+### Scheme 1: Sparse calibrations (24 congruified ages, 6 candidates)
+
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_correlated` | 0.418 | 0.894 | 0.000 | 0.306 | 0.123 | 1.113 | 3.5 | 2.0 | 1.0 | **2.17** |
+| `RelTime` | 0.357 | 0.886 | 0.000 | 0.345 | 0.074 | 1.159 | 1.5 | 5.0 | 2.0 | 2.83 |
+| `treePL` | 0.373 | 0.852 | 0.000 | 0.325 | 0.103 | 1.362 | 3.0 | 4.0 | 3.0 | 3.33 |
+| `chronos_relaxed` | 0.360 | 0.670 | 0.000 | 0.188 | 0.152 | 4.255 | 4.0 | 1.0 | 6.0 | 3.67 |
+| `chronos_clock` | 0.386 | 0.845 | 0.000 | 0.314 | 0.025 | 1.454 | 4.5 | 4.0 | 4.0 | 4.17 |
+| `chronos_discrete` | 0.386 | 0.845 | 0.000 | 0.314 | 0.025 | 1.454 | 4.5 | 5.0 | 5.0 | 4.83 |
+
+**Winner: `chronos_correlated` (2.17).** An unusual result — `chronos_correlated` wins here because it has the best rate irregularity (1.113) and a strong Family 2 score. In most other datasets, correlated models score poorly, but here the goby phylogeny seems to have enough rate autocorrelation structure that the correlated model fits well. `RelTime` is runner-up (2.83), with the best burst loss (0.357) but weaker global fidelity. Note that `chronos_relaxed` has excellent global fidelity (lowest tempo redistribution = 0.188, best depth R² = 0.152) but catastrophic rate irregularity (4.255).
+
+### Scheme 2: Dense calibrations (75 congruified ages, 6 unique candidates)
+
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_correlated` | 0.357 | 0.859 | 0.000 | 0.331 | 0.080 | 1.219 | 3.0 | 2.5 | 4.0 | **3.17** |
+| `RelTime` | 0.372 | 0.885 | 0.002 | 0.334 | 0.079 | 1.178 | 4.5 | 5.0 | 2.0 | 3.83 |
+| `treePL` | 0.366 | 0.851 | 0.000 | 0.325 | 0.037 | 1.457 | 5.0 | 3.5 | 5.0 | 4.50 |
+| `chronos_discrete` | 0.366 | 0.845 | 0.000 | 0.319 | 0.030 | 1.509 | 5.0 | 3.5 | 6.0 | 4.83 |
+| `chronos_clock` | 0.366 | 0.845 | 0.000 | 0.319 | 0.030 | 1.509 | 5.0 | 4.2 | 7.0 | 5.39 |
+| `chronos_relaxed` | 0.260 | 0.643 | 0.290 | 0.488 | 0.037 | 3.545 | 4.5 | 7.3 | 8.0 | 6.61 |
+
+Note: three identical `RelTime` entries (differing only in CI method) are collapsed to one row. Ranks reflect the full 8-candidate field.
+
+**Winner: `chronos_correlated` again (3.17).** Gobiaria is the one dataset where `chronos_correlated` consistently leads. With 75 calibrations, it retains the best global fidelity balance and still-competitive rate behavior. `RelTime` is again runner-up (3.83) with the best internode concordance (0.885) and rate irregularity (1.178). `chronos_relaxed` collapses under dense calibrations — it develops high compression (0.290), extreme tempo redistribution (0.488), and poor rate behavior (3.545).
+
+### Figure B: Gobiaria — sparse calibrations
+
+![Gobiaria post-fit sparse](../figures/gobiaria_postfit_FEW.png)
+
+### Figure C: Gobiaria — dense calibrations
+
+![Gobiaria post-fit dense](../figures/gobiaria_postfit_MANY.png)
+
+### Interpretation
+
+- `chronos_correlated` wins under both calibration densities — the only dataset where a non-clock `chronos` model leads
+- This likely reflects genuine rate autocorrelation in gobies: closely related lineages evolve at similar rates, so the correlated model fits the data well rather than distorting it
+- `chronos_relaxed` has a split personality: excellent global fidelity with sparse cals, catastrophic performance with dense cals (compression score jumps to 0.290)
+- `chronos_clock` and `chronos_discrete` are consistently mid-tier here, unlike their strong performance in other datasets
+- All calibrations are secondary/congruified; `mean_relative_gap` is NA
+
+<details>
+<summary><strong>Files behind this example</strong></summary>
+
+- `5_DATASETS_FEW_CALS/gobiaria/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `5_DATASETS_MANY_CALS/gobiaria/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `figures/gobiaria_postfit_FEW.png`
+- `figures/gobiaria_postfit_MANY.png`
+- `scripts/run_pcr.R`
+- `scripts/make_all_postfit_figures.R`
+
+</details>
+
+## Example 5: Unpublished Tetraodontiformes dataset (327 tips)
+
+This pufferfish-dominated dataset (327 tips, 47 radiation zones) compares six methods under sparse (38 congruified calibrations) and dense (120 congruified calibrations) schemes. All calibrations are secondary/congruified, so `mean_relative_gap` is NA.
+
+### Scheme 1: Sparse calibrations (38 congruified ages, 6 candidates)
+
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | 0.211 | 0.863 | 0.015 | 0.244 | 0.066 | 2.805 | 1.0 | 5.0 | 1.0 | **2.33** |
+| `chronos_clock` | 0.230 | 0.813 | 0.003 | 0.232 | 0.056 | 3.170 | 2.0 | 5.0 | 2.0 | 3.00 |
+| `chronos_discrete` | 0.238 | 0.808 | 0.003 | 0.222 | 0.060 | 3.415 | 3.0 | 3.7 | 3.0 | 3.22 |
+| `chronos_correlated` | 0.425 | 0.428 | 0.000 | 0.175 | 0.066 | 5.023 | 5.5 | 1.5 | 5.0 | 4.00 |
+| `treePL` | 0.248 | 0.803 | 0.003 | 0.231 | 0.058 | 3.802 | 4.0 | 4.3 | 4.0 | 4.11 |
+| `chronos_relaxed` | 0.425 | 0.428 | 0.000 | 0.175 | 0.066 | 5.023 | 5.5 | 1.5 | 6.0 | 4.33 |
+
+**Winner: `RelTime` (2.33).** RelTime has the best burst loss (0.211), best internode concordance (0.863), and best rate irregularity (2.805). Its only weakness is global fidelity (Family 2 = 5.0), where the correlated/relaxed pair dominate with very low tempo redistribution (0.175). `chronos_clock` (3.00) and `chronos_discrete` (3.22) are solid runners-up. The correlated/relaxed pair again show the split: great global fidelity but dismal radiation-zone concordance (0.428) and rate behavior (5.023).
+
+### Scheme 2: Dense calibrations (120 congruified ages, 6 unique candidates)
+
+| candidate | burst loss | int. concordance | compression | tempo redist. | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | 0.264 | 0.847 | 0.015 | 0.238 | 0.078 | 3.164 | 2.5 | 4.8 | 1.5 | **2.94** |
+| `treePL` | 0.263 | 0.864 | 0.003 | 0.229 | 0.076 | 3.967 | 1.0 | 4.0 | 5.0 | 3.33 |
+| `chronos_clock` | 0.267 | 0.837 | 0.000 | 0.229 | 0.076 | 3.334 | 4.5 | 2.8 | 3.0 | 3.44 |
+| `chronos_discrete` | 0.267 | 0.837 | 0.000 | 0.229 | 0.076 | 3.334 | 4.5 | 3.5 | 4.0 | 4.00 |
+| `chronos_correlated` | 0.303 | 0.769 | 0.003 | 0.220 | 0.073 | 4.973 | 7.0 | 3.7 | 6.0 | 5.56 |
+| `chronos_relaxed` | 0.303 | 0.769 | 0.003 | 0.220 | 0.073 | 4.973 | 6.0 | 4.3 | 7.0 | 5.78 |
+
+Note: two identical `RelTime` entries (differing only in CI method) are collapsed to one row. Ranks reflect the full 7-candidate field.
+
+**Winner: `RelTime` again (2.94).** With 120 calibrations, RelTime retains the lead through the best rate irregularity (3.164) combined with strong radiation-zone scores. `treePL` climbs to a close second (3.33) with the best burst loss (0.263) and best internode concordance (0.864) in the dense scheme. `chronos_clock` and `chronos_discrete` are again nearly identical (3.44 vs 4.00). The correlated/relaxed pair remain at the bottom.
+
+### Figure B: Tetraodontiformes — sparse calibrations
+
+![Tetraodontiformes post-fit sparse](../figures/tetraodontiformes_postfit_FEW.png)
+
+### Figure C: Tetraodontiformes — dense calibrations
+
+![Tetraodontiformes post-fit dense](../figures/tetraodontiformes_postfit_MANY.png)
+
+### Interpretation
+
+- `RelTime` wins under both calibration densities — consistent with the vertebrate sparse-calibration result
+- `treePL` improves from 5th (sparse) to 2nd (dense), benefiting from tighter calibration constraints
+- `chronos_clock` and `chronos_discrete` are reliable mid-tier candidates in both schemes
+- The correlated/relaxed pair are consistently the weakest, with internode concordance ~0.43–0.77 depending on calibration density
+- All calibrations are secondary/congruified; `mean_relative_gap` is NA
+
+<details>
+<summary><strong>Files behind this example</strong></summary>
+
+- `5_DATASETS_FEW_CALS/tetraodontiformes/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `5_DATASETS_MANY_CALS/tetraodontiformes/pcr_rerun_3fam/summary_pcr_metrics.csv`
+- `figures/tetraodontiformes_postfit_FEW.png`
+- `figures/tetraodontiformes_postfit_MANY.png`
+- `scripts/run_pcr.R`
+- `scripts/make_all_postfit_figures.R`
+
+</details>
+
+---
+
+## Cross-dataset summary
+
+Across 5 datasets × 2 calibration densities (10 comparisons):
+
+| Dataset | Tips | Sparse winner | Dense winner |
+| --- | ---: | --- | --- |
+| Syngnatharia | 41 | RelTime | — |
+| Terapontoidei | 105 | chronos_clock | RelTime |
+| Tetraodontiformes | 327 | RelTime | RelTime |
+| Gobiaria | 495 | chronos_correlated | chronos_correlated |
+| Vertebrate | 581 | RelTime | chronos_discrete |
+
+- **RelTime** wins 6 of 9 comparisons (Syngnatharia has only one scheme). It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
+- **chronos_correlated** wins in Gobiaria under both densities — the only dataset where a non-clock `chronos` model leads, suggesting genuine rate autocorrelation in gobies.
+- **chronos_clock/discrete** win when RelTime's rate irregularity is high (Terapontoidei sparse) or when the field is very tight (Vertebrate dense).
+- **Calibration density shifts the winner** in 2 of 4 paired comparisons (Terapontoidei, Vertebrate), confirming that reporting both schemes is more informative than picking one.
+- **The correlated/relaxed pair** is consistently weak except in Gobiaria, despite often having the best global fidelity scores (low EMD, low compression). Their poor internode concordance and rate behavior outweigh the global advantage under the 3-family balance.
 
 <details>
 <summary><strong>Scope notes</strong></summary>
 
-- The pulse-family weights are user-chosen defaults. A small fixed robustness check across five perturbation sets is included in `examples/weight_sensitivity/`; neither the pulse-family winner nor the core PCR winner changed in either bundled example. A broader sensitivity analysis across additional datasets has not yet been done.
-- The pulse family treats the source phylogram as the reference for branching rhythm. That is useful when the question is whether a dated tree preserves the tempo structure visible in the starting phylogram, but it should not be read as proof that the phylogram itself is the true diversification history.
-- `rate irregularity` is useful for comparing candidates within the same dataset, but the absolute values are not meant to be compared across unrelated datasets.
-- Under point calibrations, the gap layer behaves as symmetric calibration slack: older and younger deviations from the calibration point are penalized equally.
-- `gap burden` should be treated as a core family only when the calibration ages are primary evidence. With secondary or congruified ages, the same calculation becomes circular calibration slack and is better reported separately or omitted from the core rank.
+- The family weights (1/3 each) are a design default. A broader sensitivity analysis has not yet been done across all datasets.
+- The pulse family treats the source phylogram as the reference for branching rhythm. This is useful when asking whether a dated tree preserves the tempo structure visible in the starting phylogram, but it should not be read as proof that the phylogram itself is the true diversification history.
+- `rate irregularity` is useful for comparing candidates within the same dataset, but absolute values are not meant to be compared across unrelated datasets.
+- `mean_relative_gap` should be treated as a core family metric only when calibration ages are primary fossil evidence. With secondary or congruified ages, the calculation becomes circular and is omitted from the core rank.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- The optional `uncertainty width` layer is reported separately from the core PCR rank. In the bundled examples it comes from extracted HPD widths in Syngnatharia and from matched `chronos`, `treePL`, and `RelTime` bootstrap summaries in Terapontoidei and the bundled vertebrate release. The Tao-style analytical `RelTime` CI is kept as a supplemental diagnostic and discussed in prose when it diverges sharply from the bootstrap scale. This layer speaks to precision, not accuracy.
+- The optional `uncertainty width` layer is reported separately from the core PCR rank and speaks to precision, not accuracy.
 
 </details>
