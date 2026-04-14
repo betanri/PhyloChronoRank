@@ -62,8 +62,23 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
   if (all(is.na(uw))) {
     plot.new(); text(0.5, 0.5, 'Uncertainty width\nnot available', cex = 1.2)
   } else {
-    uw[is.na(uw)] <- 0
-    plot_panel(uw, labels, cols, 'Uncertainty width', 'Mean CI width (Ma)', 'Optional precision layer')
+    ## Only plot candidates that have CI data (non-NA uncertainty).
+    ## Candidates without CI-embedded trees should not appear here.
+    has_ci <- !is.na(uw)
+    if (sum(has_ci) == 0) {
+      plot.new(); text(0.5, 0.5, 'Uncertainty width\nnot available', cex = 1.2)
+    } else {
+      uw_ci   <- uw[has_ci]
+      lab_ci  <- labels[has_ci]
+      col_ci  <- cols[has_ci]
+      ylim_top <- max(uw_ci, na.rm = TRUE) * 1.30
+      if (ylim_top == 0) ylim_top <- 1
+      bp <- barplot(uw_ci, names.arg = lab_ci, col = col_ci, las = 2,
+                    ylab = 'Mean CI width (Ma)', main = 'Uncertainty width',
+                    ylim = c(0, ylim_top))
+      text(bp, uw_ci, labels = sprintf('%.3f', uw_ci), pos = 3, cex = 0.95)
+      mtext('Lower is better   Optional precision layer', side = 1, line = 6.2, cex = 0.85)
+    }
   }
   plot.new()  ## empty panel to fill row
   ## Row 3
@@ -241,7 +256,7 @@ col_ostario <- c(
 ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
 make_figure(
   ostario_csv,
-  file.path(out_fig, 'ostariophysi_postfit.png'),
+  file.path(out_fig, 'ostariophysi_postfit_v2.png'),
   'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
   short_ostario, col_ostario
 )
