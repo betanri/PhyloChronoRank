@@ -2,6 +2,24 @@
 
 This page documents `scripts/run_dating_grid.R`, the repo-local helper for generating candidate chronograms before running PCR.
 
+> **For PCR-targeted runs, the default runner is `scripts/run_dating_grid_staged.py`, not `run_dating_grid.R` directly.** The staged runner drives the same `run_dating_grid.R` engine in five ordered stages and incrementally populates a `MAIN_OUTPUT_TREES/` folder so PCR-ready trees appear as each stage finishes rather than only at the end of the pipeline. See [`PCR_DATING_STAGED_WORKFLOW.md`](../PCR_DATING_STAGED_WORKFLOW.md) for the canonical spec. The stage order is:
+>
+> 1. `RelTime MEGA` (with both analytical and bootstrap CIs)
+> 2. `treePL` plain winner
+> 3. `chronos` plain winners for all four clock models (`clock`, `correlated`, `discrete`, `relaxed`), seeded by the treePL winner
+> 4. `treePL` CI pass — replaces plain treePL in `MAIN_OUTPUT_TREES`
+> 5. `chronos` CI pass for `clock`, `correlated`, `discrete` — replaces their plain counterparts in `MAIN_OUTPUT_TREES`; `chronos_relaxed` stays plain
+>
+> Early-stage `MAIN_OUTPUT_TREES` already contains a usable PCR candidate set (RelTime with CIs, plain treePL, plain chronos winners) before the expensive CI passes finish. The sections below describing `run_dating_grid.R` still apply — the staged runner just orchestrates calls to that same R script.
+>
+> ```bash
+> python3 scripts/run_dating_grid_staged.py \
+>   --phylogram=PATH/TO/phylogram.tre \
+>   --calibrations-csv=PATH/TO/calibrations.csv \
+>   --outdir=PATH/TO/dating_out \
+>   --out-prefix=my_dataset
+> ```
+
 ## What It Runs
 
 `scripts/run_dating_grid.R` can run:
@@ -133,6 +151,18 @@ For modest tree sizes, the direct full-tree grid is usually simpler. For very la
 Tree size also affects method behavior itself: [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652) showed that coverage and CI width vary with `n`, and our companion benchmark (`P1` and `P2`) tests this directly by comparing `MAE` across `n = 50`, `150`, and `300` tips for `treePL`, `chronos`, and `RelTime` under the same calibration design.
 
 ## Basic Usage
+
+For PCR-targeted runs, prefer the staged wrapper so `MAIN_OUTPUT_TREES/` is populated incrementally:
+
+```bash
+python3 scripts/run_dating_grid_staged.py \
+  --phylogram=PATH/TO/phylogram.tre \
+  --calibrations-csv=PATH/TO/calibrations.csv \
+  --outdir=PATH/TO/dating_out \
+  --out-prefix=my_dataset
+```
+
+Or, to drive the R engine directly (single-pass, no incremental `MAIN_OUTPUT_TREES`):
 
 ```bash
 Rscript scripts/run_dating_grid.R \
