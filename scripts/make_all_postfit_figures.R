@@ -212,3 +212,20 @@ for (ds in datasets) {
     ds$short, ds$cols
   )
 }
+
+## ---- Ostariophysi ----
+short_ostario <- c(
+  RelTime = 'RelTime', chronos_clock = 'Clock',
+  chronos_correlated = 'Correlated', treePL = 'treePL'
+)
+col_ostario <- c(
+  RelTime = '#d7301f', chronos_clock = '#1b9e77',
+  chronos_correlated = '#d95f0e', treePL = '#6baed6'
+)
+ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
+make_figure(
+  ostario_csv,
+  file.path(out_fig, 'ostariophysi_postfit.png'),
+  'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
+  short_ostario, col_ostario
+)

@@ -551,6 +551,10 @@ This example is notable for exposing a **tipward compression bias** in `chronos`
 
 **Winner: `RelTime` (1.67).** RelTime wins decisively through the best internode concordance (0.895), best depth R² (0.104), and best rate irregularity (1.052). Its compression score (0.018) is minimal: only 1.8% of internal branches are collapsed to near-zero. In contrast, `chronos_correlated` collapses 16.1% of branches, and `chronos_clock` collapses 11.0%. `treePL` has zero compression but weaker radiation-zone preservation (burst loss = 0.282) and a lower depth R² (0.054).
 
+### Figure: Post-fit comparison across metric families
+
+![Ostariophysi post-fit evaluation](../figures/ostariophysi_postfit.png)
+
 ### The chronos tipward compression bias
 
 The `compression_score` metric exposes a systematic problem with `chronos` on this dataset. Both clock models compress branches preferentially in tipward (recent) radiation zones, converting genuine short-but-nonzero internodes into near-zero-length branches:
