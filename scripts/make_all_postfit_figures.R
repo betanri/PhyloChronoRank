@@ -214,18 +214,30 @@ for (ds in datasets) {
 }
 
 ## ---- Ostariophysi ----
+## 5 candidates: two RelTime CI variants (deduped for core metrics), chronos_clock,
+## chronos_correlated, treePL.  All CI-embedded trees except chronos_correlated.
 short_ostario <- c(
-  RelTime = 'RelTime', chronos_clock = 'Clock',
-  chronos_correlated = 'Correlated', treePL = 'treePL'
+  RelTime_tao_CI = 'RelTime(Tao)', RelTime_bootstrap_CI = 'RelTime(Boot)',
+  chronos_clock = 'Clock', chronos_correlated = 'Correlated', treePL = 'treePL'
 )
 col_ostario <- c(
-  RelTime = '#d7301f', chronos_clock = '#1b9e77',
-  chronos_correlated = '#d95f0e', treePL = '#6baed6'
+  RelTime_tao_CI = '#d7301f', RelTime_bootstrap_CI = '#fc8d59',
+  chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e', treePL = '#6baed6'
 )
 ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
-make_figure(
-  ostario_csv,
-  file.path(out_fig, 'ostariophysi_postfit.png'),
-  'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
-  short_ostario, col_ostario
-)
+## mean_relative_gap is inflated to ~3.8M by a single near-zero calibration minimum
+## (age_min = 0.000001 Ma); force it to NA so the panel shows "not scored"
+ostario_override_gap <- TRUE
+if (file.exists(ostario_csv)) {
+  dtmp <- read.csv(ostario_csv, stringsAsFactors = FALSE)
+  dtmp$mean_relative_gap <- NA
+  tmp_csv <- file.path(out_fig, '.ostario_tmp.csv')
+  write.csv(dtmp, tmp_csv, row.names = FALSE)
+  make_figure(
+    tmp_csv,
+    file.path(out_fig, 'ostariophysi_postfit.png'),
+    'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
+    short_ostario, col_ostario
+  )
+  unlink(tmp_csv)
+}
