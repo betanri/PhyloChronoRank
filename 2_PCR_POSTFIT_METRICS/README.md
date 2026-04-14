@@ -129,11 +129,13 @@ What it means: the score rises when branchwise rates are more dispersed, jump mo
 `mean_relative_gap`
 
 ```text
-For each non-fixed (window) calibration:
+For each non-fixed (window) calibration with age_min >= 0.01 Ma:
   ghost_gap = node_age - age_min
   relative_gap = ghost_gap / age_min
-mean_relative_gap = mean(relative_gap) across non-fixed calibrations only
+mean_relative_gap = mean(relative_gap) across qualifying calibrations
 ```
+
+Calibrations with `age_min < 0.01` Ma are excluded because they are effectively unconstrained and produce meaningless ratios. Each qualifying calibration contributes equal weight to the mean.
 
 What it means: the average amount of extra inferred lineage history beyond the calibration minima, scaled by the minimum ages. Fixed (point) calibrations are excluded because there is no window to evaluate. With secondary or congruified ages, report it separately as calibration slack or omit it from the core rank.
 
