@@ -414,52 +414,35 @@ Raw trees, calibration tables, and PCR output CSVs are withheld because the data
 
 </details>
 
-## Example 4: Unpublished Gobiaria dataset (495 tips)
+## Example 4: Unpublished Gobiaria dataset (460 tips)
 
-This goby-dominated percomorph dataset (495 tips, 74 radiation zones) compares six methods under sparse (24 congruified calibrations) and dense (75 congruified calibrations) schemes. All calibrations are secondary/congruified, so `mean_relative_gap` is NA.
+This goby-dominated percomorph dataset (460 tips, 74 radiation zones) uses the McCraney phylogram (Full RAxML, minus Kurtiformes, plus Eosphaeramia Apogoninae) dated with five methods under 75 congruified calibrations. All calibrations are secondary/congruified point ages, so `mean_relative_gap` is NA and Family 3 = rate irregularity only. `chronos_relaxed` is excluded because it lacks CI-embedded trees. All remaining candidates have CI data.
 
-### Scheme 1: Sparse calibrations (24 congruified ages, 6 candidates)
+### Ranked post-fit results (75 congruified ages, 6 candidates)
 
-| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `chronos_correlated` | 0.418 | 0.895 | 0.000 | 0.123 | 1.113 | 3.5 | 2.0 | 1.0 | **2.17** |
-| `RelTime(Tao)` | 0.357 | 0.886 | 0.000 | 0.074 | 1.160 | 1.5 | 4.0 | 2.0 | 2.50 |
-| `treePL` | 0.373 | 0.852 | 0.000 | 0.103 | 1.362 | 3.0 | 3.0 | 3.0 | 3.00 |
-| `chronos_relaxed` | 0.360 | 0.670 | 0.000 | 0.152 | 4.255 | 4.0 | 1.0 | 6.0 | 3.67 |
-| `chronos_clock` | 0.386 | 0.845 | 0.000 | 0.025 | 1.454 | 4.5 | 5.0 | 4.0 | 4.50 |
-| `chronos_discrete` | 0.386 | 0.845 | 0.000 | 0.025 | 1.454 | 4.5 | 6.0 | 5.0 | 5.17 |
+| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | uncertainty width (Ma) | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chronos_correlated` | 0.358 | 0.856 | 0.000 | 0.135 | 1.255 | 0.007 | 3.0 | 2.25 | 1.0 | **2.08** |
+| `RelTime (Tao CI)` | 0.372 | 0.885 | 0.002 | 0.079 | 1.178 | 0.085 | 3.5 | 4.5 | 2.0 | 3.33 |
+| `RelTime (bootstrap CI)` | 0.372 | 0.885 | 0.002 | 0.079 | 1.178 | 0.039 | 3.5 | 4.5 | 2.0 | 3.33 |
+| `treePL` | 0.368 | 0.849 | 0.000 | 0.136 | 1.413 | 0.022 | 4.0 | 1.75 | 3.0 | 2.92 |
+| `chronos_discrete` | 0.356 | 0.839 | 0.000 | 0.035 | 1.548 | 0.018 | 3.5 | 3.75 | 4.5 | 3.92 |
+| `chronos_clock` | 0.356 | 0.839 | 0.000 | 0.035 | 1.548 | 0.022 | 3.5 | 4.25 | 4.5 | 4.08 |
 
-**Winner: `chronos_correlated` (2.17).** An unusual result: `chronos_correlated` wins here because it has the best rate irregularity (1.113) and a strong Family 2 score. In most other datasets, correlated models score poorly, but here the goby phylogeny seems to have enough rate autocorrelation structure that the correlated model fits well. `RelTime` is runner-up (2.50), with the best burst loss (0.357) but weaker global fidelity. Note that `chronos_relaxed` has excellent global fidelity (best depth R² = 0.152) but catastrophic rate irregularity (4.255).
+Note: the two `RelTime` rows are the same tree with different CI methods (Tao analytical vs bootstrap); core metrics are identical and CIs do not contribute to rankings.
 
-### Scheme 2: Dense calibrations (75 congruified ages, 6 unique candidates)
+**Winner: `chronos_correlated` (2.08).** Gobiaria is the only dataset where `chronos_correlated` leads. It has the best rate irregularity (1.255), the best depth R² (0.135), and zero compression, giving it the strongest Family 2 and Family 3 scores. `treePL` is runner-up (2.92) with equally good global fidelity (depth R² = 0.136, zero compression). `RelTime` has the best internode concordance (0.885) and best rate irregularity (1.178) but weaker global fidelity (depth R² = 0.079). `chronos_clock` and `chronos_discrete` are near-identical mid-tier candidates. All uncertainty widths are very small (< 0.1 Ma), with `chronos_correlated` having the narrowest CIs (0.007 Ma).
 
-| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `chronos_correlated` | 0.357 | 0.859 | 0.000 | 0.080 | 1.219 | 3.0 | 1.75 | 4.0 | **2.92** |
-| `RelTime` | 0.372 | 0.885 | 0.002 | 0.079 | 1.178 | 4.5 | 4.5 | 2.0 | 3.67 |
-| `treePL` | 0.366 | 0.851 | 0.000 | 0.037 | 1.457 | 5.0 | 3.75 | 5.0 | 4.58 |
-| `chronos_discrete` | 0.366 | 0.845 | 0.000 | 0.030 | 1.509 | 5.0 | 4.75 | 6.0 | 5.25 |
-| `chronos_clock` | 0.366 | 0.845 | 0.000 | 0.030 | 1.509 | 5.0 | 5.25 | 7.0 | 5.75 |
-| `chronos_relaxed` | 0.260 | 0.643 | 0.290 | 0.037 | 3.545 | 4.5 | 7.0 | 8.0 | 6.50 |
+### Figure: Post-fit comparison across metric families
 
-Note: three identical `RelTime` entries (Tao and bootstrap CIs) are collapsed to one row; core metrics are identical and CIs do not contribute to rankings. Ranks reflect the full 8-candidate field.
-
-**Winner: `chronos_correlated` again (2.92).** Gobiaria is the one dataset where `chronos_correlated` consistently leads. With 75 calibrations, it retains the best global fidelity balance and still-competitive rate behavior. `RelTime` is again runner-up (3.67) with the best internode concordance (0.885) and rate irregularity (1.178). `chronos_relaxed` collapses under dense calibrations, developing high compression (0.290) and poor rate behavior (3.545).
-
-### Figure B: Gobiaria — sparse calibrations
-
-![Gobiaria post-fit sparse](../figures/gobiaria_postfit_FEW.png)
-
-### Figure C: Gobiaria — dense calibrations
-
-![Gobiaria post-fit dense](../figures/gobiaria_postfit_MANY.png)
+![Gobiaria post-fit evaluation](../figures/gobiaria_postfit.png)
 
 ### Interpretation
 
-- `chronos_correlated` wins under both calibration densities, the only dataset where a non-clock `chronos` model leads
+- `chronos_correlated` wins, the only dataset where a non-clock `chronos` model leads
 - This likely reflects genuine rate autocorrelation in gobies: closely related lineages evolve at similar rates, so the correlated model fits the data well rather than distorting it
-- `chronos_relaxed` has a split personality: excellent global fidelity with sparse cals, catastrophic performance with dense cals (compression score jumps to 0.290)
-- `chronos_clock` and `chronos_discrete` are consistently mid-tier here, unlike their strong performance in other datasets
+- `treePL` is a strong runner-up with the best global fidelity (depth R² = 0.136), while `RelTime` has the best radiation-zone concordance (0.885)
+- `chronos_clock` and `chronos_discrete` are consistently mid-tier, unlike their strong performance in other datasets
 - All calibrations are secondary/congruified; `mean_relative_gap` is NA
 
 <details>
@@ -591,21 +574,21 @@ Raw trees, calibration tables, and PCR output CSVs are withheld because the data
 
 ## Cross-dataset summary
 
-Across 6 datasets (10 comparisons; Syngnatharia and Ostariophysi have one scheme each, others have sparse + dense):
+Across 6 datasets (9 comparisons; Syngnatharia, Gobiaria, and Ostariophysi have one scheme each, others have sparse + dense):
 
 | Dataset | Tips | Sparse winner | Dense winner |
 | --- | ---: | --- | --- |
 | Syngnatharia | 41 | RelTime | — |
 | Terapontoidei | 105 | chronos_clock | RelTime |
 | Tetraodontiformes | 327 | RelTime | RelTime |
-| Gobiaria | 495 | chronos_correlated | chronos_correlated |
+| Gobiaria | 460 | — | chronos_correlated |
 | Vertebrate | 581 | RelTime | RelTime |
 | Ostariophysi | 2229 | — | RelTime |
 
-- **RelTime** wins 8 of 10 comparisons. It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
-- **chronos_correlated** wins in Gobiaria under both densities, the only dataset where a non-clock `chronos` model leads, suggesting genuine rate autocorrelation in gobies.
+- **RelTime** wins 7 of 9 comparisons. It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
+- **chronos_correlated** wins in Gobiaria (75 congruified calibrations, McCraney phylogram minus Kurtiformes, 460 tips), the only dataset where a non-clock `chronos` model leads, suggesting genuine rate autocorrelation in gobies.
 - **chronos_clock** wins only in Terapontoidei sparse, where RelTime's rate irregularity is extreme (6.607).
-- **Calibration density shifts the winner** in 1 of 4 paired comparisons (Terapontoidei), confirming that reporting both schemes is more informative than picking one.
+- **Calibration density shifts the winner** in 1 of 3 paired comparisons (Terapontoidei), confirming that reporting both schemes is more informative than picking one.
 - **The correlated/relaxed pair** is consistently weak except in Gobiaria, despite often having good global fidelity scores (low compression). Their poor internode concordance and rate behavior outweigh the global advantage under the 3-family balance.
 - **Chronos tipward compression** is a recurring problem across datasets, most severe in the largest tree (Ostariophysi, 2229 tips). The `compression_score` metric flags this systematically: `chronos_clock` collapses 11% of internal branches to near-zero in Ostariophysi, compared to 0–2% for RelTime and treePL. This bias is concentrated in recent radiation zones.
 

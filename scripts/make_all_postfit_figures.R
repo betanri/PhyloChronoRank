@@ -132,24 +132,14 @@ col_vert <- c(
 )
 
 short_gobi <- c(
-  RelTime_MEGA = 'RelTime', RelTime = 'RelTime',
-  RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
-  RelTime_with_bootstrap_CI = 'RelTime(Boot)', RelTime_with_tao_CI = 'RelTime(Tao)',
-  chronos_clock_lambda10 = 'Clock', chronos_clock_lambda1 = 'Clock',
-  chronos_discrete_lambda0p1_k2 = 'Discrete', chronos_discrete_lambda1_k2 = 'Discrete',
-  chronos_correlated_lambda0p01 = 'Correlated', chronos_correlated_lambda1 = 'Correlated',
-  chronos_relaxed_lambda0p01 = 'Relaxed', chronos_relaxed_lambda1 = 'Relaxed',
-  treePL_smooth0p01 = 'treePL'
+  chronos_clock = 'Clock', chronos_correlated = 'Correlated',
+  chronos_discrete = 'Discrete', treePL = 'treePL',
+  RelTime_with_tao_CI = 'RelTime(Tao)', RelTime_with_bootstrap_CI = 'RelTime(Boot)'
 )
 col_gobi <- c(
-  RelTime_MEGA = '#d7301f', RelTime = '#d7301f',
-  RelTime_MEGA_with_tao_CI = '#d7301f',
-  RelTime_with_bootstrap_CI = '#fc8d59', RelTime_with_tao_CI = '#d7301f',
-  chronos_clock_lambda10 = '#1b9e77', chronos_clock_lambda1 = '#1b9e77',
-  chronos_discrete_lambda0p1_k2 = '#2c7fb8', chronos_discrete_lambda1_k2 = '#2c7fb8',
-  chronos_correlated_lambda0p01 = '#d95f0e', chronos_correlated_lambda1 = '#d95f0e',
-  chronos_relaxed_lambda0p01 = '#7570b3', chronos_relaxed_lambda1 = '#7570b3',
-  treePL_smooth0p01 = '#6baed6'
+  chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e',
+  chronos_discrete = '#2c7fb8', treePL = '#6baed6',
+  RelTime_with_tao_CI = '#d7301f', RelTime_with_bootstrap_CI = '#fc8d59'
 )
 
 short_tforms <- c(
@@ -216,12 +206,20 @@ make_figure(
   short_terap_many, col_terap_many
 )
 
-## ---- Other 3 datasets ----
+## ---- Gobiaria (single scheme, McCraney minus kurtiform) ----
+make_figure(
+  file.path(base_dir, 'GOBIES', 'GOBY_TREES',
+            'McCraney_minus_kurtiform_cals_plus_eosphaeramia_apogoninae',
+            'pcr_output', 'summary_pcr_metrics.csv'),
+  file.path(out_fig, 'gobiaria_postfit.png'),
+  'Gobiaria (75 congruified calibrations): post-fit evaluation, 3 families',
+  short_gobi, col_gobi
+)
+
+## ---- Other 2 datasets (vertebrate, tetraodontiformes) ----
 datasets <- list(
   list(name = 'vertebrate', few_ncal = 18, many_ncal = 57,
        short = short_vert, cols = col_vert),
-  list(name = 'gobiaria', few_ncal = 24, many_ncal = 75,
-       short = short_gobi, cols = col_gobi),
   list(name = 'tetraodontiformes', few_ncal = 38, many_ncal = 120,
        short = short_tforms, cols = col_tforms)
 )
