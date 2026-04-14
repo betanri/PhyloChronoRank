@@ -191,8 +191,8 @@ summary_df$rank_mean_relative_gap <- .zv_nullify(summary_df$mean_relative_gap, s
 ##   burst_loss, internode_concordance
 ##   Both measure how well the chronogram preserves radiation-burst structure.
 ## Family 2: Global chronogram fidelity (1/3 weight)
-##   compression_score, tempo_redistribution, depth_r2
-##   Outside bursts: artifact detection, backbone timing, overall depth correlation.
+##   compression_score, depth_r2
+##   Outside bursts: artifact detection, overall depth correlation.
 ## Family 3: Rate & Calibration (1/3 weight)
 ##   rate_irregularity, mean_relative_gap (NA if all calibrations are fixed)
 ##
@@ -206,7 +206,6 @@ family_radiation <- rowMeans(cbind(
 
 family_global <- rowMeans(cbind(
   summary_df$rank_compression_score,
-  summary_df$rank_tempo_redistribution,
   summary_df$rank_depth_r2
 ), na.rm = TRUE)
 
@@ -246,7 +245,6 @@ lines <- c(
   '',
   '--- Family 2: Global chronogram fidelity (1/3 weight) ---',
   pcr_best_candidate_label(summary_df$compression_score, summary_df$candidate, '  Best compression score: ', '  Compression score: not scored'),
-  pcr_best_candidate_label(summary_df$tempo_redistribution, summary_df$candidate, '  Best tempo redistribution: ', '  Tempo redistribution: not scored'),
   pcr_best_candidate_label(1 - summary_df$depth_r2, summary_df$candidate, '  Best depth R2: ', '  Depth R2: not scored'),
   '',
   '--- Family 3: Rate & Calibration (1/3 weight) ---',

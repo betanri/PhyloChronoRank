@@ -10,7 +10,6 @@ Radiation zones: 18
 
 --- Family 2: Global chronogram fidelity (1/3 weight) ---
   Best compression score: RelTime
-  Best tempo redistribution: MCMCTree
   Best depth R2: RelTime
 
 --- Family 3: Rate & Calibration (1/3 weight) ---

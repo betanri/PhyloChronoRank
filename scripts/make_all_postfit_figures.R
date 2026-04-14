@@ -39,13 +39,12 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
          heights = c(1, 1, 1))
   par(mar = c(8, 5, 4, 1), oma = c(2.6, 0.2, 2.2, 0.2))
 
-  ## Row 1
+  ## Row 1: Family 1 (2 metrics) + Family 2 (2 metrics)
   plot_panel(d$burst_loss, labels, cols, 'Burst loss', 'Burst loss', 'Family 1: Radiation-zone fidelity')
   plot_panel(d$internode_concordance, labels, cols, 'Internode concordance', 'Concordance', 'Family 1: Radiation-zone fidelity', higher_better = TRUE)
   plot_panel(d$compression_score, labels, cols, 'Compression score', 'Compression', 'Family 2: Global fidelity')
-  plot_panel(d$tempo_redistribution, labels, cols, 'Tempo redistribution', 'EMD', 'Family 2: Global fidelity')
-  ## Row 2
   plot_panel(d$depth_r2, labels, cols, 'Depth R\u00B2', 'R\u00B2', 'Family 2: Global fidelity', higher_better = TRUE)
+  ## Row 2: Family 3 (2 metrics) + uncertainty + empty
   plot_panel(d$rate_irregularity, labels, cols, 'Rate irregularity', 'Rate irregularity', 'Family 3: Rate & Calibration')
   vals_gap <- d$mean_relative_gap
   if (all(is.na(vals_gap))) {
@@ -60,6 +59,7 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
     uw[is.na(uw)] <- 0
     plot_panel(uw, labels, cols, 'Uncertainty width', 'Mean CI width (Ma)', 'Optional precision layer')
   }
+  plot.new()  ## empty panel to fill row
   ## Row 3
   par(mar = c(8, 5, 4, 1))
   fam_vals <- rbind(d$family_radiation_score, d$family_global_score, d$family_ratecal_score)
@@ -83,7 +83,7 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
   mtext('Lower is better', side = 1, line = 6.0, cex = 0.85)
 
   mtext(main_title, side = 3, outer = TRUE, line = 0.5, cex = 1.5, font = 2)
-  mtext('Core PCR rank balances radiation-zone fidelity, global chronogram fidelity, and rate+calibration. mean_relative_gap NA (secondary cals). Uncertainty width separate.',
+  mtext('Core PCR rank balances radiation-zone fidelity, global chronogram fidelity, and rate+calibration. mean_relative_gap NA when secondary cals. Uncertainty width separate.',
         side = 1, outer = TRUE, line = 0.5, cex = 0.95)
   dev.off()
   message('Wrote: ', normalizePath(fig_path, winslash = '/'))
@@ -142,7 +142,52 @@ col_tforms <- col_vert  # same colors, extended
 col_tforms['chronos_clock_lambda1'] <- '#1b9e77'
 col_tforms['chronos_discrete_lambda1_k2'] <- '#2c7fb8'
 
-## ---- Generate all figures ----
+## ---- Syngnatharia ----
+short_syn <- c(RelTime = 'RelTime', MCMCTree = 'MCMCTree')
+col_syn <- c(RelTime = '#d7301f', MCMCTree = '#2c7fb8')
+make_figure(
+  file.path(base_dir, 'examples', 'syngnatharia', 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
+  file.path(out_fig, 'syngnatharia_postfit_metric_family_values.png'),
+  'Syngnatharia: post-fit evaluation, 3 families',
+  short_syn, col_syn
+)
+
+## ---- Terapontoidei ----
+short_terap_few <- c(
+  chronos_discrete = 'Discrete', chronos_clock = 'Clock',
+  chronos_correlated = 'Correlated', treePL = 'treePL',
+  chronos_relaxed = 'Relaxed', RelTime = 'RelTime'
+)
+col_terap_few <- c(
+  chronos_discrete = '#2c7fb8', chronos_clock = '#1b9e77',
+  chronos_correlated = '#d95f0e', treePL = '#6baed6',
+  chronos_relaxed = '#7570b3', RelTime = '#d7301f'
+)
+make_figure(
+  file.path(base_dir, 'examples', 'terapontoid', 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
+  file.path(out_fig, 'terapontoid_postfit_FEW.png'),
+  'Terapontoidei (6 calibrations): post-fit evaluation, 3 families',
+  short_terap_few, col_terap_few
+)
+
+short_terap_many <- c(
+  RelTime_MEGA = 'RelTime', chronos_clock_lambda1 = 'Clock',
+  chronos_discrete_lambda1_k2 = 'Discrete', treePL_smooth0p01 = 'treePL',
+  chronos_correlated_lambda0p01 = 'Correlated', chronos_relaxed_lambda0p01 = 'Relaxed'
+)
+col_terap_many <- c(
+  RelTime_MEGA = '#d7301f', chronos_clock_lambda1 = '#1b9e77',
+  chronos_discrete_lambda1_k2 = '#2c7fb8', treePL_smooth0p01 = '#6baed6',
+  chronos_correlated_lambda0p01 = '#d95f0e', chronos_relaxed_lambda0p01 = '#7570b3'
+)
+make_figure(
+  file.path(base_dir, '5_DATASETS_MANY_CALS', 'terapontoidei', 'pcr_rerun_3fam_restored', 'summary_pcr_metrics.csv'),
+  file.path(out_fig, 'terapontoid_postfit_MANY.png'),
+  'Terapontoidei (17 calibrations): post-fit evaluation, 3 families',
+  short_terap_many, col_terap_many
+)
+
+## ---- Other 3 datasets ----
 datasets <- list(
   list(name = 'vertebrate', few_ncal = 18, many_ncal = 57,
        short = short_vert, cols = col_vert),
@@ -154,14 +199,12 @@ datasets <- list(
 
 for (ds in datasets) {
   nm <- ds$name
-  # FEW
   make_figure(
     file.path(base_dir, '5_DATASETS_FEW_CALS', nm, 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
     file.path(out_fig, paste0(nm, '_postfit_FEW.png')),
     paste0(tools::toTitleCase(nm), ' (', ds$few_ncal, ' calibrations): post-fit evaluation, 3 families'),
     ds$short, ds$cols
   )
-  # MANY
   make_figure(
     file.path(base_dir, '5_DATASETS_MANY_CALS', nm, 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
     file.path(out_fig, paste0(nm, '_postfit_MANY.png')),

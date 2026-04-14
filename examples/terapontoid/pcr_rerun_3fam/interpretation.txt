@@ -10,7 +10,6 @@ Radiation zones: 13
 
 --- Family 2: Global chronogram fidelity (1/3 weight) ---
   Best compression score: chronos_discrete
-  Best tempo redistribution: RelTime
   Best depth R2: RelTime
 
 --- Family 3: Rate & Calibration (1/3 weight) ---
