@@ -551,7 +551,7 @@ Note: the two `RelTime` rows are the same tree with different CI methods (Tao an
 
 ### Figure: Post-fit comparison across metric families
 
-![Ostariophysi post-fit evaluation](../figures/ostariophysi_postfit.png)
+![Ostariophysi post-fit evaluation](../figures/ostariophysi_postfit_v2.png)
 
 ### The chronos tipward compression bias
 
