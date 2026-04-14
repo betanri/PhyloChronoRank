@@ -16,7 +16,7 @@ PCR starts from finished chronograms. If you need to generate a set of chronogra
 - **Family 2** evaluates global tree structure outside bursts
 - **Family 3** evaluates the dating method's parametric behavior (rates and calibration fit)
 
-Within each family, per-metric ranks are averaged; across families, the three family averages are averaged. This ensures no single scope dominates regardless of metric count per family. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying biological ideas each family is trying to capture. All PCR scores are oriented so that lower is better. Ties use `average` ranking to preserve the rank-sum invariant. When all candidates produce the same raw value on a metric (zero variance), that metric is excluded via `NA` so it cannot dilute discriminatory metrics.
+Within each family, per-metric ranks are averaged; across families, the three family averages are averaged. This ensures no single scope dominates regardless of metric count per family. These are implementation-level diagnostics rather than named published indices; the citations below support the underlying biological ideas each family is trying to capture. All PCR scores are oriented so that lower is better, except `internode_concordance` and `depth_r2` where higher is better. Ties use `average` ranking to preserve the rank-sum invariant. When all candidates produce the same raw value on a metric (zero variance), that metric is excluded via `NA` so it cannot dilute discriminatory metrics.
 
 ### Family 1 — Radiation-Zone Fidelity (1/3)
 
