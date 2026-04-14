@@ -405,10 +405,8 @@ Note: two identical `RelTime` entries (differing only in CI method) are collapse
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
-- `5_DATASETS_FEW_CALS/vertebrate/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `5_DATASETS_MANY_CALS/vertebrate/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `figures/vertebrate_postfit_FEW.png`
-- `figures/vertebrate_postfit_MANY.png`
+Raw trees, calibration tables, and PCR output CSVs are withheld because the dataset is unpublished.
+
 - `scripts/run_pcr.R`
 - `scripts/make_all_postfit_figures.R`
 
@@ -465,10 +463,8 @@ Note: three identical `RelTime` entries (differing only in CI method) are collap
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
-- `5_DATASETS_FEW_CALS/gobiaria/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `5_DATASETS_MANY_CALS/gobiaria/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `figures/gobiaria_postfit_FEW.png`
-- `figures/gobiaria_postfit_MANY.png`
+Raw trees, calibration tables, and PCR output CSVs are withheld because the dataset is unpublished.
+
 - `scripts/run_pcr.R`
 - `scripts/make_all_postfit_figures.R`
 
@@ -525,10 +521,8 @@ Note: two identical `RelTime` entries (differing only in CI method) are collapse
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
-- `5_DATASETS_FEW_CALS/tetraodontiformes/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `5_DATASETS_MANY_CALS/tetraodontiformes/pcr_rerun_3fam/summary_pcr_metrics.csv`
-- `figures/tetraodontiformes_postfit_FEW.png`
-- `figures/tetraodontiformes_postfit_MANY.png`
+Raw trees, calibration tables, and PCR output CSVs are withheld because the dataset is unpublished.
+
 - `scripts/run_pcr.R`
 - `scripts/make_all_postfit_figures.R`
 
@@ -583,13 +577,10 @@ This tipward compression bias likely arises from how `chronos` distributes time 
 <details>
 <summary><strong>Files behind this example</strong></summary>
 
-- `../Ostario/run1_plusAfro_plusCall/pcr_output/summary_pcr_metrics.csv`
-- `../Ostario/run1_plusAfro_plusCall/pipeline_run/ostario2229_phylogram_used.tre`
-- `../Ostario/run1_plusAfro_plusCall/pipeline_run/chronos/trees/ostario2229_chronos_clock_lambda1.tre`
-- `../Ostario/run1_plusAfro_plusCall/pipeline_run/chronos/trees/ostario2229_chronos_correlated_lambda1.tre`
-- `../Ostario/run1_plusAfro_plusCall/pipeline_run/reltime_mega/ostario2229_RelTime_MEGA_with_tao_CI.tre`
-- `../Ostario/run1_plusAfro_plusCall/pipeline_run/treepl/trees/ostario2229_treePL_smooth0p01_fulltree.tre`
+Raw trees, calibration tables, and PCR output CSVs are withheld because the dataset is unpublished.
+
 - `scripts/run_pcr.R`
+- `scripts/make_all_postfit_figures.R`
 
 </details>
 
