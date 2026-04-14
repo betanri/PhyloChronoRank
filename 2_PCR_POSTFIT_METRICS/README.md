@@ -530,23 +530,23 @@ Raw trees, calibration tables, and PCR output CSVs are withheld because the data
 
 ## Example 6: Unpublished Ostariophysi dataset (2229 tips)
 
-This large freshwater fish dataset (2229 tips, 368 radiation zones) compares four dating methods under a single dense calibration scheme (56 primary minimum-age constraints from the fossil record). Unlike the other unpublished datasets in this README, these are not secondary/congruified ages. Candidates are `chronos_clock`, `chronos_correlated`, `RelTime`, and `treePL`. `mean_relative_gap` is computed but not informative: one calibration pair has `age_min = 0.000001` Ma (essentially zero), which inflates the relative gap to ~3.8 million for all methods and dominates the mean.
+This large freshwater fish dataset (2229 tips, 368 radiation zones) compares four dating methods under a single dense calibration scheme (56 primary minimum-age constraints from the fossil record). Unlike the other unpublished datasets in this README, these are not secondary/congruified ages. Candidates are `chronos_clock`, `chronos_correlated`, `RelTime`, and `treePL`. One calibration pair has `age_min = 0.000001` Ma (essentially unconstrained); calibrations with `age_min < 0.01` Ma are excluded from the relative gap calculation because they produce meaningless ratios.
 
 This example is notable for exposing a **tipward compression bias** in `chronos`: both `chronos_clock` and `chronos_correlated` collapse branches in recent radiations to near-zero length, squeezing genuine divergence events into artificial near-polytomies. The effect is extreme in young clades (e.g., an Australasian-New Guinean radiation dated at 7.9 Ma by `RelTime` is compressed to 0.06–0.56 Ma by `chronos`). `treePL` and `RelTime` do not show this behavior.
 
 ### Ranked post-fit results (56 primary fossil calibrations, 5 candidates)
 
-| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | uncertainty width (Ma) | Fam 1 | Fam 2 | Fam 3 | core rank |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `RelTime (Tao CI)` | 0.248 | 0.895 | 0.018 | 0.104 | 1.052 | 22.14 | 2.5 | 2.0 | 2.0 | **2.17** |
-| `RelTime (bootstrap CI)` | 0.248 | 0.895 | 0.018 | 0.104 | 1.052 | 6.21 | 2.5 | 2.0 | 2.0 | **2.17** |
-| `chronos_clock` | 0.159 | 0.771 | 0.110 | 0.060 | 3.256 | 0.16 | 3.0 | 3.5 | 4.0 | 3.50 |
-| `chronos_correlated` | 0.140 | 0.745 | 0.161 | 0.059 | 3.596 | — | 3.0 | 4.5 | 3.0 | 3.50 |
-| `treePL` | 0.282 | 0.826 | 0.000 | 0.054 | 2.174 | 3.98 | 4.0 | 3.0 | 4.0 | 3.67 |
+| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | mean relative gap | uncertainty width (Ma) | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime (Tao CI)` | 0.248 | 0.895 | 0.018 | 0.104 | 1.052 | 1.395 | 22.14 | 2.5 | 2.0 | 1.5 | **2.00** |
+| `RelTime (bootstrap CI)` | 0.248 | 0.895 | 0.018 | 0.104 | 1.052 | 1.395 | 6.21 | 2.5 | 2.0 | 1.5 | **2.00** |
+| `chronos_clock` | 0.159 | 0.771 | 0.110 | 0.060 | 3.256 | 1.641 | 0.16 | 3.0 | 3.5 | 3.5 | 3.33 |
+| `treePL` | 0.282 | 0.826 | 0.000 | 0.054 | 2.174 | 1.689 | 3.98 | 4.0 | 3.0 | 3.5 | 3.50 |
+| `chronos_correlated` | 0.140 | 0.745 | 0.161 | 0.059 | 3.596 | 1.691 | — | 3.0 | 4.5 | 5.0 | 4.17 |
 
 Note: the two `RelTime` rows are the same tree with different CI methods (Tao analytical vs bootstrap); their core metrics are identical and they share rank 1. The uncertainty-width column is shown separately from the core rank.
 
-**Winner: `RelTime` (2.17).** RelTime wins through the best internode concordance (0.895), best depth R² (0.104), and best rate irregularity (1.052). Its compression score (0.018) is minimal: only 1.8% of internal branches are collapsed to near-zero. In contrast, `chronos_correlated` collapses 16.1% of branches, and `chronos_clock` collapses 11.0%. `treePL` has zero compression but weaker radiation-zone preservation (burst loss = 0.282) and a lower depth R² (0.054). The uncertainty-width column reveals that RelTime Tao CIs are much wider (22.14 Ma) than bootstrap CIs (6.21 Ma), chronos bootstrap CIs are very narrow (0.16 Ma), and treePL bootstrap CIs are intermediate (3.98 Ma). `chronos_correlated` has no CI data available.
+**Winner: `RelTime` (2.00).** RelTime wins through the best internode concordance (0.895), best depth R² (0.104), best rate irregularity (1.052), and best mean relative gap (1.395). Its compression score (0.018) is minimal: only 1.8% of internal branches are collapsed to near-zero. In contrast, `chronos_correlated` collapses 16.1% of branches, and `chronos_clock` collapses 11.0%. `treePL` has zero compression but weaker radiation-zone preservation (burst loss = 0.282) and a lower depth R² (0.054). The uncertainty-width column reveals that RelTime Tao CIs are much wider (22.14 Ma) than bootstrap CIs (6.21 Ma), chronos bootstrap CIs are very narrow (0.16 Ma), and treePL bootstrap CIs are intermediate (3.98 Ma). `chronos_correlated` has no CI data available.
 
 ### Figure: Post-fit comparison across metric families
 

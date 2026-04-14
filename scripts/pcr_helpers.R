@@ -565,7 +565,10 @@ pcr_gap_metrics <- function(dated_tree, calibrations, tol = 1e-4) {
   is_point <- is.finite(detail$age_max) & abs(detail$age_max - detail$age_min) < tol
   detail$gap_mode_row <- ifelse(is_point, 'point', 'window')
   detail$ghost_gap_ma <- ifelse(is_point, abs(detail$ghost_gap_ma_raw), pmax(0, detail$ghost_gap_ma_raw))
-  detail$ghost_relmin <- ifelse(is.finite(detail$age_min) & detail$age_min > 0,
+  ## Skip near-zero age_min (< 0.01 Ma) for relative gap: these are effectively
+
+  ## unconstrained and would blow up the ratio to millions.
+  detail$ghost_relmin <- ifelse(is.finite(detail$age_min) & detail$age_min >= 0.01,
                                 detail$ghost_gap_ma / detail$age_min,
                                 NA_real_)
   detail$window_width <- detail$age_max - detail$age_min

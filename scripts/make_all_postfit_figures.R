@@ -225,19 +225,9 @@ col_ostario <- c(
   chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e', treePL = '#6baed6'
 )
 ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
-## mean_relative_gap is inflated to ~3.8M by a single near-zero calibration minimum
-## (age_min = 0.000001 Ma); force it to NA so the panel shows "not scored"
-ostario_override_gap <- TRUE
-if (file.exists(ostario_csv)) {
-  dtmp <- read.csv(ostario_csv, stringsAsFactors = FALSE)
-  dtmp$mean_relative_gap <- NA
-  tmp_csv <- file.path(out_fig, '.ostario_tmp.csv')
-  write.csv(dtmp, tmp_csv, row.names = FALSE)
-  make_figure(
-    tmp_csv,
-    file.path(out_fig, 'ostariophysi_postfit.png'),
-    'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
-    short_ostario, col_ostario
-  )
-  unlink(tmp_csv)
-}
+make_figure(
+  ostario_csv,
+  file.path(out_fig, 'ostariophysi_postfit.png'),
+  'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
+  short_ostario, col_ostario
+)
