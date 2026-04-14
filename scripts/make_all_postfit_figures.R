@@ -27,8 +27,14 @@ plot_panel <- function(vals, labels, cols, ttl, ylab, fam_label = '', higher_bet
 make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
   if (!file.exists(csv_path)) { message('Skip: ', csv_path); return(invisible(NULL)) }
   d <- read.csv(csv_path, stringsAsFactors = FALSE)
-  # Deduplicate by identical metric fingerprints
-  d <- d[!duplicated(d[, c('burst_loss', 'internode_concordance', 'rate_irregularity')]), ]
+  # Deduplicate by identical metric fingerprints, but keep rows that differ in
+
+  # uncertainty width (so Tao-CI and bootstrap-CI variants both appear).
+  fp_cols <- c('burst_loss', 'internode_concordance', 'rate_irregularity')
+  uw <- d$uncertainty_mean_width_ma
+  uw[is.na(uw)] <- -999          # treat NA as its own level
+  fp <- paste(d$burst_loss, d$internode_concordance, d$rate_irregularity, round(uw, 4), sep = '|')
+  d <- d[!duplicated(fp), ]
   ord <- d$candidate[order(d$rank_mean_core_rank, d$rank_mean_core)]
   d <- d[match(ord, d$candidate), ]
   labels <- vapply(ord, function(x) if (x %in% names(short_labels)) short_labels[[x]] else x, '')
@@ -92,7 +98,7 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
 ## ---- Short labels and color maps ----
 ## Common building blocks
 short_vert <- c(
-  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
   RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
   chronos_clock_lambda100 = 'Clock', chronos_clock_lambda0p1 = 'Clock',
   chronos_discrete_lambda100_k2 = 'Discrete', chronos_discrete_lambda0p01_k2 = 'Discrete',
@@ -101,7 +107,7 @@ short_vert <- c(
   treePL_smooth0p01 = 'treePL'
 )
 col_vert <- c(
-  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#d7301f',
+  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#fc8d59',
   RelTime_MEGA_with_tao_CI = '#d7301f',
   chronos_clock_lambda100 = '#1b9e77', chronos_clock_lambda0p1 = '#1b9e77',
   chronos_discrete_lambda100_k2 = '#2c7fb8', chronos_discrete_lambda0p01_k2 = '#2c7fb8',
@@ -112,7 +118,8 @@ col_vert <- c(
 
 short_gobi <- c(
   RelTime_MEGA = 'RelTime', RelTime = 'RelTime',
-  RelTime_with_bootstrap_CI = 'RelTime', RelTime_with_tao_CI = 'RelTime(Tao)',
+  RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
+  RelTime_with_bootstrap_CI = 'RelTime(Boot)', RelTime_with_tao_CI = 'RelTime(Tao)',
   chronos_clock_lambda10 = 'Clock', chronos_clock_lambda1 = 'Clock',
   chronos_discrete_lambda0p1_k2 = 'Discrete', chronos_discrete_lambda1_k2 = 'Discrete',
   chronos_correlated_lambda0p01 = 'Correlated', chronos_correlated_lambda1 = 'Correlated',
@@ -121,7 +128,8 @@ short_gobi <- c(
 )
 col_gobi <- c(
   RelTime_MEGA = '#d7301f', RelTime = '#d7301f',
-  RelTime_with_bootstrap_CI = '#d7301f', RelTime_with_tao_CI = '#d7301f',
+  RelTime_MEGA_with_tao_CI = '#d7301f',
+  RelTime_with_bootstrap_CI = '#fc8d59', RelTime_with_tao_CI = '#d7301f',
   chronos_clock_lambda10 = '#1b9e77', chronos_clock_lambda1 = '#1b9e77',
   chronos_discrete_lambda0p1_k2 = '#2c7fb8', chronos_discrete_lambda1_k2 = '#2c7fb8',
   chronos_correlated_lambda0p01 = '#d95f0e', chronos_correlated_lambda1 = '#d95f0e',
@@ -130,7 +138,7 @@ col_gobi <- c(
 )
 
 short_tforms <- c(
-  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
   RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
   chronos_clock_lambda1 = 'Clock',
   chronos_discrete_lambda1_k2 = 'Discrete',
@@ -156,12 +164,14 @@ make_figure(
 short_terap_few <- c(
   chronos_discrete = 'Discrete', chronos_clock = 'Clock',
   chronos_correlated = 'Correlated', treePL = 'treePL',
-  chronos_relaxed = 'Relaxed', RelTime = 'RelTime'
+  chronos_relaxed = 'Relaxed', RelTime = 'RelTime',
+  RelTime_with_tao_CI = 'RelTime(Tao)', RelTime_with_bootstrap_CI = 'RelTime(Boot)'
 )
 col_terap_few <- c(
   chronos_discrete = '#2c7fb8', chronos_clock = '#1b9e77',
   chronos_correlated = '#d95f0e', treePL = '#6baed6',
-  chronos_relaxed = '#7570b3', RelTime = '#d7301f'
+  chronos_relaxed = '#7570b3', RelTime = '#d7301f',
+  RelTime_with_tao_CI = '#d7301f', RelTime_with_bootstrap_CI = '#fc8d59'
 )
 make_figure(
   file.path(base_dir, 'examples', 'terapontoid', 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
@@ -171,12 +181,16 @@ make_figure(
 )
 
 short_terap_many <- c(
-  RelTime_MEGA = 'RelTime', chronos_clock_lambda1 = 'Clock',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
+  RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
+  chronos_clock_lambda1 = 'Clock',
   chronos_discrete_lambda1_k2 = 'Discrete', treePL_smooth0p01 = 'treePL',
   chronos_correlated_lambda0p01 = 'Correlated', chronos_relaxed_lambda0p01 = 'Relaxed'
 )
 col_terap_many <- c(
-  RelTime_MEGA = '#d7301f', chronos_clock_lambda1 = '#1b9e77',
+  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#fc8d59',
+  RelTime_MEGA_with_tao_CI = '#d7301f',
+  chronos_clock_lambda1 = '#1b9e77',
   chronos_discrete_lambda1_k2 = '#2c7fb8', treePL_smooth0p01 = '#6baed6',
   chronos_correlated_lambda0p01 = '#d95f0e', chronos_relaxed_lambda0p01 = '#7570b3'
 )
@@ -218,11 +232,11 @@ for (ds in datasets) {
 ## chronos_correlated, treePL.  All CI-embedded trees except chronos_correlated.
 short_ostario <- c(
   RelTime_tao_CI = 'RelTime(Tao)', RelTime_bootstrap_CI = 'RelTime(Boot)',
-  chronos_clock = 'Clock', chronos_correlated = 'Correlated', treePL = 'treePL'
+  chronos_clock = 'Clock', treePL = 'treePL'
 )
 col_ostario <- c(
   RelTime_tao_CI = '#d7301f', RelTime_bootstrap_CI = '#fc8d59',
-  chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e', treePL = '#6baed6'
+  chronos_clock = '#1b9e77', treePL = '#6baed6'
 )
 ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
 make_figure(

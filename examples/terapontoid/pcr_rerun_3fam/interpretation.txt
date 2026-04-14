@@ -1,5 +1,5 @@
 PhyloChronoRank summary
-Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree
+Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre
 Candidates: 6
 Pulse panel clades: 29 (min_tips=8, min_events=4)
 Radiation zones: 13
@@ -16,6 +16,6 @@ Radiation zones: 13
   Best rate irregularity: chronos_clock
   Mean relative gap: not scored (all calibrations fixed or no calibrations)
 
-Most precise by uncertainty width: chronos_correlated
+Uncertainty width: not scored
 
 Core overall winner (3-family balanced): chronos_clock
