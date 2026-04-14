@@ -534,11 +534,66 @@ Note: two identical `RelTime` entries (differing only in CI method) are collapse
 
 </details>
 
+## Example 6: Unpublished Ostariophysi dataset (2229 tips)
+
+This large freshwater fish dataset (2229 tips, 368 radiation zones) compares four dating methods under a single calibration scheme (56 congruified minimum-age constraints). Candidates are `chronos_clock`, `chronos_correlated`, `RelTime`, and `treePL`. All calibrations are secondary/congruified ages, so `mean_relative_gap` is not shown (its absolute values are inflated by a few very young calibration minima, making them non-informative for comparison).
+
+This example is notable for exposing a **tipward compression bias** in `chronos`: both `chronos_clock` and `chronos_correlated` collapse branches in recent radiations to near-zero length, squeezing genuine divergence events into artificial near-polytomies. The effect is extreme in young clades (e.g., an Australasian-New Guinean radiation dated at 7.9 Ma by `RelTime` is compressed to 0.06–0.56 Ma by `chronos`). `treePL` and `RelTime` do not show this behavior.
+
+### Ranked post-fit results (56 congruified ages, 4 candidates)
+
+| candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `RelTime` | 0.248 | 0.895 | 0.018 | 0.104 | 1.052 | 2.0 | 1.5 | 1.5 | **1.67** |
+| `chronos_clock` | 0.159 | 0.771 | 0.110 | 0.060 | 3.256 | 2.5 | 2.5 | 3.0 | 2.67 |
+| `chronos_correlated` | 0.140 | 0.745 | 0.161 | 0.059 | 3.596 | 2.5 | 3.5 | 2.5 | 2.83 |
+| `treePL` | 0.282 | 0.826 | 0.000 | 0.054 | 2.174 | 3.0 | 2.5 | 3.0 | 2.83 |
+
+**Winner: `RelTime` (1.67).** RelTime wins decisively through the best internode concordance (0.895), best depth R² (0.104), and best rate irregularity (1.052). Its compression score (0.018) is minimal: only 1.8% of internal branches are collapsed to near-zero. In contrast, `chronos_correlated` collapses 16.1% of branches, and `chronos_clock` collapses 11.0%. `treePL` has zero compression but weaker radiation-zone preservation (burst loss = 0.282) and a lower depth R² (0.054).
+
+### The chronos tipward compression bias
+
+The `compression_score` metric exposes a systematic problem with `chronos` on this dataset. Both clock models compress branches preferentially in tipward (recent) radiation zones, converting genuine short-but-nonzero internodes into near-zero-length branches:
+
+| method | compression score | what it looks like |
+| --- | ---: | --- |
+| `chronos_correlated` | **0.161** | 16% of internal branches collapsed; young radiations compressed to < 1 Ma |
+| `chronos_clock` | **0.110** | 11% of branches collapsed; same tipward bias, somewhat less severe |
+| `RelTime` | 0.018 | minimal compression; recent radiations preserved at biologically reasonable ages |
+| `treePL` | 0.000 | no compression detected |
+
+This is not a random artifact. Comparing root ages for individual clades across methods reveals that `chronos` systematically underestimates divergence times in recent radiations while preserving backbone (deep) node ages. For example, in one Australasian-New Guinean radiation, `chronos_correlated` estimates a clade age of 0.06 Ma (essentially a hard polytomy), while `RelTime` dates the same clade at 7.9 Ma. This pattern is consistent across multiple young clades in the dataset, including Cypriniformes, Siluriformes, and Characiformes subclades.
+
+The `internode_concordance` metric captures a complementary aspect of this distortion: `chronos_correlated` (0.745) and `chronos_clock` (0.771) show substantially lower concordance than `RelTime` (0.895) or `treePL` (0.826), meaning the variability of branch lengths within radiation zones is not preserved. The compression makes all internodes uniformly near-zero instead of maintaining the phylogram's mix of short and moderately short branches.
+
+This tipward compression bias likely arises from how `chronos` distributes time across a tree with many more tipward branches than backbone branches. When the penalized-likelihood optimization has limited calibration information in recent parts of the tree, the penalty term (lambda) can drive recently diverged lineages toward near-simultaneous splitting. The effect is worse with the correlated model, which smooths rates between adjacent branches and can propagate compression inward from the tips.
+
+### Interpretation
+
+- `RelTime` wins clearly (1.67), with the best scores in Families 1, 2, and 3
+- The dominant signal is `chronos` tipward compression: 11–16% of internal branches are collapsed to near-zero, concentrated in recent radiation zones
+- `treePL` avoids compression entirely (0.000) but has weaker radiation-zone preservation and a lower depth R²
+- `chronos_correlated` has the best burst loss (0.140), but this is misleading: it achieves low burst loss partly because it compresses entire radiation zones rather than selectively smearing individual events. The low internode concordance (0.745) and high compression (0.161) reveal the true picture
+- This dataset highlights why `compression_score` is essential in PCR: without it, `chronos_correlated` would appear competitive on burst loss alone
+
+<details>
+<summary><strong>Files behind this example</strong></summary>
+
+- `../Ostario/run1_plusAfro_plusCall/pcr_output/summary_pcr_metrics.csv`
+- `../Ostario/run1_plusAfro_plusCall/pipeline_run/ostario2229_phylogram_used.tre`
+- `../Ostario/run1_plusAfro_plusCall/pipeline_run/chronos/trees/ostario2229_chronos_clock_lambda1.tre`
+- `../Ostario/run1_plusAfro_plusCall/pipeline_run/chronos/trees/ostario2229_chronos_correlated_lambda1.tre`
+- `../Ostario/run1_plusAfro_plusCall/pipeline_run/reltime_mega/ostario2229_RelTime_MEGA_with_tao_CI.tre`
+- `../Ostario/run1_plusAfro_plusCall/pipeline_run/treepl/trees/ostario2229_treePL_smooth0p01_fulltree.tre`
+- `scripts/run_pcr.R`
+
+</details>
+
 ---
 
 ## Cross-dataset summary
 
-Across 5 datasets × 2 calibration densities (9 comparisons; Syngnatharia has only one scheme):
+Across 6 datasets (10 comparisons; Syngnatharia and Ostariophysi have one scheme each, others have sparse + dense):
 
 | Dataset | Tips | Sparse winner | Dense winner |
 | --- | ---: | --- | --- |
@@ -547,12 +602,14 @@ Across 5 datasets × 2 calibration densities (9 comparisons; Syngnatharia has on
 | Tetraodontiformes | 327 | RelTime | RelTime |
 | Gobiaria | 495 | chronos_correlated | chronos_correlated |
 | Vertebrate | 581 | RelTime | RelTime |
+| Ostariophysi | 2229 | RelTime | — |
 
-- **RelTime** wins 7 of 9 comparisons. It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
+- **RelTime** wins 8 of 10 comparisons. It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
 - **chronos_correlated** wins in Gobiaria under both densities, the only dataset where a non-clock `chronos` model leads, suggesting genuine rate autocorrelation in gobies.
 - **chronos_clock** wins only in Terapontoidei sparse, where RelTime's rate irregularity is extreme (6.607).
 - **Calibration density shifts the winner** in 1 of 4 paired comparisons (Terapontoidei), confirming that reporting both schemes is more informative than picking one.
 - **The correlated/relaxed pair** is consistently weak except in Gobiaria, despite often having good global fidelity scores (low compression). Their poor internode concordance and rate behavior outweigh the global advantage under the 3-family balance.
+- **Chronos tipward compression** is a recurring problem across datasets, most severe in the largest tree (Ostariophysi, 2229 tips). The `compression_score` metric flags this systematically: `chronos` collapses 10–16% of internal branches to near-zero in Ostariophysi, compared to 0–2% for RelTime and treePL. This bias is concentrated in recent radiation zones and worsens with the correlated model.
 
 <details>
 <summary><strong>Scope notes</strong></summary>
