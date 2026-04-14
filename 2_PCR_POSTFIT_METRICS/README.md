@@ -536,11 +536,11 @@ Note: two identical `RelTime` entries (differing only in CI method) are collapse
 
 ## Example 6: Unpublished Ostariophysi dataset (2229 tips)
 
-This large freshwater fish dataset (2229 tips, 368 radiation zones) compares four dating methods under a single calibration scheme (56 congruified minimum-age constraints). Candidates are `chronos_clock`, `chronos_correlated`, `RelTime`, and `treePL`. All calibrations are secondary/congruified ages, so `mean_relative_gap` is not shown (its absolute values are inflated by a few very young calibration minima, making them non-informative for comparison).
+This large freshwater fish dataset (2229 tips, 368 radiation zones) compares four dating methods under a single dense calibration scheme (56 primary minimum-age constraints derived from the fossil record). Unlike the other unpublished datasets in this README, these are not secondary/congruified ages. Candidates are `chronos_clock`, `chronos_correlated`, `RelTime`, and `treePL`. `mean_relative_gap` is computed but not shown in the table because its absolute values are inflated by a few very young calibration minima, making them non-informative for comparison.
 
 This example is notable for exposing a **tipward compression bias** in `chronos`: both `chronos_clock` and `chronos_correlated` collapse branches in recent radiations to near-zero length, squeezing genuine divergence events into artificial near-polytomies. The effect is extreme in young clades (e.g., an Australasian-New Guinean radiation dated at 7.9 Ma by `RelTime` is compressed to 0.06–0.56 Ma by `chronos`). `treePL` and `RelTime` do not show this behavior.
 
-### Ranked post-fit results (56 congruified ages, 4 candidates)
+### Ranked post-fit results (56 primary fossil calibrations, 4 candidates)
 
 | candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | Fam 1 | Fam 2 | Fam 3 | core rank |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -606,7 +606,7 @@ Across 6 datasets (10 comparisons; Syngnatharia and Ostariophysi have one scheme
 | Tetraodontiformes | 327 | RelTime | RelTime |
 | Gobiaria | 495 | chronos_correlated | chronos_correlated |
 | Vertebrate | 581 | RelTime | RelTime |
-| Ostariophysi | 2229 | RelTime | — |
+| Ostariophysi | 2229 | — | RelTime |
 
 - **RelTime** wins 8 of 10 comparisons. It tends to dominate radiation-zone preservation and rate behavior, especially with sparse calibrations.
 - **chronos_correlated** wins in Gobiaria under both densities, the only dataset where a non-clock `chronos` model leads, suggesting genuine rate autocorrelation in gobies.
