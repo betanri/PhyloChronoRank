@@ -1,5 +1,5 @@
 PhyloChronoRank summary
-Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre
+Reference tree: examples/terapontoid/phylogram.tre
 Candidates: 6
 Pulse panel clades: 29 (min_tips=8, min_events=4)
 Radiation zones: 13

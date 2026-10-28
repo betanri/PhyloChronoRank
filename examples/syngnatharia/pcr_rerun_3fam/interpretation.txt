@@ -1,5 +1,5 @@
 PhyloChronoRank summary
-Reference tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre
+Reference tree: examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre
 Candidates: 2
 Pulse panel clades: 41 (min_tips=8, min_events=4)
 Radiation zones: 18
