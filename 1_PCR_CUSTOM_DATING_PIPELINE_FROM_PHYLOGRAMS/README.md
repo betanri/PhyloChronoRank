@@ -2,14 +2,32 @@
 
 This page documents `scripts/run_dating_grid.R`, the repo-local helper for generating candidate chronograms before running PCR.
 
+> **For PCR-targeted runs, the default runner is `scripts/run_dating_grid_staged.py`, not `run_dating_grid.R` directly.** The staged runner calls the same `run_dating_grid.R` engine five times in one output folder. `MAIN_OUTPUT_TREES/` is refreshed after each stage, so PCR-ready trees appear as soon as each stage finishes. See [`PCR_DATING_STAGED_WORKFLOW.md`](../PCR_DATING_STAGED_WORKFLOW.md) for the full spec. The stage order is:
+>
+> 1. `RelTime_MEGA` with both CIs (Tao analytical and bootstrap)
+> 2. `treePL`: prime, cross-validation of smoothing, final dating
+> 3. `chronos` winners for all four clock models (`clock`, `correlated`, `discrete`, `relaxed`), seeded by the treePL tree
+> 4. `treePL` bootstrap CI for the stage-2 tree — replaces plain treePL in `MAIN_OUTPUT_TREES`
+> 5. `chronos` bootstrap CI for `clock`, `correlated`, `discrete` — replaces their plain trees in `MAIN_OUTPUT_TREES`; `chronos_relaxed` stays plain
+>
+> Stages 4 and 5 reuse the trees from stages 2 and 3 (checkpoints in the same folder). They add intervals to those trees; they do not refit them. After stage 3, `MAIN_OUTPUT_TREES` already holds a usable PCR candidate set. The sections below describe `run_dating_grid.R` and also apply to the staged runner.
+>
+> ```bash
+> python3 scripts/run_dating_grid_staged.py \
+>   --phylogram=PATH/TO/phylogram.tre \
+>   --calibrations-csv=PATH/TO/calibrations.csv \
+>   --outdir=PATH/TO/dating_out \
+>   --out-prefix=my_dataset
+> ```
+
 ## What It Runs
 
 `scripts/run_dating_grid.R` can run:
 
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
-- `treePL` across a smoothing grid
-- `RelTime` via MEGA-CC (`megacc` binary required; freely available from [megasoftware.net](https://www.megasoftware.net))
-- optional uncertainty summaries: all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` additionally reports analytical delta-method CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
+- `treePL` in the standard three steps: `prime`, cross-validation over a smoothing grid, then one `thorough` dating run with the CV-selected smoothing (see [treePL](#treepl))
+- `RelTime` via MEGA-CC (`megacc` binary required; freely available from [megasoftware.net](https://www.megasoftware.net)). MEGA-CC is the only RelTime engine in this repo
+- optional uncertainty summaries: all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). Each `treePL` and `RelTime` replicate reruns the real program (`treePL` or `megacc`) on the perturbed phylogram. `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 
 The main point is calibration consistency: all three methods receive exactly the same age constraints. The script reads one shared calibration table, finds the tree node that corresponds to each calibration (MRCAs of the two taxa listed), combines any rows that map to the same node by keeping only the overlap of their age ranges, drops any calibrations that cannot be placed (taxa not found in the tree) or that produce contradictory constraints on the same node (e.g., one row says ≥10 Ma while another says ≤5 Ma), and then passes that single cleaned set of node-age bounds identically to chronos, treePL, and RelTime. The script reports any dropped calibrations at runtime and writes them to `*_calibration_bounds_dropped.csv` (see [Outputs](#outputs)). This ensures that any differences among the resulting chronograms come from the dating methods themselves, not from differences in calibration input.
 
@@ -44,8 +62,8 @@ Operationally, all methods are exposed here through one R-driven workflow:
 
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
-- `RelTime` requires the `megacc` binary (MEGA-CC, freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms). The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file), grafts a temporary mock outgroup at the root (required because MEGA's RelTime cannot calibrate the root node directly), runs `megacc`, strips the outgroup from the output, and cleans tip labels
-- all three methods compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` additionally reports analytical delta-method CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
+- `RelTime` requires the `megacc` binary (MEGA-CC, freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms). The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file), grafts a temporary mock outgroup at the root (MEGA's RelTime cannot calibrate the root node of the input tree, so the outgroup turns the ingroup root into a calibratable node), runs `megacc`, strips the outgroup from the output, and cleans tip labels
+- all three methods compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 - all CI-annotated trees are written as FigTree-ready NEXUS files with `height_95%_HPD` node-bar annotations
 
 This repo can generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
@@ -60,7 +78,7 @@ This workflow is easiest to read if you keep four layers separate:
   - `chronos` is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`). The best-fitting model is selected by `PHIIC` ([Paradis 2013](https://doi.org/10.1016/j.ympev.2013.02.008)) before candidates enter post-fit scoring. `treePL` and `RelTime_MEGA` each produce a single candidate — no model selection applies
 - tuning layer
   - `chronos`: the `--chronos-lambdas` grid (default `0.01,0.1,1,10,100`) controls the smoothing penalty across all four clock models. For the `discrete` model only, `--chronos-discrete-k` (default `2,3,5`) additionally searches the number of rate categories. The best lambda (and k, for discrete) per model is selected by `PHIIC`
-  - `treePL`: the `--treepl-smoothing` grid (default `0.01,0.1,1,10,100`) controls the smoothing parameter. The best smoothing value is selected by treePL's internal cross-validation objective
+  - `treePL`: the `--treepl-smoothing` grid (default `0.01,0.1,1,10,100`) sets the smoothing values that treePL cross-validates. The value with the lowest CV chi-square is used for the one dated `treePL` tree
   - `RelTime_MEGA`: no tuning parameters — RelTime produces a single tree from the input phylogram and calibrations
 - post-fit layer (see [2_PCR_POSTFIT_METRICS](../2_PCR_POSTFIT_METRICS/README.md))
   - PCR, run afterward with `scripts/run_pcr.R`, scores the finished candidate chronograms on a common biological diagnostic set
@@ -120,19 +138,30 @@ In that mode the script:
 
 ## Large Trees And Subset Tuning
 
-A large-tree subset strategy can be useful: tune on a smaller calibration-preserving subset, then rerun the selected settings on the full tree.
+For trees with more than `--subset-tips` tips (default `500`), `run_dating_grid.R` tunes on a smaller calibration-preserving subset (about 200 tips), then uses the selected settings on the full tree:
 
-`run_dating_grid.R` does not automate that subset workflow. If you need it, the practical pattern is:
+- the subset keeps the calibration taxa, the longest and shortest terminal branches, and tips spread across tree depth
+- `chronos` runs its lambda (and k) grid on the subset; the winner of each clock model is then rerun on the full tree
+- `treePL` primes and cross-validates smoothing on the subset; it then primes again and dates the full tree with the selected smoothing
+- `RelTime_MEGA` always runs on the full tree
+- subset trees never go into `MAIN_OUTPUT_TREES`
 
-- build a reduced tree that preserves all calibration taxa
-- keep deep or tempo-extreme parts of the tree rather than using a purely random subset
-- tune `chronos` lambda values and `treePL` smoothing values on that subset
-- rerun the selected settings on the full phylogram with the same shared calibration file
-
-For modest tree sizes, the direct full-tree grid is usually simpler. For very large trees, subset tuning can be the difference between a usable screening pass and an impractically slow one.
+The subset is built with a fixed seed (`--seed`, default `1`), so every stage of a staged run uses the same subset.
 Tree size also affects method behavior itself: [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652) showed that coverage and CI width vary with `n`, and our companion benchmark (`P1` and `P2`) tests this directly by comparing `MAE` across `n = 50`, `150`, and `300` tips for `treePL`, `chronos`, and `RelTime` under the same calibration design.
 
 ## Basic Usage
+
+For PCR-targeted runs, prefer the staged wrapper so `MAIN_OUTPUT_TREES/` is populated incrementally:
+
+```bash
+python3 scripts/run_dating_grid_staged.py \
+  --phylogram=PATH/TO/phylogram.tre \
+  --calibrations-csv=PATH/TO/calibrations.csv \
+  --outdir=PATH/TO/dating_out \
+  --out-prefix=my_dataset
+```
+
+Or, to drive the R engine directly (single-pass, no incremental `MAIN_OUTPUT_TREES`):
 
 ```bash
 Rscript scripts/run_dating_grid.R \
@@ -159,16 +188,17 @@ Rscript scripts/run_dating_grid.R \
 --chronos-models=clock,correlated,relaxed,discrete
 --chronos-discrete-k=5
 --chronos-retries=2
---treepl-smoothing=0.01,0.1,1,10,100
+--treepl-smoothing=0.01,0.1,1,10,100     # geometric series, cross-validated
+--treepl-cv=loo                          # loo (treePL default) or random (faster)
 --treepl-bin=/absolute/path/to/treePL
---treepl-numsites=1000
+--treepl-numsites=1000                   # set to your alignment length
 --treepl-threads=1
 --treepl-thorough=TRUE
 --treepl-prime=TRUE
 --ci-sites=1000
 --treepl-bootstrap-reps=100
 --treepl-bootstrap-jobs=4
---megacc-bootstrap-reps=100
+--reltime-bootstrap-reps=100
 --root-age=123.4
 --out-prefix=my_dataset
 ```
@@ -195,9 +225,12 @@ Rscript scripts/run_dating_grid.R \
   --calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv \
   --outdir=/tmp/pcr_dating_grid_smoke \
   --chronos-lambdas=0.1 \
-  --treepl-smoothing=0.1 \
+  --treepl-smoothing=0.1,1 \
+  --treepl-cv=random \
   --chronos-discrete-k=5
 ```
+
+`treePL` cross-validation needs at least two smoothing values, so the smoke test keeps two.
 
 ## Outputs
 
@@ -208,7 +241,7 @@ The script writes:
   - in the standard full-method comparison, this is the reduced 6-tree table: one retained `chronos` tree per clock model, one retained `treePL` tree, and `RelTime_MEGA`
   - ready for `scripts/run_pcr.R`
 - `full_grid/candidates.csv`
-  - one row per successful dated tree across the full grid
+  - one row per successful dated tree: every `chronos` grid setting, the one CV-selected `treePL` tree, and `RelTime_MEGA`
   - ready for `scripts/run_pcr.R`
 - `<prefix>_all_runs_summary.csv`
   - combined run summary across all requested methods
@@ -227,16 +260,19 @@ The script writes:
 <summary><strong>Method-specific outputs</strong></summary>
 
 - `chronos/trees/*.tre`
-- `chronos/ci/*.csv`
 - `chronos/<prefix>_chronos_runs.csv`
-- `treepl/configs/*.cfg`
-- `treepl/logs/*.log`
-- `treepl/trees/*.tre`
-- `treepl/ci/*.csv`
-- `treepl/<prefix>_treepl_runs.csv`
+- `treepl/configs/<prefix>_treePL_prime.cfg`, `_cv.cfg`, `_smooth<value>.cfg` — one config per step
+- `treepl/logs/*.log` — one log per step
+- `treepl/<prefix>_treePL_cv.out` — treePL's raw CV output (`chisq: (smoothing) score`)
+- `treepl/<prefix>_treePL_cv_scores.csv` — CV score per smoothing value
+- `treepl/trees/<prefix>_treePL_smooth<value>.tre` — the dated treePL tree (CV-selected smoothing)
+- `treepl/<prefix>_treepl_runs.csv` — one row per smoothing value with `cv_chisq` and `cv_selected`
+- `selected_ci/*_ci.csv`, `selected_ci/*_with_CI.tre` — bootstrap CIs for the selected `chronos` and `treePL` trees
 - `reltime_mega/<prefix>_RelTime_MEGA.tre`
 - `reltime_mega/<prefix>_RelTime_MEGA_with_tao_CI.tre` — FigTree NEXUS with Tao analytical CIs
 - `reltime_mega/<prefix>_RelTime_MEGA_tao_ci.csv`
+- `reltime_mega/<prefix>_RelTime_MEGA_with_bootstrap_CI.tre` — FigTree NEXUS with bootstrap CIs
+- `reltime_mega/<prefix>_RelTime_MEGA_bootstrap_ci.csv`
 - `reltime_mega/<prefix>_RelTime_MEGA_run.csv`
 - `reltime_mega/<prefix>_mega_reltime.log`
 - `uncertainty_summary_long.csv`
@@ -288,7 +324,7 @@ The practical review pattern is:
 - inspect `full_grid/candidates.csv` and the run summaries if you want to review the full sensitivity surface
 - compare fit within a method family first
   - for `chronos`, inspect `chronos/<prefix>_chronos_runs.csv`
-  - for `treePL`, inspect `treepl/<prefix>_treepl_runs.csv`
+  - for `treePL`, inspect `treepl/<prefix>_treePL_cv_scores.csv` (a flat CV curve means the smoothing choice is weakly supported)
 - if neighboring settings are near-tied or biologically different, keep more than one candidate rather than pretending the fit surface is sharper than it is
 - then run PCR on the retained candidate set and compare methods on the same post-fit scale
 
@@ -313,13 +349,29 @@ Common patterns are:
 
 The practical rule is simple: do not force those layers into one synthetic winner if they are telling different stories. Report the fit preference, report the PCR preference, and explain the biological consequence of the difference.
 
+## treePL
+
+`treePL` ([Smith and O'Meara 2012](https://academic.oup.com/bioinformatics/article/28/20/2689/203074)) is run in its standard order. Each step has its own config and log in `treepl/configs/` and `treepl/logs/`:
+
+1. **prime** — treePL tests its optimizers and prints the best `opt`, `optad`, `optcvad`, and `moredetail*` lines, then exits without a tree. The pipeline reads those lines and adds them to the next two steps.
+2. **cross-validation** — one `cv` run over the smoothing grid. treePL steps from `cvstart` (largest value) down to `cvstop` by `cvmultstep`, so `--treepl-smoothing` must be a geometric series with at least two values. `--treepl-cv=loo` (default) uses treePL's leave-one-out CV; `--treepl-cv=random` adds `randomcv` (random subsample and replicate CV), which is faster on large trees. The smoothing with the lowest CV chi-square is selected.
+3. **final dating** — one `thorough` run on the full tree with the selected smoothing and the primed lines. This is the `treePL_smooth<value>` candidate.
+
+Smoothing is never chosen by comparing treePL's final penalized-likelihood score across smoothing values. That score always gets smaller as smoothing gets smaller, so it would always pick the smallest value.
+
+If the selected smoothing is the largest or smallest value in the grid, the log prints a warning: the CV optimum may lie outside the grid, so extend the grid and run again.
+
+Set `--treepl-numsites` to your alignment length. treePL uses it in the likelihood and in CV, and the default (`1000`) is only a placeholder.
+
+The `treePL` bootstrap CI reruns the final step (same smoothing, same primed lines) on each Poisson-perturbed phylogram.
+
 ## RelTime via MEGA-CC
 
-The pipeline uses MEGA-CC's RelTime implementation ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/); [Tamura, Tao, and Kumar 2018](https://pubmed.ncbi.nlm.nih.gov/29893954/)) as its RelTime engine. The `megacc` binary is required and is freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms.
+The pipeline uses MEGA-CC's RelTime implementation ([Tamura et al. 2012](https://pubmed.ncbi.nlm.nih.gov/23129628/); [Tamura, Tao, and Kumar 2018](https://pubmed.ncbi.nlm.nih.gov/29893954/)) as its only RelTime engine. The `megacc` binary is required and is freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms. (`--methods=reltime` is accepted as an alias for `reltime_mega`.)
 
-The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file) from the same shared calibration set used by `chronos` and `treePL`. Because MEGA's RelTime cannot constrain the root node directly — it requires a designated outgroup lineage external to all calibrated nodes — the pipeline excludes the root calibration and grafts a temporary single-lineage mock outgroup at the base of the tree before invoking `megacc`. Without this step, the root age is left unconstrained and deep-node confidence intervals can span the entire tree depth. After the run, the mock outgroup is stripped from the output tree, and tip labels are cleaned (MEGA adds quotes and replaces underscores with spaces).
+The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file) from the same shared calibration set used by `chronos` and `treePL`. MEGA's RelTime cannot calibrate the root node of the tree it receives. So the pipeline grafts a temporary single-lineage mock outgroup below the root before it calls `megacc`. The original root then becomes an ordinary internal node, and its calibration is applied like any other. Without this step, the root age is left unconstrained and deep-node confidence intervals can span the entire tree depth. After the run, the mock outgroup is stripped from the output tree, and tip labels are cleaned (MEGA adds quotes and replaces underscores with spaces).
 
-Confidence intervals are computed two ways: (1) analytical delta-method CIs parsed from MEGA's native NEXUS output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)), and (2) Poisson branch-length bootstrap CIs ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)), where each replicate perturbs the phylogram's branch lengths, runs `megacc` on the perturbed tree, and collects node ages for percentile CIs. Both CI types produce FigTree-ready NEXUS trees with `height_95%_HPD` node-bar annotations.
+Confidence intervals are computed two ways: (1) analytical CIs parsed from MEGA's native NEXUS output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325)), and (2) Poisson branch-length bootstrap CIs ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)). For the bootstrap, each replicate perturbs the phylogram's branch lengths, runs `megacc` on the perturbed tree with the same calibrations, and collects node ages for percentile CIs (`--reltime-bootstrap-reps`, default `100`). Both CI types produce FigTree-ready NEXUS trees with `height_95%_HPD` node-bar annotations.
 
 ### Usage
 
@@ -347,7 +399,6 @@ R packages:
 - `ape`
 - `geiger` for congruification mode
 - `phytools` if the reference time tree needs ultrametric extension before congruification
-- `quadprog` for full-bound `RelTime` projection
 
 External binaries:
 
@@ -377,12 +428,12 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - duplicate-node conflicts are merged by interval intersection
 - empty intersections are dropped for everyone, not just for one method
 - `RelTime` is run via MEGA-CC (`megacc`); the pipeline auto-generates all input files, grafts a mock outgroup, runs `megacc`, strips the outgroup, and cleans tip labels
-- all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)); `RelTime` additionally reports Tao analytical CIs from MEGA's native output
-- `uncertainty_summary_long.csv` combines uncertainty summaries across all methods on the same comparison scale
-- the Tao-style analytical `RelTime` CI is reported separately only; on hard-bounded empirical trees it can live in a completely different numerical regime from the bootstrap widths because the analytical variance term can explode after bound projection compresses internal durations
-- `treePL` defaults to `thorough = TRUE` and `prime = TRUE`, with a real post-prime optimization pass rather than stopping after the priming step
+- all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652)); `RelTime` also reports Tao analytical CIs from MEGA's native output
+- `uncertainty_summary_long.csv` combines the bootstrap CI summaries of all methods on the same comparison scale; the Tao `RelTime` CI is a supplemental file and is used there only when no `RelTime` bootstrap was run
+- `treePL` defaults to `thorough = TRUE` and `prime = TRUE`; smoothing is selected by treePL cross-validation (see [treePL](#treepl))
 - `uncertainty_summary_long.csv` is written in PCR-ready format for `--uncertainty-csv`
-- in the bracketed benchmarks, `RelTime` is run only under the constraints it can actually consume, which means internal max bounds are not used on the `RelTime` side; those runs therefore compare method-specific usable calibration information rather than a literal all-methods-share-every-bound setup
+- `MAIN_OUTPUT_TREES` holds the best available version of each selected candidate: the CI tree when its CI exists, else the plain tree
+- reruns in the same `--outdir` reuse finished steps (chronos grid trees, treePL CV scores and final tree, MEGA trees, CI tables)
 - `chronos` failures and `treePL` failures are retained in the run summary even when they do not appear in `candidates.csv`
 
 ## Common Issues
@@ -392,6 +443,10 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 - no `megacc` binary found (only relevant if `reltime_mega` is in `--methods`)
   - pass `--megacc-bin=/PATH/TO/megacc`, set `MEGACC_BIN`, or place `megacc` on your `PATH`
   - download MEGA-CC from [megasoftware.net](https://www.megasoftware.net/)
+- `--treepl-smoothing must be a geometric series`
+  - use values with a constant ratio, for example `0.001,0.01,0.1,1,10,100,1000`
+- treePL CV warning that the selected smoothing is at the grid edge
+  - extend `--treepl-smoothing` past that edge and rerun (delete `treepl/<prefix>_treePL_cv_scores.csv` first, or use a new `--outdir`)
 - no successful dated trees written
   - inspect `<prefix>_all_runs_summary.csv` and the method-specific log files first
 - dropped calibration bounds

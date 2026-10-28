@@ -18,9 +18,10 @@ usage <- function() {
       "--phylogram=TARGET.tre",
       "--outdir=OUT",
       "[--calibrations-csv=CALS.csv | --reference-time-tree=REF_TIME.tre]",
-      "[--methods=chronos,treepl,reltime]",
+      "[--methods=chronos,treepl,reltime_mega]",
       "[--chronos-lambdas=0.01,0.1,1,10,100]",
       "[--treepl-smoothing=0.01,0.1,1,10,100]",
+      "[--treepl-cv=loo]",
       "[--chronos-discrete-k=2,3,5]",
       "[--chronos-ci-models=clock,correlated,discrete,relaxed]",
       "[--chronos-attempt-timeout=90]",
@@ -36,6 +37,7 @@ usage <- function() {
       "[--reltime-bootstrap-reps=100]",
       "[--chronos-pml-rds=FIT.rds]",
       "[--calibration-tag=NAME]",
+      "[--seed=1]",
       sep = " "
     ),
     "\n\n",
@@ -46,7 +48,8 @@ usage <- function() {
     "    --calibrations-csv    Pairwise calibration CSV with taxonA,taxonB,age_min[,age_max].\n",
     "    --reference-time-tree Reference ultrametric tree for congruification.\n\n",
     "Optional arguments:\n",
-    "  --methods               Comma list from chronos,treepl,reltime,reltime_mega. Default: chronos,treepl,reltime.\n",
+    "  --methods               Comma list from chronos,treepl,reltime_mega. Default: chronos,treepl,reltime_mega.\n",
+    "                          RelTime runs only through MEGA-CC; 'reltime' is accepted as an alias for reltime_mega.\n",
     "  --megacc-bin            megacc executable for MEGA RelTime. Default: MEGACC_BIN env, PATH megacc.\n",
     "  --phylogram-tree-name   Select named tree from a named-Newick or multi-tree file.\n",
     "  --phylogram-tree-index  1-based fallback tree index. Default: 1.\n",
@@ -65,12 +68,15 @@ usage <- function() {
     "  --chronos-retries       Retries per chronos setting. Default: 2.\n",
     "  --chronos-attempt-timeout Maximum elapsed seconds allowed per chronos attempt. Default: 0 (no timeout).\n",
     "  --chronos-age-start-tree Optional dated tree used only to seed chronos starting ages.\n",
-    "  --treepl-smoothing      Smoothing grid. Default: 0.01,0.1,1,10,100.\n",
+    "  --treepl-smoothing      Smoothing grid for treePL cross-validation; must be a geometric series\n",
+    "                          (constant ratio). Default: 0.01,0.1,1,10,100.\n",
+    "  --treepl-cv             treePL cross-validation type: loo (leave-one-out, treePL default) or random\n",
+    "                          (random subsample and replicate CV; faster on large trees). Default: loo.\n",
     "  --treepl-bin            treePL executable. Default: TREEPL_BIN env, PATH treePL, then ../treePL.\n",
-    "  --treepl-numsites       numsites value written to treePL configs. Default: 1000.\n",
+    "  --treepl-numsites       numsites value written to treePL configs; set to the alignment length. Default: 1000.\n",
     "  --treepl-threads        OMP_NUM_THREADS for treePL. Default: 1.\n",
     "  --treepl-thorough       Use thorough optimization in treePL (strongly recommended). Default: TRUE.\n",
-    "  --treepl-prime          Prime treePL optimizer before full run. Default: TRUE.\n",
+    "  --treepl-prime          Prime treePL optimizer settings before CV and dating. Default: TRUE.\n",
     "  --treepl-opt            treePL optimization algorithm (1=LM, 2=stochastic, 4=auto). Default: not set.\n",
     "  --treepl-plsimaniter    Simulated-annealing iterations for treePL. Default: not set (treePL default).\n",
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
@@ -81,9 +87,10 @@ usage <- function() {
     "  --chronos-ci-reps       chronos bootstrap replicates. Default: 100.\n",
     "  --treepl-bootstrap-reps treePL bootstrap replicates for the shared uncertainty layer. Default: 0 (skip treePL CI).\n",
     "  --treepl-bootstrap-jobs Parallel workers for treePL bootstrap replicates. Default: 1.\n",
-    "  --reltime-bootstrap-reps RelTime bootstrap replicates for the shared uncertainty layer. Default: 100.\n",
+    "  --reltime-bootstrap-reps MEGA RelTime bootstrap replicates (megacc rerun per replicate). Default: 100.\n",
     "  --chronos-pml-rds       Optional RDS containing a phangorn pml.output for nonparametric/semiparametric chronos bootstrap.\n",
-    "  --reltime-sites         Backward-compatible alias for --ci-sites.\n",
+    "  --subset-tips           Trees with more tips than this tune chronos/treePL on a ~200-tip subset. Default: 500.\n",
+    "  --seed                  Random seed (tuning subset, bootstraps). Default: 1.\n",
     "  --help                  Print this message.\n",
     sep = ""
   )
@@ -113,9 +120,6 @@ if (!requireNamespace("ape", quietly = TRUE)) {
 }
 suppressPackageStartupMessages(library(ape))
 
-## quadprog is no longer required -- calibration bounds are now enforced via
-## MEGA-style local rescaling (see .reltime_project_node_ages_local).
-
 script_file_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 if (length(script_file_arg)) {
   script_dir <- dirname(normalizePath(sub("^--file=", "", script_file_arg[1]), winslash = "/", mustWork = TRUE))
@@ -123,9 +127,9 @@ if (length(script_file_arg)) {
   script_dir <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 }
 repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork = TRUE)
-source(file.path(script_dir, "reltime_helpers.R"))
 source(file.path(script_dir, "chronos_ci_helpers.R"))
-source(file.path(script_dir, "treepl_bootstrap_helpers.R"))
+source(file.path(script_dir, "treepl_helpers.R"))
+source(file.path(script_dir, "reltime_mega_helpers.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
 
@@ -207,34 +211,6 @@ scalar_num_or_na <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   if (!is.finite(x)) return(NA_real_)
   x
-}
-
-build_ci_inputs <- function(phy, node_bounds) {
-  root_node <- Ntip(phy) + 1L
-  calib_df <- data.frame(
-    node = node_bounds$node,
-    age.min = node_bounds$age_min,
-    age.max = node_bounds$age_max,
-    stringsAsFactors = FALSE
-  )
-  cal_min <- as.list(stats::setNames(calib_df$age.min, calib_df$node))
-  cal_max <- as.list(stats::setNames(calib_df$age.max, calib_df$node))
-
-  root_var <- 0
-  root_row <- calib_df[calib_df$node == root_node, , drop = FALSE]
-  if (nrow(root_row) &&
-      is.finite(root_row$age.min[1L]) &&
-      is.finite(root_row$age.max[1L]) &&
-      abs(root_row$age.max[1L] - root_row$age.min[1L]) > 1e-10) {
-    root_var <- ((root_row$age.max[1L] - root_row$age.min[1L]) / (2 * 1.96))^2
-  }
-
-  list(
-    root_var = root_var,
-    cal_min = cal_min,
-    cal_max = cal_max,
-    calib_bundle = list(chronos_calib = calib_df)
-  )
 }
 
 make_unscored_uncertainty_row <- function(candidate, source = "not_scored") {
@@ -697,9 +673,29 @@ build_seeded_chronos_calib_from_node_bounds <- function(phy, node_bounds, age_st
   upper <- rep(Inf, total)
   lower[node_bounds$node] <- node_bounds$age_min
   upper[node_bounds$node] <- node_bounds$age_max
-  seed_age <- .reltime_project_node_ages_local(phy, seed_age, lower, upper)
+  seed_age <- project_seed_ages_to_bounds(phy, seed_age, lower, upper)
+  if (is.null(seed_age)) return(calib)
   calib$age.start <- seed_age[node_bounds$node]
   calib
+}
+
+## Clamp seed ages into the node bounds, then raise parents (postorder) so
+## every parent is older than its children. Returns NULL if the seed cannot
+## be made consistent with the bounds; chronos then picks its own start ages.
+project_seed_ages_to_bounds <- function(phy, node_age, lower, upper, eps = 1e-6) {
+  n_tip <- ape::Ntip(phy)
+  node_age <- pmin(pmax(node_age, lower), upper)
+  node_age[seq_len(n_tip)] <- 0
+  po <- ape::reorder.phylo(phy, "postorder")$edge
+  for (k in seq_len(nrow(po))) {
+    p <- po[k, 1L]
+    ch <- po[k, 2L]
+    if (node_age[p] < node_age[ch] + eps) node_age[p] <- min(node_age[ch] + eps, upper[p])
+  }
+  ordered <- all(node_age[phy$edge[, 1L]] > node_age[phy$edge[, 2L]])
+  in_bounds <- all(node_age >= lower - 1e-9 & node_age <= upper + 1e-9)
+  if (!ordered || !in_bounds) return(NULL)
+  node_age
 }
 
 fit_score_chronos <- function(tr) {
@@ -891,18 +887,6 @@ tail_text <- function(path, n = 12L) {
   paste(tail(txt, n), collapse = "\n")
 }
 
-parse_treepl_final_objective <- function(log_path) {
-  if (!file.exists(log_path)) return(NA_real_)
-  txt <- readLines(log_path, warn = FALSE)
-  for (pat in c("after opt calc2:", "after opt calc1:", "exit siman:")) {
-    hits <- grep(pat, txt, fixed = TRUE, value = TRUE)
-    if (!length(hits)) next
-    val <- suppressWarnings(as.numeric(trimws(sub("^.*:\\s*", "", tail(hits, 1L)))))
-    if (is.finite(val)) return(val)
-  }
-  NA_real_
-}
-
 distance_from_one <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   ifelse(is.finite(x) & x > 0, abs(log10(x)), Inf)
@@ -963,28 +947,16 @@ build_representative_candidates <- function(all_df) {
     drop = FALSE
   ]
   if (nrow(treepl_df)) {
-    if (!("treepl_objective" %in% names(treepl_df))) treepl_df$treepl_objective <- NA_real_
-    missing_obj <- !is.finite(treepl_df$treepl_objective)
-    if (any(missing_obj) && "log_file" %in% names(treepl_df)) {
-      treepl_df$treepl_objective[missing_obj] <- vapply(
-        treepl_df$log_file[missing_obj],
-        parse_treepl_final_objective,
-        FUN.VALUE = numeric(1)
-      )
-    }
+    ## Only the CV-selected smoothing is dated, so normally one row is left.
+    if (!("cv_chisq" %in% names(treepl_df))) treepl_df$cv_chisq <- NA_real_
     ord <- order(
-      ifelse(is.finite(treepl_df$treepl_objective), treepl_df$treepl_objective, Inf),
-      distance_from_one(treepl_df$smooth),
-      ifelse(is.finite(treepl_df$smooth), treepl_df$smooth, Inf),
+      ifelse(is.finite(treepl_df$cv_chisq), treepl_df$cv_chisq, Inf),
       treepl_df$candidate
     )
     best <- treepl_df[ord[1L], , drop = FALSE]
     add_i <- add_i + 1L
-    ## Build descriptive candidate name including selected smoothing
-    smooth_str <- fmt_token(best$smooth[1L])
-    treepl_cand_name <- paste0("treePL_smooth", smooth_str)
     reps[[add_i]] <- data.frame(
-      candidate = treepl_cand_name,
+      candidate = best$candidate[1L],
       tree_file = best$tree_file[1L],
       method = "treePL",
       model = "treePL",
@@ -992,33 +964,8 @@ build_representative_candidates <- function(all_df) {
       nb_rate_cat = NA_integer_,
       smooth = best$smooth[1L],
       selected_from_candidate = best$candidate[1L],
-      selection_score = best$treepl_objective[1L],
-      selection_rule = "min_treepl_objective_then_smoothing_closest_to_1",
-      stringsAsFactors = FALSE
-    )
-  }
-
-  rel_df <- all_df[
-    all_df$method == "RelTime" &
-      all_df$status == "OK" &
-      nzchar(all_df$tree_file),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(rel_df)) {
-    best <- rel_df[1L, , drop = FALSE]
-    add_i <- add_i + 1L
-    reps[[add_i]] <- data.frame(
-      candidate = "RelTime",
-      tree_file = best$tree_file[1L],
-      method = "RelTime",
-      model = "RelTime",
-      lambda = NA_real_,
-      nb_rate_cat = NA_integer_,
-      smooth = NA_real_,
-      selected_from_candidate = best$candidate[1L],
-      selection_score = NA_real_,
-      selection_rule = "single_reltime_run",
+      selection_score = best$cv_chisq[1L],
+      selection_rule = "min_treepl_cv_chisq",
       stringsAsFactors = FALSE
     )
   }
@@ -1315,8 +1262,11 @@ build_representative_uncertainty <- function(candidates_df, uncertainty_df) {
   bind_rows_fill(out)
 }
 
-copy_representative_ci_files <- function(outdir, candidates_df, all_df, require_ci = TRUE) {
-  if (!nrow(candidates_df) || is.null(all_df) || !nrow(all_df)) {
+## Fill MAIN_OUTPUT_TREES with the best available version of each selected
+## candidate: the CI-annotated tree when its CI exists, else the plain tree.
+## Later CI stages run in the same output folder and replace plain trees.
+copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
+  if (!nrow(candidates_df)) {
     return(list(ci_dir = "", main_tree_dir = "", candidates_df = candidates_df))
   }
   main_dir <- file.path(outdir, "MAIN_OUTPUT_TREES")
@@ -1326,107 +1276,65 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df, require_
   if (length(existing_ci_csv)) unlink(existing_ci_csv, force = TRUE)
   copied_ci <- FALSE
 
-  is_relaxed_exception <- function(ci_method, cand_name) {
-    identical(ci_method, "chronos") && grepl("^chronos_relaxed_", cand_name)
-  }
-
-  require_existing <- function(path, label, cand_name) {
-    if (!is.character(path) || length(path) != 1L || !nzchar(path) || !file.exists(path)) {
-      stop("Selected candidate ", cand_name, " is missing required ", label, " for MAIN_OUTPUT_TREES.")
+  ci_expected <- function(method, model) {
+    if (identical(method, "treePL")) return(treepl_bootstrap_reps > 0L)
+    if (identical(method, "chronos")) {
+      return(chronos_ci_reps > 0L && tolower(model) %in% chronos_ci_models)
     }
-    path
-  }
-
-  primary_tree_dst <- function(cand_name, ci_method) {
-    if (identical(ci_method, "RelTime")) return(file.path(main_dir, "RelTime_with_bootstrap_CI.tre"))
-    if (identical(ci_method, "RelTime_MEGA")) return(file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre"))
-    file.path(main_dir, paste0(cand_name, "_with_CI.tre"))
+    FALSE
   }
 
   for (i in seq_len(nrow(candidates_df))) {
-    src_id <- candidates_df$selected_from_candidate[i] %||% candidates_df$candidate[i]
-    hit <- all_df[all_df$candidate == src_id, , drop = FALSE]
-    if (!nrow(hit)) next
-    tree_src <- candidates_df$tree_file[i]
     cand_name <- candidates_df$candidate[i]
-    ci_method <- candidates_df$method[i]
+    cand_method <- candidates_df$method[i]
 
-    if (!isTRUE(require_ci)) {
-      plain_dst <- if (identical(ci_method, "RelTime")) {
-        file.path(main_dir, "RelTime.tre")
-      } else if (identical(ci_method, "RelTime_MEGA")) {
-        file.path(main_dir, "RelTime_MEGA.tre")
-      } else {
-        file.path(main_dir, paste0(cand_name, ".tre"))
+    if (identical(cand_method, "RelTime_MEGA")) {
+      mega_dir <- file.path(outdir, "reltime_mega")
+      boot_csv <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_bootstrap_ci.csv"))
+      boot_tre <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_with_bootstrap_CI.tre"))
+      tao_csv  <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_tao_ci.csv"))
+      tao_tre  <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_with_tao_CI.tre"))
+      plain    <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA.tre"))
+      dst <- ""
+      if (copy_if_present(tao_tre, file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre"))) {
+        copied_ci <- copy_if_present(tao_csv, file.path(ci_dir, "RelTime_MEGA_tao_ci.csv")) || copied_ci
+        dst <- file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre")
       }
-      copy_if_present(tree_src, plain_dst)
-      candidates_df$tree_file[i] <- plain_dst
+      if (copy_if_present(boot_tre, file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre"))) {
+        copied_ci <- copy_if_present(boot_csv, file.path(ci_dir, "RelTime_MEGA_ci.csv")) || copied_ci
+        dst <- file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre")
+      }
+      if (!nzchar(dst) && copy_if_present(plain, file.path(main_dir, "RelTime_MEGA.tre"))) {
+        dst <- file.path(main_dir, "RelTime_MEGA.tre")
+      }
+      if (nzchar(dst)) candidates_df$tree_file[i] <- dst
       next
     }
 
-    ## -- Bootstrap / main CI file (skip RelTime — handled below) --
-    fallback_ci_csv <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_ci.csv"))
-    fallback_ci_tre <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_with_CI.tre"))
-    hit_ci_file <- if ("ci_file" %in% names(hit)) hit$ci_file[1L] else ""
-    if (!(ci_method %in% c("RelTime", "RelTime_MEGA")) && !is_relaxed_exception(ci_method, cand_name)) {
-      ci_csv_src <- if (nzchar(hit_ci_file) && file.exists(hit_ci_file)) hit_ci_file else fallback_ci_csv
-      ci_csv_src <- require_existing(ci_csv_src, "CI CSV", cand_name)
-      csv_dst <- file.path(ci_dir, paste0(cand_name, "_ci.csv"))
-      copy_if_present(ci_csv_src, csv_dst)
-      copied_ci <- TRUE
-
-      ci_tree_src <- require_existing(fallback_ci_tre, "CI tree", cand_name)
-      ci_dst <- primary_tree_dst(cand_name, ci_method)
-      copy_if_present(ci_tree_src, ci_dst)
-      candidates_df$tree_file[i] <- ci_dst
-    } else if (!(ci_method %in% c("RelTime", "RelTime_MEGA"))) {
-      ## chronos_relaxed remains the sole plain-tree exception in MAIN_OUTPUT_TREES.
-      plain_dst <- file.path(main_dir, paste0(cand_name, ".tre"))
-      copy_if_present(tree_src, plain_dst)
-      candidates_df$tree_file[i] <- plain_dst
+    src_id <- candidates_df$selected_from_candidate[i] %||% cand_name
+    hit <- all_df[all_df$candidate == src_id, , drop = FALSE]
+    hit_ci_file <- if (nrow(hit) && "ci_file" %in% names(hit)) as.character(hit$ci_file[1L]) else ""
+    if (is.na(hit_ci_file)) hit_ci_file <- ""
+    ci_csv_src <- if (nzchar(hit_ci_file) && file.exists(hit_ci_file)) {
+      hit_ci_file
+    } else {
+      file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_ci.csv"))
     }
+    ci_tree_src <- file.path(outdir, "selected_ci", paste0(prefix, "_", cand_name, "_with_CI.tre"))
 
-    ## -- Tao analytical CI file (RelTime R and MEGA) --
-    if ("tao_ci_file" %in% names(hit) && nzchar(hit$tao_ci_file[1L]) && file.exists(hit$tao_ci_file[1L])) {
-      csv_dst <- file.path(ci_dir, paste0(cand_name, "_tao_ci.csv"))
-      copy_if_present(hit$tao_ci_file[1L], csv_dst)
+    if (file.exists(ci_csv_src) && file.exists(ci_tree_src)) {
+      dst <- file.path(main_dir, paste0(cand_name, "_with_CI.tre"))
+      copy_if_present(ci_tree_src, dst)
+      copy_if_present(ci_csv_src, file.path(ci_dir, paste0(cand_name, "_ci.csv")))
       copied_ci <- TRUE
+    } else {
+      if (ci_expected(cand_method, candidates_df$model[i])) {
+        msg("  no CI available for ", cand_name, "; MAIN_OUTPUT_TREES keeps the plain tree")
+      }
+      dst <- file.path(main_dir, paste0(cand_name, ".tre"))
+      copy_if_present(candidates_df$tree_file[i], dst)
     }
-
-    ## -- RelTime R: copy both CI-annotated trees from reltime/ dir --
-    if (identical(ci_method, "RelTime")) {
-      rt_dir <- file.path(outdir, "reltime")
-      boot_ci_tre <- file.path(rt_dir, paste0(prefix, "_RelTime_with_bootstrap_CI.tre"))
-      tao_ci_tre  <- file.path(rt_dir, paste0(prefix, "_RelTime_with_tao_CI.tre"))
-      hit_ci_file <- require_existing(hit_ci_file, "bootstrap CI CSV", cand_name)
-      csv_dst <- file.path(ci_dir, paste0(cand_name, "_ci.csv"))
-      copy_if_present(hit_ci_file, csv_dst)
-      copied_ci <- TRUE
-      boot_ci_tre <- require_existing(boot_ci_tre, "bootstrap CI tree", cand_name)
-      boot_dst <- file.path(main_dir, "RelTime_with_bootstrap_CI.tre")
-      copy_if_present(boot_ci_tre, boot_dst)
-      candidates_df$tree_file[i] <- boot_dst
-      tao_ci_tre <- require_existing(tao_ci_tre, "Tao CI tree", cand_name)
-      copy_if_present(tao_ci_tre, file.path(main_dir, "RelTime_with_tao_CI.tre"))
-    }
-
-    ## -- RelTime MEGA: copy Tao CI-annotated tree --
-    if (identical(ci_method, "RelTime_MEGA")) {
-      mega_dir <- file.path(outdir, "reltime_mega")
-      mega_boot_csv <- file.path(outdir, "selected_ci", paste0(prefix, "_RelTime_MEGA_bootstrap_ci.csv"))
-      mega_boot_tre <- file.path(outdir, "selected_ci", paste0(prefix, "_RelTime_MEGA_with_bootstrap_CI.tre"))
-      mega_ci_tre <- file.path(mega_dir, paste0(prefix, "_RelTime_MEGA_with_tao_CI.tre"))
-      mega_boot_csv <- require_existing(mega_boot_csv, "MEGA bootstrap CI CSV", cand_name)
-      copy_if_present(mega_boot_csv, file.path(ci_dir, paste0(cand_name, "_ci.csv")))
-      copied_ci <- TRUE
-      mega_boot_tre <- require_existing(mega_boot_tre, "MEGA bootstrap CI tree", cand_name)
-      mega_boot_dst <- file.path(main_dir, "RelTime_MEGA_with_bootstrap_CI.tre")
-      copy_if_present(mega_boot_tre, mega_boot_dst)
-      candidates_df$tree_file[i] <- mega_boot_dst
-      mega_ci_tre <- require_existing(mega_ci_tre, "MEGA Tao CI tree", cand_name)
-      mega_dst <- file.path(main_dir, "RelTime_MEGA_with_tao_CI.tre")
-      copy_if_present(mega_ci_tre, mega_dst)
-    }
+    candidates_df$tree_file[i] <- dst
   }
 
   list(
@@ -1436,337 +1344,9 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df, require_
   )
 }
 
-resolve_treepl_bin <- function(user_bin, repo_dir) {
-  candidates <- c(
-    user_bin %||% NA_character_,
-    Sys.getenv("TREEPL_BIN", unset = ""),
-    Sys.which("treePL"),
-    file.path(dirname(repo_dir), "treePL")
-  )
-  candidates <- unique(trimws(candidates))
-  candidates <- candidates[nzchar(candidates)]
-  for (cand in candidates) {
-    if (file.exists(cand)) return(normalizePath(cand, winslash = "/", mustWork = TRUE))
-  }
-  ""
-}
-
-## ---------------------------------------------------------------------------
-## MEGA-CC RelTime helpers
-## ---------------------------------------------------------------------------
-
-resolve_megacc_bin <- function(user_bin) {
-  candidates <- c(
-    user_bin %||% NA_character_,
-    Sys.getenv("MEGACC_BIN", unset = ""),
-    Sys.which("megacc")
-  )
-  candidates <- unique(trimws(candidates))
-  candidates <- candidates[nzchar(candidates)]
-  for (cand in candidates) {
-    if (file.exists(cand)) return(normalizePath(cand, winslash = "/", mustWork = TRUE))
-  }
-  ""
-}
-
-write_mega_mao <- function(mao_path) {
-  lines <- c(
-    "; MEGA RelTime from branch lengths settings",
-    "[ MEGAinfo ]",
-    "ver=0",
-    "[ DataSettings ]",
-    "datatype=Newick Tree",
-    "[ ProcessTypes ]",
-    "ppRelTimeBLens=true",
-    "[ AnalysisSettings ]"
-  )
-  writeLines(lines, mao_path)
-}
-
-write_mega_outgroup <- function(outgroup_path, outgroup_tip = "MOCK_OUTGROUP_FOR_MEGA") {
-  writeLines(paste0(outgroup_tip, "=outgroup"), outgroup_path)
-}
-
-write_mega_calibrations <- function(cal_path, node_bounds, root_node = NULL) {
-  ## MEGA RelTime cannot calibrate the root node — only internal nodes below
-  ## the root.  Exclude the root calibration if present.
-  keep <- rep(TRUE, nrow(node_bounds))
-  if (!is.null(root_node)) {
-    keep <- node_bounds$node != root_node
-    n_dropped <- sum(!keep)
-    if (n_dropped > 0L)
-      message("Note: excluded ", n_dropped,
-              " root-node calibration(s) — MEGA RelTime cannot constrain the root.")
-  }
-  nb <- node_bounds[keep, , drop = FALSE]
-  lines <- character(nrow(nb))
-  for (i in seq_len(nrow(nb))) {
-    tag <- paste0("cal_", nb$node[i])
-    if (is.finite(nb$age_max[i])) {
-      lines[i] <- sprintf(
-        "!MRCA='%s' TaxonA='%s' TaxonB='%s' MinTime=%.11f MaxTime=%.11f calibrationName='%s';",
-        tag, nb$taxonA[i], nb$taxonB[i],
-        nb$age_min[i], nb$age_max[i], tag
-      )
-    } else {
-      lines[i] <- sprintf(
-        "!MRCA='%s' TaxonA='%s' TaxonB='%s' MinTime=%.11f calibrationName='%s';",
-        tag, nb$taxonA[i], nb$taxonB[i],
-        nb$age_min[i], tag
-      )
-    }
-  }
-  writeLines(lines, cal_path)
-}
-
-write_mega_input_tree <- function(tree_path, phy) {
-  ## MEGA-CC needs underscores in tip labels replaced with spaces, wrapped in quotes
-  ## Actually: MEGA replaces underscores with spaces internally, so we write as-is
-  ## and it reads them fine.  Write plain Newick.
-  ape::write.tree(phy, file = tree_path)
-}
-
-add_mock_mega_outgroup <- function(phy, mock_tip = "MOCK_OUTGROUP_FOR_MEGA") {
-  d <- node.depth.edgelength(phy)
-  root_depth <- max(d)
-  nwk <- sub(";$", "", ape::write.tree(phy))
-  new_nwk <- paste0("(", nwk, ":0.001,", mock_tip, ":",
-                    format(root_depth + 0.001, scientific = FALSE), ");")
-  ape::read.tree(text = new_nwk)
-}
-
-run_megacc_reltime <- function(megacc_bin, phy, node_bounds, work_dir, prefix) {
-  dir.create(work_dir, recursive = TRUE, showWarnings = FALSE)
-
-  ## MEGA-CC is fragile with long/deep file paths on some empirical trees.
-  ## Run from a short temp directory, then copy artifacts back into work_dir.
-  mega_work <- tempfile(pattern = paste0("megacc_", prefix, "_"), tmpdir = tempdir())
-  dir.create(mega_work, recursive = TRUE, showWarnings = FALSE)
-
-  mao_path      <- file.path(mega_work, "reltime_blens.mao")
-  tree_path     <- file.path(mega_work, paste0(prefix, "_phylogram_for_mega.nwk"))
-  outgroup_path <- file.path(mega_work, "outgroup.txt")
-  cal_path      <- file.path(mega_work, "mega_calibrations.txt")
-  out_prefix    <- file.path(mega_work, paste0(prefix, "_mega_reltime"))
-  log_path      <- file.path(mega_work, paste0(prefix, "_mega_reltime.log"))
-  mock_tip      <- "MOCK_OUTGROUP_FOR_MEGA"
-
-  write_mega_mao(mao_path)
-  ## Add a synthetic outgroup so the original ingroup root becomes calibratable
-  ## in MEGA.  This matches the established pipeline behavior used in older
-  ## example outputs.
-  phy_mega <- add_mock_mega_outgroup(phy, mock_tip = mock_tip)
-  write_mega_input_tree(tree_path, phy_mega)
-  write_mega_outgroup(outgroup_path, outgroup_tip = mock_tip)
-  write_mega_calibrations(cal_path, node_bounds)
-
-  ## Run megacc
-  exit_code <- suppressWarnings(system2(
-    megacc_bin,
-    args = c("-a", mao_path, "-t", tree_path,
-             "-c", cal_path, "-g", outgroup_path,
-             "-o", out_prefix),
-    stdout = log_path,
-    stderr = log_path
-  ))
-
-  ## Copy staged MEGA artifacts back to the requested work_dir for debugging
-  ## and for downstream Tao-CI parsing.
-  staged_files <- list.files(mega_work, all.files = FALSE, full.names = TRUE, no.. = TRUE)
-  if (length(staged_files)) {
-    invisible(file.copy(staged_files, work_dir, overwrite = TRUE, recursive = TRUE))
-  }
-
-  ## Parse output tree and drop the mock outgroup
-  exact_tree_file <- paste0(out_prefix, "_exactTimes.nwk")
-  if (file.exists(exact_tree_file)) {
-    mega_tree <- ape::read.tree(exact_tree_file)
-    ## Fix MEGA's label mangling: strip quotes and restore underscores
-    mega_tree$tip.label <- gsub("^'|'$", "", mega_tree$tip.label)
-    mega_tree$tip.label <- gsub(" ", "_", mega_tree$tip.label)
-    if (mock_tip %in% mega_tree$tip.label) {
-      mega_tree <- ape::drop.tip(mega_tree, mock_tip)
-    }
-    ## Write cleaned tree
-    out_tree <- file.path(work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
-    ape::write.tree(mega_tree, file = out_tree)
-    list(tree = mega_tree, tree_file = out_tree, status = "OK", error = NA_character_)
-  } else {
-    log_txt <- if (file.exists(log_path)) paste(readLines(log_path, warn = FALSE), collapse = "\n") else ""
-    list(tree = NULL, tree_file = "", status = "FAILED",
-         error = paste0("megacc exit code ", exit_code, "; ", log_txt))
-  }
-}
-
-megacc_tao_ci <- function(megacc_bin, phy, node_bounds, work_dir, prefix,
-                          n_sites = 1000L) {
-  ## Run base MEGA RelTime
-  base <- run_megacc_reltime(megacc_bin, phy, node_bounds, work_dir, prefix)
-  if (base$status != "OK") return(base)
-
-  mega_tree <- base$tree
-  n_tip  <- Ntip(mega_tree)
-  n_node <- Nnode(mega_tree)
-  int_nodes <- seq.int(n_tip + 1L, n_tip + n_node)
-
-  ## ---- Parse native Tao 95% CIs from MEGA's NEXUS output ----
-  nexus_files <- list.files(work_dir, pattern = "_nexus\\.tre$", full.names = TRUE)
-  if (!length(nexus_files)) {
-    warning("No MEGA NEXUS output found — skipping Tao CIs")
-    base$ci <- NULL
-    return(base)
-  }
-  nexus_txt <- paste(readLines(nexus_files[1L], warn = FALSE), collapse = "\n")
-  tree_line <- grep("^tree TREE1", strsplit(nexus_txt, "\n")[[1L]], value = TRUE)
-  if (!length(tree_line)) {
-    warning("No 'tree TREE1' line in MEGA NEXUS — skipping Tao CIs")
-    base$ci <- NULL
-    return(base)
-  }
-
-  ## Extract divtime and divtime_95%_CI for each internal node
-  ## MEGA annotates internal nodes as: [&rate=...,divtime=T,divtime_95%_CI={hi,lo}]
-  ## The NEXUS tree has numbered tips (1..N) and annotations on internal nodes.
-  ## We parse the annotations in the order they appear (postorder traversal),
-  ## then match to the cleaned tree via a reconstructed mapping.
-
-  ci_raw <- regmatches(tree_line, gregexpr("divtime_95%_CI=[{][^}]+[}]", tree_line))[[1]]
-  dt_raw <- regmatches(tree_line, gregexpr("divtime=([0-9eE.+-]+)", tree_line))[[1]]
-  dt_vals <- as.numeric(gsub("divtime=", "", dt_raw))
-
-  if (length(ci_raw) != length(dt_raw) || length(ci_raw) == 0L) {
-    warning("Could not parse MEGA Tao CIs (", length(ci_raw), " CIs, ",
-            length(dt_raw), " divtimes)")
-    base$ci <- NULL
-    return(base)
-  }
-
-  ## Parse CI bounds
-  ci_parsed <- gsub("divtime_95%_CI=[{]|[}]", "", ci_raw)
-  ci_split  <- strsplit(ci_parsed, ",")
-  ci_lo <- vapply(ci_split, function(x) min(as.numeric(x)), numeric(1))
-  ci_hi <- vapply(ci_split, function(x) max(as.numeric(x)), numeric(1))
-
-  ## MEGA node ages from the cleaned tree
-  dist_from_root <- node.depth.edgelength(mega_tree)
-  root_h <- max(dist_from_root)
-  mega_ages <- root_h - dist_from_root
-
-  ## Match parsed annotations to tree nodes by divtime value (closest match)
-  ## There are n_node-1 annotations (root excluded) or n_node.
-  ## Build lookup: for each annotation, find the internal node with closest age.
-  matched_ci_lo <- rep(NA_real_, n_node)
-  matched_ci_hi <- rep(NA_real_, n_node)
-  int_ages <- mega_ages[int_nodes]
-  used <- logical(length(dt_vals))
-
-  for (j in seq_along(int_nodes)) {
-    best_k <- NA_integer_
-    best_d <- Inf
-    for (k in seq_along(dt_vals)) {
-      if (used[k]) next
-      d <- abs(int_ages[j] - dt_vals[k])
-      if (d < best_d) { best_d <- d; best_k <- k }
-    }
-    if (!is.na(best_k) && best_d < 1e-6) {
-      matched_ci_lo[j] <- ci_lo[best_k]
-      matched_ci_hi[j] <- ci_hi[best_k]
-      used[best_k] <- TRUE
-    }
-  }
-
-  ## For the root (no CI annotation typically), set CI = point estimate
-  root_idx <- which(int_nodes == n_tip + 1L)
-  if (is.na(matched_ci_lo[root_idx])) {
-    matched_ci_lo[root_idx] <- int_ages[root_idx]
-    matched_ci_hi[root_idx] <- int_ages[root_idx]
-  }
-
-  ## Clamp CIs for near-zero-age nodes (MEGA's collapsed backbone branches).
-  ## These nodes have age ≈ 0 but Tao CIs spanning the full tree depth,
-  ## producing absurd FigTree bars.  Set their CIs to the point estimate.
-  near_zero <- int_ages < 1e-4
-  matched_ci_lo[near_zero] <- int_ages[near_zero]
-  matched_ci_hi[near_zero] <- int_ages[near_zero]
-
-  ci_df <- data.frame(
-    node  = int_nodes,
-    age   = int_ages,
-    ci_lo = matched_ci_lo,
-    ci_hi = matched_ci_hi,
-    se    = (matched_ci_hi - matched_ci_lo) / (2 * 1.96),
-    stringsAsFactors = FALSE
-  )
-
-  base$ci <- ci_df
-  base
-}
-
-write_treepl_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsites,
-                             node_bounds, thorough = TRUE, prime = TRUE,
-                             opt = NULL, plsimaniter = NULL, pliter = NULL,
-                             extra_lines = NULL) {
-  lines <- c(
-    paste0("treefile = ", tree_path),
-    paste0("outfile = ", out_tree_path),
-    paste0("numsites = ", as.integer(numsites)),
-    paste0("smooth = ", fmt_num(smooth))
-  )
-  ## Optimization settings (Smith & O'Meara 2012 strongly recommend thorough + prime)
-  if (isTRUE(thorough)) lines <- c(lines, "thorough")
-  if (isTRUE(prime))    lines <- c(lines, "prime")
-  if (!is.null(opt) && nzchar(opt))
-    lines <- c(lines, paste0("opt = ", as.integer(opt)))
-  if (!is.null(plsimaniter) && nzchar(plsimaniter))
-    lines <- c(lines, paste0("plsimaniter = ", as.integer(plsimaniter)))
-  if (!is.null(pliter) && nzchar(pliter))
-    lines <- c(lines, paste0("pliter = ", as.integer(pliter)))
-  if (length(extra_lines)) {
-    extra_lines <- trimws(as.character(extra_lines))
-    extra_lines <- extra_lines[nzchar(extra_lines)]
-    lines <- c(lines, extra_lines)
-  }
-  ## Calibration constraints
-  for (i in seq_len(nrow(node_bounds))) {
-    tag <- paste0("N", node_bounds$node[i])
-    lines <- c(
-      lines,
-      paste0("mrca = ", tag, " ", node_bounds$taxonA[i], " ", node_bounds$taxonB[i]),
-      paste0("min = ", tag, " ", fmt_num(node_bounds$age_min[i]))
-    )
-    if (is.finite(node_bounds$age_max[i])) {
-      lines <- c(lines, paste0("max = ", tag, " ", fmt_num(node_bounds$age_max[i])))
-    }
-  }
-  writeLines(lines, cfg_path)
-}
-
-parse_treepl_prime_lines <- function(log_path) {
-  if (!file.exists(log_path)) return(character(0))
-  txt <- readLines(log_path, warn = FALSE)
-  marker <- grep("PLACE THE LINES BELOW IN THE CONFIGURATION FILE", txt, fixed = TRUE)
-  if (!length(marker)) return(character(0))
-  out <- trimws(txt[(marker[1L] + 1L):length(txt)])
-  out <- out[
-    grepl("^(opt(ad|cvad)?\\s*=|moredetail(ad|cvad)?\\b)", out) &
-      !grepl("^[-]+$", out)
-  ]
-  unique(out[nzchar(out)])
-}
-
-run_treepl_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
-  if (file.exists(log_path)) unlink(log_path)
-  suppressWarnings(system2(
-    treepl_bin,
-    args = cfg_path,
-    stdout = log_path,
-    stderr = log_path,
-    env = paste0("OMP_NUM_THREADS=", as.integer(omp_threads))
-  ))
-}
-
-methods <- tolower(parse_chr_grid(kv[["methods"]] %||% "chronos,treepl,reltime", "--methods"))
-valid_methods <- c("chronos", "treepl", "reltime", "reltime_mega")
+methods <- tolower(parse_chr_grid(kv[["methods"]] %||% "chronos,treepl,reltime_mega", "--methods"))
+methods <- unique(sub("^reltime$", "reltime_mega", methods))
+valid_methods <- c("chronos", "treepl", "reltime_mega")
 bad_methods <- setdiff(methods, valid_methods)
 if (length(bad_methods)) {
   stop("Unknown methods: ", paste(bad_methods, collapse = ", "))
@@ -1799,6 +1379,9 @@ chronos_allow_cal_drop <- !identical(
 )
 
 treepl_smoothing <- parse_num_grid(kv[["treepl-smoothing"]] %||% "0.01,0.1,1,10,100", "--treepl-smoothing")
+treepl_cv_type <- tolower(kv[["treepl-cv"]] %||% "loo")
+if (!(treepl_cv_type %in% c("loo", "random"))) stop("--treepl-cv must be loo or random.")
+if ("treepl" %in% methods) treepl_cv <- treepl_cv_settings(treepl_smoothing)
 treepl_numsites <- as.integer(kv[["treepl-numsites"]] %||% "1000")
 treepl_threads <- as.integer(kv[["treepl-threads"]] %||% "1")
 if (!is.finite(treepl_numsites) || treepl_numsites < 1L) stop("--treepl-numsites must be >= 1.")
@@ -1809,7 +1392,7 @@ treepl_opt <- kv[["treepl-opt"]] %||% NULL
 treepl_plsimaniter <- kv[["treepl-plsimaniter"]] %||% NULL
 treepl_pliter <- kv[["treepl-pliter"]] %||% NULL
 
-ci_sites <- as.integer(kv[["ci-sites"]] %||% kv[["reltime-sites"]] %||% "1000")
+ci_sites <- as.integer(kv[["ci-sites"]] %||% "1000")
 if (!is.finite(ci_sites) || ci_sites < 1L) stop("--ci-sites must be >= 1.")
 chronos_ci_type <- kv[["chronos-ci-type"]] %||% "parametric"
 chronos_ci_reps <- as.integer(kv[["chronos-ci-reps"]] %||% "100")
@@ -1873,14 +1456,17 @@ msg <- function(...) {
   cat(sprintf("[%s] %s\n", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), s), file = log_file, append = TRUE)
 }
 
-dir.create(file.path(outdir, "chronos", "trees"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "chronos", "ci"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "treepl", "trees"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "treepl", "ci"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "treepl", "configs"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "treepl", "logs"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "reltime"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(outdir, "reltime_mega"), recursive = TRUE, showWarnings = FALSE)
+if ("chronos" %in% methods) {
+  dir.create(file.path(outdir, "chronos", "trees"), recursive = TRUE, showWarnings = FALSE)
+}
+if ("treepl" %in% methods) {
+  for (sub_dir in c("trees", "configs", "logs")) {
+    dir.create(file.path(outdir, "treepl", sub_dir), recursive = TRUE, showWarnings = FALSE)
+  }
+}
+if ("reltime_mega" %in% methods) {
+  dir.create(file.path(outdir, "reltime_mega"), recursive = TRUE, showWarnings = FALSE)
+}
 
 existing_all_df <- dedupe_rows_last(read_csv_if_exists(existing_all_runs_csv), c("candidate", "method"))
 existing_full_candidates_df <- dedupe_rows_last(read_csv_if_exists(existing_full_candidates_csv), "candidate")
@@ -1964,10 +1550,15 @@ if (nrow(pair_map$dropped_inconsistent)) {
 candidate_rows <- if (nrow(existing_full_candidates_df)) list(existing_full_candidates_df) else list()
 all_rows <- if (nrow(existing_all_df)) list(existing_all_df) else list()
 uncertainty_rows <- if (nrow(existing_uncertainty_df)) list(existing_uncertainty_df) else list()
-ci_inputs <- build_ci_inputs(phy, node_bounds)
 chronos_runs_csv <- ""
+chronos_trees_cache <- list()   ## in-memory chronos trees for post-selection CI
+treepl_bin <- ""
 treepl_runs_csv <- ""
-reltime_run_csv <- ""
+treepl_prime_lines_full <- character(0)
+megacc_run_csv <- ""
+
+## Fixed seed so every stage of a staged run builds the same tuning subset.
+set.seed(as.integer(kv[["seed"]] %||% "1"))
 
 ## ---------------------------------------------------------------------------
 ## Large-tree subset tuning (auto for >500 tips, override with --subset-tips)
@@ -2001,8 +1592,55 @@ if ("chronos" %in% methods) {
   )
   chronos_phy_grid <- phy_tune  ## tree used for grid search
   chronos_rows <- list()
-  chronos_trees_cache <- list()   ## cache in-memory chronos trees for post-selection CI
   row_i <- 0L
+  chronos_runs_csv <- file.path(outdir, "chronos", paste0(prefix, "_chronos_runs.csv"))
+  update_incremental_chronos_outputs <- function() {
+    chronos_df_partial <- bind_rows_fill(chronos_rows)
+    if (!nrow(chronos_df_partial)) return(invisible(NULL))
+
+    write.csv(chronos_df_partial, chronos_runs_csv, row.names = FALSE)
+
+    incremental_all_df <- dedupe_rows_last(
+      bind_rows_fill(list(existing_all_df, chronos_df_partial)),
+      c("candidate", "method")
+    )
+    incremental_candidates_df <- build_representative_candidates(incremental_all_df)
+    if (!nrow(incremental_candidates_df)) return(invisible(NULL))
+    ## Subset-tuning trees must never reach MAIN_OUTPUT_TREES.
+    if (use_subset_tuning) return(invisible(NULL))
+
+    main_output_dir <- file.path(outdir, "MAIN_OUTPUT_TREES")
+    dir.create(main_output_dir, recursive = TRUE, showWarnings = FALSE)
+    chronos_reps <- incremental_candidates_df[
+      incremental_candidates_df$method == "chronos",
+      ,
+      drop = FALSE
+    ]
+    if (nrow(chronos_reps)) {
+      for (.rr in seq_len(nrow(chronos_reps))) {
+        src <- as.character(chronos_reps$tree_file[.rr])
+        if (length(src) == 1L && nzchar(src) && file.exists(src)) {
+          candidate_name <- as.character(chronos_reps$candidate[.rr])
+          dst <- file.path(main_output_dir, paste0(candidate_name, ".tre"))
+          ok <- file.copy(src, dst, overwrite = TRUE)
+          if (isTRUE(ok)) {
+            incremental_candidates_df$tree_file[
+              incremental_candidates_df$candidate == candidate_name
+            ] <- dst
+            msg("  promoted current chronos winner to MAIN_OUTPUT_TREES: ", basename(dst))
+          }
+        }
+      }
+    }
+
+    write.csv(
+      incremental_candidates_df,
+      file.path(outdir, "candidates.csv"),
+      row.names = FALSE,
+      quote = TRUE
+    )
+    invisible(NULL)
+  }
 
   for (mdl in chronos_models) {
     k_grid <- if (identical(mdl, "discrete")) chronos_discrete_k else NA_integer_
@@ -2015,6 +1653,7 @@ if ("chronos" %in% methods) {
         }
         out_tree <- file.path(outdir, "chronos", "trees", paste0(prefix, "_", candidate, ".tre"))
         ## Checkpoint: skip if tree already exists from a previous interrupted run
+        run <- NULL
         if (file.exists(out_tree)) {
           cached_tree <- tryCatch(ape::read.tree(out_tree), error = function(e) NULL)
           if (!is.null(cached_tree) && inherits(cached_tree, "phylo")) {
@@ -2044,26 +1683,31 @@ if ("chronos" %in% methods) {
               0L
             }
             if (!is.finite(cached_attempts)) cached_attempts <- 0L
-            run <- list(status = "OK", tree = cached_tree, error = NA_character_,
-                        phiic = cached_phiic, ploglik = cached_ploglik,
-                        fit_score = cached_fit_score, attempt = cached_attempts)
-            chronos_trees_cache[[candidate]] <- cached_tree
-            msg("  checkpoint: reusing ", candidate)
+            if (is.finite(cached_fit_score)) {
+              run <- list(status = "OK", tree = cached_tree, error = NA_character_,
+                          phiic = cached_phiic, ploglik = cached_ploglik,
+                          fit_score = cached_fit_score, attempt = cached_attempts)
+              chronos_trees_cache[[candidate]] <- cached_tree
+              msg("  checkpoint: reusing ", candidate)
+            } else {
+              msg("  checkpoint tree lacks saved chronos score; rerunning ", candidate)
+            }
           } else {
-            run <- list(status = "FAIL", tree = NULL, error = "cached tree unreadable")
+            msg("  checkpoint tree unreadable; rerunning ", candidate)
           }
-        } else {
-        run <- run_chronos_one(
-          phy = chronos_phy_grid,
-          calib = chronos_calib,
-          model = mdl,
-          lambda = lam,
-          nb_rate_cat = kcat,
-          retries = chronos_retries,
-          iter_max = chronos_iter_max,
-          tol = chronos_tol,
-          attempt_timeout = chronos_attempt_timeout
-        )
+        }
+        if (is.null(run)) {
+          run <- run_chronos_one(
+            phy = chronos_phy_grid,
+            calib = chronos_calib,
+            model = mdl,
+            lambda = lam,
+            nb_rate_cat = kcat,
+            retries = chronos_retries,
+            iter_max = chronos_iter_max,
+            tol = chronos_tol,
+            attempt_timeout = chronos_attempt_timeout
+          )
         }
         ## If discrete model fails, try progressively dropping calibrations
         ## (chronos discrete init can fail with many fixed-point calibrations)
@@ -2134,229 +1778,185 @@ if ("chronos" %in% methods) {
           error = run$error %||% NA_character_,
           stringsAsFactors = FALSE
         )
+        update_incremental_chronos_outputs()
       }
     }
   }
 
   chronos_df <- bind_rows_fill(chronos_rows)
-  chronos_runs_csv <- file.path(outdir, "chronos", paste0(prefix, "_chronos_runs.csv"))
   write.csv(chronos_df, chronos_runs_csv, row.names = FALSE)
   all_rows[[length(all_rows) + 1L]] <- chronos_df
   msg("chronos finished: ", sum(chronos_df$status == "OK"), "/", nrow(chronos_df), " successful.")
 }
 
+## ---------------------------------------------------------------------------
+## treePL: prime -> cross-validate smoothing -> one thorough dating run.
+## Priming and CV use the tuning tree (a subset for large trees); the final
+## run always uses the full tree, primed on the full tree.
+## ---------------------------------------------------------------------------
 if ("treepl" %in% methods) {
   treepl_bin <- treepl_resolve_bin(kv[["treepl-bin"]] %||% NULL, repo_dir)
   if (!nzchar(treepl_bin)) {
     stop("treePL requested, but no executable was found. Pass --treepl-bin or set TREEPL_BIN.")
   }
-  msg("Running treePL grid with binary: ", treepl_bin)
-  treepl_rows <- list()
-  treepl_input_tree <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl.tre"))
-  ## Use subset tree for grid tuning if large-tree mode is active
-  treepl_phy_grid <- if (use_subset_tuning) phy_tune else phy
-  treepl_bounds_grid <- if (use_subset_tuning) node_bounds_tune else node_bounds
-  ape::write.tree(treepl_phy_grid, file = treepl_input_tree)
-  for (i in seq_along(treepl_smoothing)) {
-    smooth <- treepl_smoothing[i]
-    smooth_tag <- fmt_token(smooth)
-    candidate <- paste0("treePL_smooth", smooth_tag)
-    cfg_path <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", candidate, ".cfg"))
-    out_tree <- file.path(outdir, "treepl", "trees", paste0(prefix, "_", candidate, ".tre"))
-    log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".log"))
-    prime_cfg_path <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", candidate, ".prime.cfg"))
-    prime_log_path <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", candidate, ".prime.log"))
-    ## Checkpoint: skip if tree already exists from a previous interrupted run
-    if (file.exists(out_tree)) {
-      cached_tree <- tryCatch(ape::read.tree(out_tree), error = function(e) NULL)
-      if (!is.null(cached_tree) && inherits(cached_tree, "phylo")) {
-        cached_row <- existing_treepl_df[
-          existing_treepl_df$candidate == candidate,
-          ,
-          drop = FALSE
-        ]
-        msg("  checkpoint: reusing ", candidate)
-        treepl_rows[[length(treepl_rows) + 1L]] <- data.frame(
-          candidate = candidate, method = "treePL", model = "treePL",
-          lambda = NA, nb_rate_cat = NA, smooth = smooth,
-          treepl_objective = if (nrow(cached_row) && "treepl_objective" %in% names(cached_row)) scalar_num_or_na(cached_row$treepl_objective[1L]) else NA_real_,
-          status = if (nrow(cached_row) && "status" %in% names(cached_row)) as.character(cached_row$status[1L]) else "OK",
-          exit_code = if (nrow(cached_row) && "exit_code" %in% names(cached_row)) suppressWarnings(as.integer(cached_row$exit_code[1L])) else 0L,
-          tree_file = normalizePath(out_tree), ci_file = "", n_sites = NA,
-          cfg_file = cfg_path, log_file = log_path, error = NA_character_,
-          stringsAsFactors = FALSE)
-        candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
-          candidate = candidate, tree_file = normalizePath(out_tree),
-          method = "treePL", model = "treePL", lambda = NA, nb_rate_cat = NA,
-          smooth = smooth, stringsAsFactors = FALSE)
-        next
-      }
-    }
-    if (file.exists(out_tree)) unlink(out_tree)
-    if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
-
-    prime_lines <- character(0)
-    if (isTRUE(treepl_prime)) {
-      treepl_write_cfg(
-        prime_cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, treepl_bounds_grid,
-        thorough = treepl_thorough, prime = TRUE,
-        opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter
-      )
-      run_treepl_one(treepl_bin, prime_cfg_path, prime_log_path, omp_threads = treepl_threads)
-      prime_lines <- treepl_parse_prime_lines(prime_log_path)
-      if (file.exists(out_tree)) unlink(out_tree)
-      if (file.exists(paste0(out_tree, ".r8s"))) unlink(paste0(out_tree, ".r8s"))
-    }
-
-    treepl_write_cfg(
-      cfg_path, treepl_input_tree, out_tree, smooth, treepl_numsites, treepl_bounds_grid,
-      thorough = treepl_thorough, prime = FALSE,
+  msg("Running treePL with binary: ", treepl_bin)
+  tp_dir <- file.path(outdir, "treepl")
+  tp_cfg <- function(name) file.path(tp_dir, "configs", paste0(prefix, "_treePL_", name, ".cfg"))
+  tp_log <- function(name) file.path(tp_dir, "logs", paste0(prefix, "_treePL_", name, ".log"))
+  tp_prime <- function(tree_path, bounds, name) {
+    treepl_run_prime(
+      treepl_bin, tree_path, bounds,
+      smooth = exp(mean(log(treepl_cv$grid))), numsites = treepl_numsites,
+      cfg_path = tp_cfg(name), log_path = tp_log(name), thorough = treepl_thorough,
       opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
-      extra_lines = prime_lines
+      omp_threads = treepl_threads
     )
-    exit_code <- run_treepl_one(treepl_bin, cfg_path, log_path, omp_threads = treepl_threads)
+  }
+  full_tree_path <- file.path(tp_dir, paste0(prefix, "_phylogram_for_treepl.tre"))
+  ape::write.tree(phy, file = full_tree_path)
+  cv_tree_path <- full_tree_path
+  if (use_subset_tuning) {
+    cv_tree_path <- file.path(tp_dir, paste0(prefix, "_phylogram_for_treepl_cv_subset.tre"))
+    ape::write.tree(phy_tune, file = cv_tree_path)
+  }
+  cv_scores_csv <- file.path(tp_dir, paste0(prefix, "_treePL_cv_scores.csv"))
+  cv_outfile <- file.path(tp_dir, paste0(prefix, "_treePL_cv.out"))
+  final_status <- "FAILED"
+  final_error <- NA_character_
+  final_exit <- NA_integer_
+  best_smooth <- NA_real_
+  final_candidate <- ""
+  final_tree <- ""
 
-    status <- "FAILED"
-    err <- tail_text(log_path)
-    out_ci <- ""
-    ## treePL can exit non-zero (e.g. convergence warnings) yet still write
-    ## a valid output tree.  Check the tree file regardless of exit code.
-    if (file.exists(out_tree)) {
-      tr <- try(ape::read.tree(out_tree), silent = TRUE)
-      if (!inherits(tr, "try-error") && inherits(tr, "phylo") &&
-          !is.null(tr$edge.length) && all(is.finite(tr$edge.length)) && all(tr$edge.length >= 0)) {
-        status <- if (identical(exit_code, 0L)) "OK" else "OK_NONZERO_EXIT"
-        err <- NA_character_
-        candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
-          candidate = candidate,
-          tree_file = out_tree,
-          stringsAsFactors = FALSE
-        )
+  treepl_res <- try({
+    ## Step 1-2: prime + cross-validation (checkpointed by the CV score table)
+    cv_scores <- read_csv_if_exists(cv_scores_csv)
+    cv_reusable <- nrow(cv_scores) &&
+      all(c("smooth", "cv_chisq", "cv_type") %in% names(cv_scores)) &&
+      isTRUE(all.equal(sort(cv_scores$smooth), sort(treepl_cv$grid))) &&
+      identical(unique(as.character(cv_scores$cv_type)), treepl_cv_type) &&
+      any(is.finite(cv_scores$cv_chisq))
+    if (cv_reusable) {
+      msg("  checkpoint: reusing treePL cross-validation scores")
+    } else {
+      cv_prime_lines <- character(0)
+      if (isTRUE(treepl_prime)) {
+        msg("  priming treePL optimizer", if (use_subset_tuning) " on the tuning subset" else "", "...")
+        cv_prime_lines <- tp_prime(cv_tree_path, node_bounds_tune,
+                                   if (use_subset_tuning) "prime_cv_subset" else "prime")
       }
+      msg("  treePL ", treepl_cv_type, " cross-validation, smoothing ",
+          paste(fmt_num(treepl_cv$grid), collapse = ","), "...")
+      cv_scores <- treepl_cross_validate(
+        treepl_bin, cv_tree_path, node_bounds_tune, treepl_cv, treepl_cv_type,
+        numsites = treepl_numsites, prime_lines = cv_prime_lines,
+        cfg_path = tp_cfg("cv"), log_path = tp_log("cv"), cvoutfile = cv_outfile,
+        thorough = treepl_thorough, opt = treepl_opt,
+        plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
+        omp_threads = treepl_threads
+      )
+      cv_scores$cv_type <- treepl_cv_type
+      write.csv(cv_scores, cv_scores_csv, row.names = FALSE)
+    }
+    for (j in seq_len(nrow(cv_scores))) {
+      msg("    smooth=", fmt_num(cv_scores$smooth[j]), "  CV chisq=", fmt_num(cv_scores$cv_chisq[j]))
+    }
+    best_smooth <- treepl_select_smoothing(cv_scores)
+    if (!is.finite(best_smooth)) {
+      stop("treePL cross-validation produced no usable scores; see ", tp_log("cv"))
+    }
+    msg("  CV-selected smoothing: ", fmt_num(best_smooth))
+    if (best_smooth %in% range(treepl_cv$grid)) {
+      msg("  WARNING: the CV-selected smoothing is at the edge of --treepl-smoothing; ",
+          "the CV optimum may lie outside the grid. Consider extending the grid.")
     }
 
-    treepl_rows[[i]] <- data.frame(
-      candidate = candidate,
+    ## Step 3: final dating run on the full tree
+    if (isTRUE(treepl_prime)) {
+      treepl_prime_lines_full <- treepl_parse_prime_lines(tp_log("prime"))
+      if (!length(treepl_prime_lines_full)) {
+        msg("  priming treePL optimizer on the full tree...")
+        treepl_prime_lines_full <- tp_prime(full_tree_path, node_bounds, "prime")
+      }
+    }
+    final_candidate <- paste0("treePL_smooth", fmt_token(best_smooth))
+    final_tree <- file.path(tp_dir, "trees", paste0(prefix, "_", final_candidate, ".tre"))
+    if (tree_has_expected_tips(final_tree, Ntip(phy)) && !is.null(.treepl_read_valid_tree(final_tree))) {
+      msg("  checkpoint: reusing ", final_candidate)
+      final_exit <- 0L
+    } else {
+      unlink(c(final_tree, paste0(final_tree, ".r8s")), force = TRUE)
+      treepl_write_cfg(
+        tp_cfg(final_candidate), full_tree_path, final_tree, best_smooth, treepl_numsites, node_bounds,
+        thorough = treepl_thorough, prime = FALSE,
+        opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
+        extra_lines = treepl_prime_lines_full
+      )
+      final_exit <- treepl_run_one(treepl_bin, tp_cfg(final_candidate), tp_log(final_candidate),
+                                   omp_threads = treepl_threads)
+    }
+    ## treePL can exit non-zero (e.g. convergence warnings) yet still write
+    ## a valid output tree, so the tree file decides success.
+    if (is.null(.treepl_read_valid_tree(final_tree))) {
+      stop("treePL final run wrote no valid tree; ", tail_text(tp_log(final_candidate)))
+    }
+    final_status <- if (identical(final_exit, 0L)) "OK" else "OK_NONZERO_EXIT"
+    cv_scores
+  }, silent = TRUE)
+
+  if (inherits(treepl_res, "try-error")) {
+    final_error <- conditionMessage(attr(treepl_res, "condition"))
+    msg("treePL failed: ", final_error)
+    cv_scores <- read_csv_if_exists(cv_scores_csv)
+    if (!nrow(cv_scores)) cv_scores <- data.frame(smooth = treepl_cv$grid, cv_chisq = NA_real_)
+  } else {
+    cv_scores <- treepl_res
+  }
+
+  treepl_rows <- lapply(seq_len(nrow(cv_scores)), function(j) {
+    s <- cv_scores$smooth[j]
+    is_sel <- is.finite(best_smooth) && isTRUE(all.equal(s, best_smooth))
+    cand_j <- paste0("treePL_smooth", fmt_token(s))
+    data.frame(
+      candidate = cand_j,
       method = "treePL",
       model = "treePL",
       lambda = NA_real_,
       nb_rate_cat = NA_integer_,
-      smooth = smooth,
-      treepl_objective = if (grepl("^OK", status)) parse_treepl_final_objective(log_path) else NA_real_,
-      status = status,
-      exit_code = exit_code,
-      tree_file = if (grepl("^OK", status)) out_tree else "",
-      ci_file = out_ci,
-      n_sites = if (nzchar(out_ci)) ci_sites else NA_integer_,
-      cfg_file = cfg_path,
-      log_file = log_path,
-      error = err %||% NA_character_,
+      smooth = s,
+      cv_type = treepl_cv_type,
+      cv_chisq = cv_scores$cv_chisq[j],
+      cv_selected = is_sel,
+      status = if (is_sel) final_status else if (is.na(final_error)) "CV_ONLY" else "FAILED",
+      exit_code = if (is_sel) final_exit else NA_integer_,
+      tree_file = if (is_sel && grepl("^OK", final_status)) final_tree else "",
+      ci_file = "",
+      n_sites = NA_integer_,
+      cfg_file = if (is_sel) tp_cfg(cand_j) else tp_cfg("cv"),
+      log_file = if (is_sel) tp_log(cand_j) else tp_log("cv"),
+      error = if (is_sel || !is.na(final_error)) final_error else NA_character_,
+      stringsAsFactors = FALSE
+    )
+  })
+  treepl_df <- bind_rows_fill(treepl_rows)
+  if (grepl("^OK", final_status)) {
+    candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
+      candidate = final_candidate,
+      tree_file = final_tree,
       stringsAsFactors = FALSE
     )
   }
-
-  treepl_df <- bind_rows_fill(treepl_rows)
-  treepl_runs_csv <- file.path(outdir, "treepl", paste0(prefix, "_treepl_runs.csv"))
+  treepl_runs_csv <- file.path(tp_dir, paste0(prefix, "_treepl_runs.csv"))
   write.csv(treepl_df, treepl_runs_csv, row.names = FALSE)
   all_rows[[length(all_rows) + 1L]] <- treepl_df
-  msg("treePL finished: ", sum(grepl("^OK", treepl_df$status)), "/", nrow(treepl_df), " successful.")
-}
-
-if ("reltime" %in% methods) {
-  msg("Running RelTime...")
-  rel_candidate <- "RelTime"
-  rel_tree_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime.tre"))
-  rel_boot_ci_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_bootstrap_ci.csv"))
-  rel_tao_ci_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_ci.csv"))
-  rel_bounds_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_bounds_used.csv"))
-  rel_summary_file <- file.path(outdir, "reltime", paste0(prefix, "_RelTime_run.csv"))
-  reltime_run_csv <- rel_summary_file
-
-  rel_run <- try(
-    reltime_bootstrap_ci(
-      phy = phy,
-      calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
-      root_age = if (is.finite(root_age)) root_age else NULL,
-      B = reltime_bootstrap_reps,
-      n_sites = ci_sites,
-      quiet = TRUE
-    ),
-    silent = TRUE
-  )
-
-  if (!inherits(rel_run, "try-error")) {
-    ape::write.tree(rel_run$tree, file = rel_tree_file)
-    write.csv(rel_run$ci, rel_boot_ci_file, row.names = FALSE)
-    write.csv(rel_run$bounds, rel_bounds_file, row.names = FALSE)
-    rel_tao_ci <- reltime_tao_ci_from_bounds_run(
-      phy = phy,
-      rel_run = rel_run,
-      n_sites = ci_sites
-    )
-    write.csv(rel_tao_ci, rel_tao_ci_file, row.names = FALSE)
-    ## Write FigTree-annotated NEXUS trees with HPD bars (use in-memory tree
-    ## to avoid node-number reordering from write.tree → read.tree round-trip)
-    rel_boot_annotated <- file.path(outdir, "reltime",
-                                     paste0(prefix, "_RelTime_with_bootstrap_CI.tre"))
-    annotate_tree_with_ci_from_objects(rel_run$tree, rel_run$ci, rel_boot_annotated)
-    rel_tao_annotated <- file.path(outdir, "reltime",
-                                    paste0(prefix, "_RelTime_with_tao_CI.tre"))
-    annotate_tree_with_ci_from_objects(rel_run$tree, rel_tao_ci, rel_tao_annotated)
-    rel_df <- data.frame(
-      candidate = rel_candidate,
-      method = "RelTime",
-      model = "RelTime",
-      lambda = NA_real_,
-      nb_rate_cat = NA_integer_,
-      smooth = NA_real_,
-      status = "OK",
-      tree_file = rel_tree_file,
-      ci_file = rel_boot_ci_file,
-      tao_ci_file = rel_tao_ci_file,
-      bounds_file = rel_bounds_file,
-      n_sites = ci_sites,
-      error = NA_character_,
-      stringsAsFactors = FALSE
-    )
-    uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
-      rel_candidate,
-      rel_run$ci,
-      source = "RelTime-bootstrap"
-    )
-    candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
-      candidate = rel_candidate,
-      tree_file = rel_tree_file,
-      stringsAsFactors = FALSE
-    )
-    msg("RelTime finished successfully.")
-  } else {
-    rel_df <- data.frame(
-      candidate = rel_candidate,
-      method = "RelTime",
-      model = "RelTime",
-      lambda = NA_real_,
-      nb_rate_cat = NA_integer_,
-      smooth = NA_real_,
-      status = "FAILED",
-      tree_file = "",
-      ci_file = "",
-      tao_ci_file = "",
-      bounds_file = "",
-      n_sites = ci_sites,
-      error = conditionMessage(attr(rel_run, "condition")),
-      stringsAsFactors = FALSE
-    )
-    msg("RelTime failed: ", rel_df$error[1L])
-  }
-
-  write.csv(rel_df, rel_summary_file, row.names = FALSE)
-  all_rows[[length(all_rows) + 1L]] <- rel_df
+  msg("treePL finished: ", if (grepl("^OK", final_status)) paste0(final_candidate, " dated") else "FAILED")
 }
 
 ## ---------------------------------------------------------------------------
-## MEGA-CC RelTime (optional — runs only if megacc binary is available)
+## RelTime through MEGA-CC: point estimate + Tao analytical CI, then a Poisson
+## branch-length bootstrap that reruns megacc on each perturbed phylogram.
+## Always runs on the full tree.
 ## ---------------------------------------------------------------------------
-megacc_run_csv <- ""
 if ("reltime_mega" %in% methods) {
   megacc_bin <- resolve_megacc_bin(kv[["megacc-bin"]] %||% NULL)
   if (!nzchar(megacc_bin)) {
@@ -2367,97 +1967,93 @@ if ("reltime_mega" %in% methods) {
 
   mega_work_dir <- file.path(outdir, "reltime_mega")
   mega_candidate <- "RelTime_MEGA"
-  mega_summary_file <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA_run.csv"))
-  mega_tao_ci_file  <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA_tao_ci.csv"))
-  megacc_run_csv <- mega_summary_file
+  mega_file <- function(suffix) file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA", suffix))
+  mega_tree_file <- mega_file(".tre")
+  mega_tao_ci_file <- mega_file("_tao_ci.csv")
+  mega_boot_ci_file <- mega_file("_bootstrap_ci.csv")
+  megacc_run_csv <- mega_file("_run.csv")
+  mega_status <- "OK"
+  mega_error <- NA_character_
 
-  ## Checkpoint: skip MEGA if output tree already exists
-  mega_tree_file <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
   if (file.exists(mega_tree_file) && file.exists(mega_tao_ci_file)) {
-    msg("  checkpoint: reusing MEGA RelTime from previous run")
-    mega_result <- list(
-      status = "OK",
-      tree_file = mega_tree_file,
-      ci = tryCatch(read.csv(mega_tao_ci_file), error = function(e) NULL)
-    )
+    msg("  checkpoint: reusing MEGA RelTime point estimate")
   } else {
-  msg("Running MEGA-CC RelTime with Tao analytical CIs...")
-  mega_result <- try(
-    megacc_tao_ci(
-      megacc_bin = megacc_bin,
-      phy = phy,
-      node_bounds = node_bounds,
-      work_dir = mega_work_dir,
-      prefix = prefix,
-      n_sites = ci_sites
-    ),
-    silent = TRUE
-  )
-  }  ## end of MEGA checkpoint else
-
-  if (!inherits(mega_result, "try-error") && mega_result$status == "OK") {
-    has_ci <- !is.null(mega_result$ci) && is.data.frame(mega_result$ci) && nrow(mega_result$ci) > 0
-    if (has_ci) {
-      write.csv(mega_result$ci, mega_tao_ci_file, row.names = FALSE)
-      msg("MEGA-CC RelTime Tao analytical CI written: ", mega_tao_ci_file)
-      ## Write FigTree-annotated NEXUS tree with HPD bars
-      mega_annotated_tree <- file.path(mega_work_dir,
-                                        paste0(prefix, "_RelTime_MEGA_with_tao_CI.tre"))
-      annotate_tree_with_ci_comments(mega_result$tree_file, mega_tao_ci_file,
-                                      mega_annotated_tree)
-      msg("MEGA-CC RelTime annotated tree: ", mega_annotated_tree)
-    }
-    mega_df <- data.frame(
-      candidate = mega_candidate,
-      method = "RelTime_MEGA",
-      model = "RelTime_MEGA",
-      lambda = NA_real_,
-      nb_rate_cat = NA_integer_,
-      smooth = NA_real_,
-      status = "OK",
-      tree_file = if (has_ci && file.exists(mega_annotated_tree)) mega_annotated_tree else mega_result$tree_file,
-      ci_file = if (has_ci) mega_tao_ci_file else "",
-      n_sites = if (has_ci) ci_sites else NA_integer_,
-      error = NA_character_,
-      stringsAsFactors = FALSE
+    mega_result <- try(
+      megacc_tao_ci(megacc_bin, phy, node_bounds, mega_work_dir, prefix),
+      silent = TRUE
     )
-    if (has_ci) {
+    if (inherits(mega_result, "try-error")) {
+      mega_status <- "FAILED"
+      mega_error <- conditionMessage(attr(mega_result, "condition"))
+    } else if (!identical(mega_result$status, "OK")) {
+      mega_status <- "FAILED"
+      mega_error <- mega_result$error
+    } else if (is.data.frame(mega_result$ci) && nrow(mega_result$ci)) {
+      write.csv(mega_result$ci, mega_tao_ci_file, row.names = FALSE)
+      annotate_tree_with_ci_from_objects(mega_result$tree, mega_result$ci, mega_file("_with_tao_CI.tre"))
+      msg("  MEGA Tao analytical CI written: ", mega_tao_ci_file)
+    }
+  }
+
+  if (identical(mega_status, "OK") && reltime_bootstrap_reps > 0L) {
+    if (file.exists(mega_boot_ci_file) && file.exists(mega_file("_with_bootstrap_CI.tre"))) {
+      msg("  checkpoint: reusing MEGA RelTime bootstrap CI")
+    } else {
+      msg("  MEGA RelTime bootstrap CI (", reltime_bootstrap_reps, " megacc reruns)...")
+      mega_tree <- ape::read.tree(mega_tree_file)
+      boot_ci <- try(
+        megacc_bootstrap_ci(megacc_bin, phy, node_bounds, mega_tree,
+                            B = reltime_bootstrap_reps, n_sites = ci_sites, prefix = prefix),
+        silent = TRUE
+      )
+      if (inherits(boot_ci, "try-error")) {
+        msg("  MEGA RelTime bootstrap CI failed: ", conditionMessage(attr(boot_ci, "condition")))
+      } else {
+        write.csv(boot_ci, mega_boot_ci_file, row.names = FALSE)
+        annotate_tree_with_ci_from_objects(mega_tree, boot_ci, mega_file("_with_bootstrap_CI.tre"))
+        msg("  -> ", mega_boot_ci_file)
+      }
+    }
+  }
+
+  if (identical(mega_status, "OK")) {
+    ## The bootstrap CI shares the Poisson scheme used for chronos and treePL,
+    ## so it feeds uncertainty_summary_long.csv; Tao is the fallback.
+    if (file.exists(mega_boot_ci_file)) {
       uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
-        mega_candidate,
-        mega_result$ci,
-        source = "RelTime_MEGA-Tao"
+        mega_candidate, read.csv(mega_boot_ci_file), source = "RelTime_MEGA-bootstrap"
+      )
+    } else if (file.exists(mega_tao_ci_file)) {
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+        mega_candidate, read.csv(mega_tao_ci_file), source = "RelTime_MEGA-Tao"
       )
     }
     candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
       candidate = mega_candidate,
-      tree_file = if (has_ci && file.exists(mega_annotated_tree)) mega_annotated_tree else mega_result$tree_file,
+      tree_file = mega_tree_file,
       stringsAsFactors = FALSE
     )
     msg("MEGA-CC RelTime finished successfully.")
   } else {
-    err_msg <- if (inherits(mega_result, "try-error")) {
-      conditionMessage(attr(mega_result, "condition"))
-    } else {
-      mega_result$error
-    }
-    mega_df <- data.frame(
-      candidate = mega_candidate,
-      method = "RelTime_MEGA",
-      model = "RelTime_MEGA",
-      lambda = NA_real_,
-      nb_rate_cat = NA_integer_,
-      smooth = NA_real_,
-      status = "FAILED",
-      tree_file = "",
-      ci_file = "",
-      n_sites = NA_integer_,
-      error = err_msg,
-      stringsAsFactors = FALSE
-    )
-    msg("MEGA-CC RelTime failed: ", mega_df$error[1L])
+    msg("MEGA-CC RelTime failed: ", mega_error)
   }
 
-  write.csv(mega_df, mega_summary_file, row.names = FALSE)
+  mega_df <- data.frame(
+    candidate = mega_candidate,
+    method = "RelTime_MEGA",
+    model = "RelTime_MEGA",
+    lambda = NA_real_,
+    nb_rate_cat = NA_integer_,
+    smooth = NA_real_,
+    status = mega_status,
+    tree_file = if (identical(mega_status, "OK")) mega_tree_file else "",
+    ci_file = if (file.exists(mega_boot_ci_file)) mega_boot_ci_file else "",
+    tao_ci_file = if (file.exists(mega_tao_ci_file)) mega_tao_ci_file else "",
+    n_sites = ci_sites,
+    error = mega_error,
+    stringsAsFactors = FALSE
+  )
+  write.csv(mega_df, megacc_run_csv, row.names = FALSE)
   all_rows[[length(all_rows) + 1L]] <- mega_df
 }
 
@@ -2485,9 +2081,11 @@ if (!nrow(candidates_df)) {
   candidates_df <- full_candidates_df
 }
 
-## ---- Subset tuning: rerun winners on full tree if grid used a subset ----
+## ---- Subset tuning: rerun chronos winners on the full tree ----
+## treePL already dates the full tree after subset CV, and RelTime always
+## runs on the full tree, so only chronos needs a rerun here.
 if (use_subset_tuning) {
-  msg("Rerunning ", nrow(candidates_df), " winning candidates on the full tree (", Ntip(phy), " tips)...")
+  msg("Checking full-tree versions of the selected chronos candidates (", Ntip(phy), " tips)...")
   full_chronos_calib <- build_seeded_chronos_calib_from_node_bounds(
     phy,
     node_bounds,
@@ -2496,83 +2094,39 @@ if (use_subset_tuning) {
   expected_full_tips <- as.integer(Ntip(phy))
   for (ri in seq_len(nrow(candidates_df))) {
     cand <- candidates_df$candidate[ri]
-    cand_method <- candidates_df$method[ri]
-    if (identical(cand_method, "chronos")) {
-      src <- candidates_df$selected_from_candidate[ri] %||% cand
-      src_row <- all_df[all_df$candidate == src & all_df$status == "OK", , drop = FALSE]
-      if (!nrow(src_row)) next
-      mdl <- src_row$model[1]; lam <- src_row$lambda[1]; kcat <- src_row$nb_rate_cat[1]
-      full_tree_path <- file.path(outdir, "chronos", "trees",
-        paste0(prefix, "_", cand, "_fulltree.tre"))
-      if (file.exists(full_tree_path) && !tree_has_expected_tips(full_tree_path, expected_full_tips)) {
-        unlink(full_tree_path, force = TRUE)
-      }
-      if (!file.exists(full_tree_path)) {
-        full_run <- run_chronos_one(phy = phy, calib = full_chronos_calib,
-          model = mdl, lambda = lam, nb_rate_cat = if (is.finite(kcat)) kcat else NA_integer_,
-          retries = chronos_retries, iter_max = chronos_iter_max, tol = chronos_tol,
-          attempt_timeout = chronos_attempt_timeout)
-        if (identical(full_run$status, "OK")) {
-          ape::write.tree(full_run$tree, full_tree_path)
-          if (tree_has_expected_tips(full_tree_path, expected_full_tips)) {
-            candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
-            chronos_trees_cache[[cand]] <- full_run$tree
-            msg("  ", cand, ": rerun OK on full tree")
-          } else {
-            unlink(full_tree_path, force = TRUE)
-            msg("  ", cand, ": rerun produced a non-full tree — dropping from final outputs")
-          }
-        } else {
-          msg("  ", cand, ": rerun FAILED on full tree — dropping from final outputs")
-        }
-      } else {
-        candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
-        msg("  checkpoint: reusing full-tree ", cand)
-      }
-    } else if (identical(cand_method, "treePL")) {
-      src <- candidates_df$selected_from_candidate[ri] %||% cand
-      src_row <- all_df[all_df$candidate == src, , drop = FALSE]
-      smooth <- if (nrow(src_row)) src_row$smooth[1] else 0.01
-      full_tree_path <- file.path(outdir, "treepl", "trees",
-        paste0(prefix, "_", cand, "_fulltree.tre"))
-      if (file.exists(full_tree_path) && !tree_has_expected_tips(full_tree_path, expected_full_tips)) {
-        unlink(full_tree_path, force = TRUE)
-      }
-      if (!file.exists(full_tree_path)) {
-        treepl_input_full <- file.path(outdir, "treepl", paste0(prefix, "_phylogram_for_treepl_full.tre"))
-        ape::write.tree(phy, treepl_input_full)
-        cfg_full <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.cfg"))
-        log_full <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.log"))
-        prime_cfg <- file.path(outdir, "treepl", "configs", paste0(prefix, "_", cand, "_full.prime.cfg"))
-        prime_log <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, "_full.prime.log"))
-        subset_prime_log <- file.path(outdir, "treepl", "logs", paste0(prefix, "_", cand, ".prime.log"))
-        prime_lines <- treepl_parse_prime_lines(subset_prime_log)
-        if (isTRUE(treepl_prime) && !length(prime_lines)) {
-          treepl_write_cfg(prime_cfg, treepl_input_full, full_tree_path, smooth, treepl_numsites,
-            node_bounds, thorough = treepl_thorough, prime = TRUE,
-            opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter)
-          run_treepl_one(treepl_bin, prime_cfg, prime_log, omp_threads = treepl_threads)
-          prime_lines <- treepl_parse_prime_lines(prime_log)
-          if (file.exists(full_tree_path)) unlink(full_tree_path)
-        }
-        treepl_write_cfg(cfg_full, treepl_input_full, full_tree_path, smooth, treepl_numsites,
-          node_bounds, thorough = treepl_thorough, prime = FALSE,
-          opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
-          extra_lines = prime_lines)
-        run_treepl_one(treepl_bin, cfg_full, log_full, omp_threads = treepl_threads)
-        if (tree_has_expected_tips(full_tree_path, expected_full_tips)) {
-          candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
-          msg("  ", cand, ": rerun OK on full tree")
-        } else {
-          unlink(full_tree_path, force = TRUE)
-          msg("  ", cand, ": rerun FAILED on full tree — dropping from final outputs")
-        }
-      } else {
-        candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
-        msg("  checkpoint: reusing full-tree ", cand)
-      }
+    if (!identical(candidates_df$method[ri], "chronos")) next
+    src <- candidates_df$selected_from_candidate[ri] %||% cand
+    src_row <- all_df[all_df$candidate == src & all_df$status == "OK", , drop = FALSE]
+    if (!nrow(src_row)) next
+    mdl <- src_row$model[1]; lam <- src_row$lambda[1]; kcat <- src_row$nb_rate_cat[1]
+    full_tree_path <- file.path(outdir, "chronos", "trees",
+      paste0(prefix, "_", cand, "_fulltree.tre"))
+    if (file.exists(full_tree_path) && !tree_has_expected_tips(full_tree_path, expected_full_tips)) {
+      unlink(full_tree_path, force = TRUE)
     }
-    ## RelTime MEGA always runs on full tree (not subset) — no rerun needed
+    if (file.exists(full_tree_path)) {
+      candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+      msg("  checkpoint: reusing full-tree ", cand)
+      next
+    }
+    if (!("chronos" %in% methods)) next
+    full_run <- run_chronos_one(phy = phy, calib = full_chronos_calib,
+      model = mdl, lambda = lam, nb_rate_cat = if (is.finite(kcat)) kcat else NA_integer_,
+      retries = chronos_retries, iter_max = chronos_iter_max, tol = chronos_tol,
+      attempt_timeout = chronos_attempt_timeout)
+    if (identical(full_run$status, "OK")) {
+      ape::write.tree(full_run$tree, full_tree_path)
+      if (tree_has_expected_tips(full_tree_path, expected_full_tips)) {
+        candidates_df$tree_file[ri] <- normalizePath(full_tree_path)
+        chronos_trees_cache[[cand]] <- full_run$tree
+        msg("  ", cand, ": rerun OK on full tree")
+      } else {
+        unlink(full_tree_path, force = TRUE)
+        msg("  ", cand, ": rerun produced a non-full tree — dropping from final outputs")
+      }
+    } else {
+      msg("  ", cand, ": rerun FAILED on full tree — dropping from final outputs")
+    }
   }
 
   final_tip_counts <- vapply(candidates_df$tree_file, tree_tip_count, integer(1))
@@ -2584,7 +2138,8 @@ if (use_subset_tuning) {
   }
 }
 
-## ---- Post-selection CI computation (only for the 7 final trees) ----
+## ---- Post-selection bootstrap CIs for the selected chronos and treePL trees ----
+## RelTime_MEGA CIs are computed in the MEGA block above.
 msg("Computing CIs for selected candidates...")
 ci_output_dir <- file.path(outdir, "selected_ci")
 dir.create(ci_output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -2594,65 +2149,7 @@ for (ci_i in seq_len(nrow(candidates_df))) {
   ci_method <- candidates_df$method[ci_i]
   ci_tree_f <- candidates_df$tree_file[ci_i]
   if (!nzchar(ci_tree_f) || !file.exists(ci_tree_f)) next
-
-  ## R RelTime already has CIs — skip
-  if (identical(ci_method, "RelTime")) next
-
-  ## MEGA RelTime: Tao CIs computed inline; also compute Poisson bootstrap CIs
-  if (identical(ci_method, "RelTime_MEGA")) {
-    mega_boot_csv <- file.path(ci_output_dir, paste0(prefix, "_RelTime_MEGA_bootstrap_ci.csv"))
-    mega_boot_tre <- file.path(ci_output_dir, paste0(prefix, "_RelTime_MEGA_with_bootstrap_CI.tre"))
-    if (file.exists(mega_boot_csv)) {
-      msg("  checkpoint: reusing MEGA bootstrap CI")
-    } else {
-      msg("  MEGA RelTime bootstrap CI (", reltime_bootstrap_reps, " reps)...")
-      mega_boot_res <- try({
-        mega_tree_f <- file.path(mega_work_dir, paste0(prefix, "_RelTime_MEGA.tre"))
-        mega_tree <- ape::read.tree(mega_tree_f)
-        ## Determine root age: from --root-age, or from congruification root calibration
-        mega_root_age <- if (is.finite(root_age)) root_age else {
-          root_nd <- ape::Ntip(phy) + 1L
-          root_row <- node_bounds[node_bounds$node == root_nd, , drop = FALSE]
-          if (nrow(root_row)) {
-            mean(c(root_row$age_min[1], root_row$age_max[1]))
-          } else {
-            max(ape::node.depth.edgelength(mega_tree))
-          }
-        }
-        boot_result <- reltime_bootstrap_ci(
-          phy = phy,
-          calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
-          root_age = mega_root_age,
-          B = reltime_bootstrap_reps, n_sites = ci_sites,
-          quiet = TRUE, trees = FALSE
-        )
-        boot_ci <- boot_result$ci
-        boot_r_tree <- boot_result$tree
-        ## Remap CI nodes from R tree to MEGA tree via descendant tip-set hashing
-        n_m <- ape::Ntip(mega_tree)
-        int_r <- (ape::Ntip(boot_r_tree) + 1L):(ape::Ntip(boot_r_tree) + boot_r_tree$Nnode)
-        int_m <- (n_m + 1L):(n_m + mega_tree$Nnode)
-        h_r <- vapply(int_r, function(nd) digest::digest(sort(ape::extract.clade(boot_r_tree, nd)$tip.label), algo = "md5"), "")
-        h_m <- vapply(int_m, function(nd) digest::digest(sort(ape::extract.clade(mega_tree, nd)$tip.label), algo = "md5"), "")
-        ci_mega <- boot_ci
-        for (k in seq_len(nrow(ci_mega))) {
-          r_idx <- which(int_r == ci_mega$node[k])
-          if (length(r_idx) == 1L) {
-            m_idx <- which(h_m == h_r[r_idx])
-            if (length(m_idx) == 1L) ci_mega$node[k] <- int_m[m_idx]
-          }
-        }
-        d_m <- ape::node.depth.edgelength(mega_tree)
-        ci_mega$age <- (max(d_m) - d_m)[ci_mega$node]
-        write.csv(ci_mega, mega_boot_csv, row.names = FALSE)
-        annotate_tree_with_ci_from_objects(mega_tree, ci_mega, mega_boot_tre)
-        msg("  -> ", mega_boot_csv)
-      }, silent = FALSE)
-      if (inherits(mega_boot_res, "try-error"))
-        msg("  MEGA bootstrap CI failed: ", conditionMessage(attr(mega_boot_res, "condition")))
-    }
-    next
-  }
+  if (!(ci_method %in% c("chronos", "treePL"))) next
 
   ci_csv_out  <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_ci.csv"))
   ci_tree_out <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_with_CI.tre"))
@@ -2665,10 +2162,14 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     next
   }
 
+  run_chronos_ci <- identical(ci_method, "chronos") && "chronos" %in% methods && chronos_ci_reps > 0L
+  run_treepl_ci <- identical(ci_method, "treePL") && "treepl" %in% methods && treepl_bootstrap_reps > 0L
+  if (!run_chronos_ci && !run_treepl_ci) next
+
   ci_tree     <- try(ape::read.tree(ci_tree_f), silent = TRUE)
   if (inherits(ci_tree, "try-error")) next
 
-  if (identical(ci_method, "chronos")) {
+  if (run_chronos_ci) {
     ## Look up model/lambda/nb_rate_cat from the source candidate row
     src_cand <- candidates_df$selected_from_candidate[ci_i] %||% ci_cand
     src_row  <- all_df[all_df$candidate == src_cand & all_df$status == "OK", , drop = FALSE]
@@ -2681,15 +2182,16 @@ for (ci_i in seq_len(nrow(candidates_df))) {
       next
     }
 
-    ## Use cached in-memory chronos tree but strip the call attribute so
-    ## chronos_ci() rebuilds it cleanly — the original call can cause the
-    ## bootstrap to return the starting ages unchanged (zero-width CIs).
-    cached_tree <- chronos_trees_cache[[src_cand]]
-    if (is.null(cached_tree)) {
-      msg("  chronos CI skipped for ", ci_cand, " — no cached in-memory tree")
+    ## Prefer the file-backed full-tree chronogram for CI generation.
+    ## In-memory cached chronos objects can carry state that makes downstream
+    ## chronosCI bootstraps brittle on some large empirical trees. The
+    ## file-backed full-tree chronogram is the safer source for stage-5 CI.
+    ci_source_tree <- if (inherits(ci_tree, "phylo")) ci_tree else chronos_trees_cache[[src_cand]]
+    if (is.null(ci_source_tree) || !inherits(ci_source_tree, "phylo")) {
+      msg("  chronos CI skipped for ", ci_cand, " — no usable full-tree chronogram")
       next
     }
-    attr(cached_tree, "call") <- NULL
+    attr(ci_source_tree, "call") <- NULL
 
     msg("  chronos CI for ", ci_cand, " (", chronos_ci_reps, " reps)...")
     ci_ctrl <- ape::chronos.control()
@@ -2699,11 +2201,12 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     if (identical(ci_model, "discrete") && is.finite(ci_nrc)) {
       ci_ctrl$nb.rate.cat <- as.integer(ci_nrc)
     }
+    ci_calibration <- if (use_subset_tuning) full_chronos_calib else chronos_calib
     ci_res <- try(
       chronos_ci(
-        phy, cached_tree,
+        phy, ci_source_tree,
         pml_output = chronos_pml_output,
-        calibration = chronos_calib,
+        calibration = ci_calibration,
         B = chronos_ci_reps,
         type = chronos_ci_type,
         n_sites = ci_sites,
@@ -2717,7 +2220,7 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     )
     if (!inherits(ci_res, "try-error")) {
       write.csv(ci_res, ci_csv_out, row.names = FALSE)
-      annotate_tree_with_ci_from_objects(cached_tree, ci_res, ci_tree_out)
+      annotate_tree_with_ci_from_objects(ci_source_tree, ci_res, ci_tree_out)
       uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
         ci_cand, ci_res, source = "chronos-bootstrap"
       )
@@ -2728,47 +2231,44 @@ for (ci_i in seq_len(nrow(candidates_df))) {
       msg("  chronos CI failed for ", ci_cand, ": ", conditionMessage(attr(ci_res, "condition")))
     }
 
-  } else if (identical(ci_method, "treePL")) {
-    if (treepl_bootstrap_reps > 0L) {
-      ci_smooth <- candidates_df$smooth[ci_i]
-      if (!is.finite(ci_smooth)) ci_smooth <- 1
-      msg("  treePL CI for ", ci_cand, " (smooth=", ci_smooth, ", ", treepl_bootstrap_reps, " reps)...")
-      ci_res <- try(
-        treepl_bootstrap_ci(
-          treepl_bin = treepl_bin,
-          phy = phy,
-          calibration_df = pair_df[, c("taxonA", "taxonB", "age_min", "age_max"), drop = FALSE],
-          smooth = ci_smooth,
-          dated_tree = ci_tree,
-          B = treepl_bootstrap_reps,
-          n_sites = ci_sites,
-          numsites = treepl_numsites,
-          thorough = treepl_thorough,
-          prime = treepl_prime,
-          opt = treepl_opt,
-          plsimaniter = treepl_plsimaniter,
-          pliter = treepl_pliter,
-          quiet = TRUE,
-          omp_threads = treepl_threads,
-          jobs = treepl_bootstrap_jobs,
-          workdir = tempfile(pattern = paste0(prefix, "_", ci_cand, "_treepl_boot_")),
-          prefix = paste0(prefix, "_", ci_cand)
-        ),
-        silent = TRUE
+  } else if (run_treepl_ci) {
+    ci_smooth <- candidates_df$smooth[ci_i]
+    msg("  treePL CI for ", ci_cand, " (smooth=", fmt_num(ci_smooth), ", ", treepl_bootstrap_reps, " reps)...")
+    ci_res <- try(
+      treepl_bootstrap_ci(
+        treepl_bin = treepl_bin,
+        phy = phy,
+        node_bounds = node_bounds,
+        smooth = ci_smooth,
+        dated_tree = ci_tree,
+        prime_lines = treepl_prime_lines_full,
+        B = treepl_bootstrap_reps,
+        n_sites = ci_sites,
+        numsites = treepl_numsites,
+        thorough = treepl_thorough,
+        opt = treepl_opt,
+        plsimaniter = treepl_plsimaniter,
+        pliter = treepl_pliter,
+        quiet = TRUE,
+        omp_threads = treepl_threads,
+        jobs = treepl_bootstrap_jobs,
+        workdir = tempfile(pattern = paste0(prefix, "_", ci_cand, "_treepl_boot_")),
+        prefix = paste0(prefix, "_", ci_cand)
+      ),
+      silent = TRUE
+    )
+    if (!inherits(ci_res, "try-error")) {
+      write.csv(ci_res$ci, ci_csv_out, row.names = FALSE)
+      annotate_tree_with_ci_from_objects(ci_tree, ci_res$ci, ci_tree_out)
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+        ci_cand, ci_res$ci, source = "treePL-bootstrap"
       )
-      if (!inherits(ci_res, "try-error")) {
-        write.csv(ci_res$ci, ci_csv_out, row.names = FALSE)
-        annotate_tree_with_ci_from_objects(ci_tree, ci_res$ci, ci_tree_out)
-        uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
-          ci_cand, ci_res$ci, source = "treePL-bootstrap"
-        )
-        src_cand <- candidates_df$selected_from_candidate[ci_i] %||% ci_cand
-        src_idx <- which(all_df$candidate == src_cand & grepl("^OK", all_df$status))
-        if (length(src_idx)) all_df$ci_file[src_idx[1L]] <- ci_csv_out
-        msg("  -> ", ci_csv_out)
-      } else {
-        msg("  treePL CI failed for ", ci_cand, ": ", conditionMessage(attr(ci_res, "condition")))
-      }
+      src_cand <- candidates_df$selected_from_candidate[ci_i] %||% ci_cand
+      src_idx <- which(all_df$candidate == src_cand & grepl("^OK", all_df$status))
+      if (length(src_idx)) all_df$ci_file[src_idx[1L]] <- ci_csv_out
+      msg("  -> ", ci_csv_out)
+    } else {
+      msg("  treePL CI failed for ", ci_cand, ": ", conditionMessage(attr(ci_res, "condition")))
     }
   }
 }
@@ -2784,30 +2284,18 @@ key_dirs <- materialize_key_outputs(
     all_runs_summary = all_runs_csv,
     chronos_runs = chronos_runs_csv,
     treepl_runs = treepl_runs_csv,
-    reltime_run = reltime_run_csv,
     reltime_mega_run = megacc_run_csv
   )
 )
 candidates_df <- key_dirs$candidates_df
-
-## Copy MEGA bootstrap CI tree to MAIN_OUTPUT_TREES if it exists
-mega_boot_tre_src <- file.path(ci_output_dir, paste0(prefix, "_RelTime_MEGA_with_bootstrap_CI.tre"))
-if (file.exists(mega_boot_tre_src)) {
-  mega_boot_dst <- file.path(key_dirs$main_tree_dir, "RelTime_MEGA_with_bootstrap_CI.tre")
-  file.copy(mega_boot_tre_src, mega_boot_dst, overwrite = TRUE)
-  msg("Copied MEGA bootstrap CI tree to MAIN_OUTPUT_TREES")
-}
 
 selected_uncertainty_df <- build_representative_uncertainty(candidates_df, uncertainty_df)
 uncertainty_csv <- file.path(outdir, "uncertainty_summary_long.csv")
 if (nrow(selected_uncertainty_df)) {
   write.csv(selected_uncertainty_df, uncertainty_csv, row.names = FALSE)
 }
-plain_main_outputs <- chronos_ci_reps <= 0L && treepl_bootstrap_reps <= 0L && reltime_bootstrap_reps <= 0L
-selected_ci_paths <- copy_representative_ci_files(outdir, candidates_df, all_df, require_ci = !plain_main_outputs)
-if (!is.null(selected_ci_paths$candidates_df)) {
-  candidates_df <- selected_ci_paths$candidates_df
-}
+selected_ci_paths <- copy_representative_ci_files(outdir, candidates_df, all_df)
+candidates_df <- selected_ci_paths$candidates_df
 candidates_csv <- file.path(outdir, "candidates.csv")
 write.csv(candidates_df, candidates_csv, row.names = FALSE, quote = TRUE)
 
@@ -2819,16 +2307,19 @@ meta_lines <- c(
   paste0("Calibration source: ", if (has_csv) "csv" else "congruify"),
   if (has_csv) paste0("Calibration CSV: ", normalizePath(kv[["calibrations-csv"]], winslash = "/", mustWork = TRUE)) else paste0("Reference time tree: ", normalizePath(kv[["reference-time-tree"]], winslash = "/", mustWork = TRUE)),
   if (is.finite(root_age)) paste0("Root age appended: ", fmt_num(root_age)) else "Root age appended: none",
+  paste0("Subset tuning: ", if (use_subset_tuning) paste0("yes (", Ntip(phy_tune), " of ", Ntip(phy), " tips)") else "no"),
   paste0("chronos bootstrap type: ", chronos_ci_type),
   paste0("chronos bootstrap replicates: ", chronos_ci_reps),
   paste0("chronos bootstrap CI models: ", paste(chronos_ci_models, collapse = ",")),
   paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
+  if ("treepl" %in% methods) paste0("treePL smoothing selection: ", treepl_cv_type, " cross-validation over ",
+                                    paste(fmt_num(treepl_cv$grid), collapse = ","), " (lowest CV chi-square wins)") else NULL,
+  paste0("treePL numsites: ", treepl_numsites),
   paste0("treePL bootstrap replicates: ", treepl_bootstrap_reps),
   paste0("treePL bootstrap jobs: ", treepl_bootstrap_jobs),
-  paste0("RelTime bootstrap replicates: ", reltime_bootstrap_reps),
-  "RelTime Tao analytical CI: written as supplemental file only; not used in uncertainty_summary_long.csv",
-  if ("reltime_mega" %in% methods) paste0("MEGA-CC binary: ", if (exists("megacc_bin") && nzchar(megacc_bin)) megacc_bin else "not found") else NULL,
-  if ("reltime_mega" %in% methods) "MEGA-CC RelTime CI: Tao analytical (delta-method variance)" else NULL,
+  if ("reltime_mega" %in% methods) paste0("MEGA-CC binary: ", megacc_bin) else NULL,
+  paste0("RelTime (MEGA) bootstrap replicates: ", reltime_bootstrap_reps, " (megacc rerun per replicate)"),
+  "RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present",
   paste0("Calibration pairs input: ", nrow(pair_df)),
   paste0("Calibration pairs mapped: ", nrow(pair_map$mapped)),
   paste0("Calibration bounds retained: ", nrow(node_bounds)),

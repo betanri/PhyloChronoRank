@@ -27,8 +27,14 @@ plot_panel <- function(vals, labels, cols, ttl, ylab, fam_label = '', higher_bet
 make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
   if (!file.exists(csv_path)) { message('Skip: ', csv_path); return(invisible(NULL)) }
   d <- read.csv(csv_path, stringsAsFactors = FALSE)
-  # Deduplicate by identical metric fingerprints
-  d <- d[!duplicated(d[, c('burst_loss', 'internode_concordance', 'rate_irregularity')]), ]
+  # Deduplicate by identical metric fingerprints, but keep rows that differ in
+
+  # uncertainty width (so Tao-CI and bootstrap-CI variants both appear).
+  fp_cols <- c('burst_loss', 'internode_concordance', 'rate_irregularity')
+  uw <- d$uncertainty_mean_width_ma
+  uw[is.na(uw)] <- -999          # treat NA as its own level
+  fp <- paste(d$burst_loss, d$internode_concordance, d$rate_irregularity, round(uw, 4), sep = '|')
+  d <- d[!duplicated(fp), ]
   ord <- d$candidate[order(d$rank_mean_core_rank, d$rank_mean_core)]
   d <- d[match(ord, d$candidate), ]
   labels <- vapply(ord, function(x) if (x %in% names(short_labels)) short_labels[[x]] else x, '')
@@ -56,8 +62,23 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
   if (all(is.na(uw))) {
     plot.new(); text(0.5, 0.5, 'Uncertainty width\nnot available', cex = 1.2)
   } else {
-    uw[is.na(uw)] <- 0
-    plot_panel(uw, labels, cols, 'Uncertainty width', 'Mean CI width (Ma)', 'Optional precision layer')
+    ## Only plot candidates that have CI data (non-NA uncertainty).
+    ## Candidates without CI-embedded trees should not appear here.
+    has_ci <- !is.na(uw)
+    if (sum(has_ci) == 0) {
+      plot.new(); text(0.5, 0.5, 'Uncertainty width\nnot available', cex = 1.2)
+    } else {
+      uw_ci   <- uw[has_ci]
+      lab_ci  <- labels[has_ci]
+      col_ci  <- cols[has_ci]
+      ylim_top <- max(uw_ci, na.rm = TRUE) * 1.30
+      if (ylim_top == 0) ylim_top <- 1
+      bp <- barplot(uw_ci, names.arg = lab_ci, col = col_ci, las = 2,
+                    ylab = 'Mean CI width (Ma)', main = 'Uncertainty width',
+                    ylim = c(0, ylim_top))
+      text(bp, uw_ci, labels = sprintf('%.3f', uw_ci), pos = 3, cex = 0.95)
+      mtext('Lower is better   Optional precision layer', side = 1, line = 6.2, cex = 0.85)
+    }
   }
   plot.new()  ## empty panel to fill row
   ## Row 3
@@ -92,7 +113,7 @@ make_figure <- function(csv_path, fig_path, main_title, short_labels, col_map) {
 ## ---- Short labels and color maps ----
 ## Common building blocks
 short_vert <- c(
-  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
   RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
   chronos_clock_lambda100 = 'Clock', chronos_clock_lambda0p1 = 'Clock',
   chronos_discrete_lambda100_k2 = 'Discrete', chronos_discrete_lambda0p01_k2 = 'Discrete',
@@ -101,7 +122,7 @@ short_vert <- c(
   treePL_smooth0p01 = 'treePL'
 )
 col_vert <- c(
-  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#d7301f',
+  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#fc8d59',
   RelTime_MEGA_with_tao_CI = '#d7301f',
   chronos_clock_lambda100 = '#1b9e77', chronos_clock_lambda0p1 = '#1b9e77',
   chronos_discrete_lambda100_k2 = '#2c7fb8', chronos_discrete_lambda0p01_k2 = '#2c7fb8',
@@ -111,26 +132,18 @@ col_vert <- c(
 )
 
 short_gobi <- c(
-  RelTime_MEGA = 'RelTime', RelTime = 'RelTime',
-  RelTime_with_bootstrap_CI = 'RelTime', RelTime_with_tao_CI = 'RelTime(Tao)',
-  chronos_clock_lambda10 = 'Clock', chronos_clock_lambda1 = 'Clock',
-  chronos_discrete_lambda0p1_k2 = 'Discrete', chronos_discrete_lambda1_k2 = 'Discrete',
-  chronos_correlated_lambda0p01 = 'Correlated', chronos_correlated_lambda1 = 'Correlated',
-  chronos_relaxed_lambda0p01 = 'Relaxed', chronos_relaxed_lambda1 = 'Relaxed',
-  treePL_smooth0p01 = 'treePL'
+  chronos_clock = 'Clock', chronos_correlated = 'Correlated',
+  chronos_discrete = 'Discrete', treePL = 'treePL',
+  RelTime_with_tao_CI = 'RelTime(Tao)', RelTime_with_bootstrap_CI = 'RelTime(Boot)'
 )
 col_gobi <- c(
-  RelTime_MEGA = '#d7301f', RelTime = '#d7301f',
-  RelTime_with_bootstrap_CI = '#d7301f', RelTime_with_tao_CI = '#d7301f',
-  chronos_clock_lambda10 = '#1b9e77', chronos_clock_lambda1 = '#1b9e77',
-  chronos_discrete_lambda0p1_k2 = '#2c7fb8', chronos_discrete_lambda1_k2 = '#2c7fb8',
-  chronos_correlated_lambda0p01 = '#d95f0e', chronos_correlated_lambda1 = '#d95f0e',
-  chronos_relaxed_lambda0p01 = '#7570b3', chronos_relaxed_lambda1 = '#7570b3',
-  treePL_smooth0p01 = '#6baed6'
+  chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e',
+  chronos_discrete = '#2c7fb8', treePL = '#6baed6',
+  RelTime_with_tao_CI = '#d7301f', RelTime_with_bootstrap_CI = '#fc8d59'
 )
 
 short_tforms <- c(
-  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
   RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
   chronos_clock_lambda1 = 'Clock',
   chronos_discrete_lambda1_k2 = 'Discrete',
@@ -156,12 +169,14 @@ make_figure(
 short_terap_few <- c(
   chronos_discrete = 'Discrete', chronos_clock = 'Clock',
   chronos_correlated = 'Correlated', treePL = 'treePL',
-  chronos_relaxed = 'Relaxed', RelTime = 'RelTime'
+  chronos_relaxed = 'Relaxed', RelTime = 'RelTime',
+  RelTime_with_tao_CI = 'RelTime(Tao)', RelTime_with_bootstrap_CI = 'RelTime(Boot)'
 )
 col_terap_few <- c(
   chronos_discrete = '#2c7fb8', chronos_clock = '#1b9e77',
   chronos_correlated = '#d95f0e', treePL = '#6baed6',
-  chronos_relaxed = '#7570b3', RelTime = '#d7301f'
+  chronos_relaxed = '#7570b3', RelTime = '#d7301f',
+  RelTime_with_tao_CI = '#d7301f', RelTime_with_bootstrap_CI = '#fc8d59'
 )
 make_figure(
   file.path(base_dir, 'examples', 'terapontoid', 'pcr_rerun_3fam', 'summary_pcr_metrics.csv'),
@@ -171,12 +186,16 @@ make_figure(
 )
 
 short_terap_many <- c(
-  RelTime_MEGA = 'RelTime', chronos_clock_lambda1 = 'Clock',
+  RelTime_MEGA = 'RelTime', RelTime_MEGA_with_bootstrap_CI = 'RelTime(Boot)',
+  RelTime_MEGA_with_tao_CI = 'RelTime(Tao)',
+  chronos_clock_lambda1 = 'Clock',
   chronos_discrete_lambda1_k2 = 'Discrete', treePL_smooth0p01 = 'treePL',
   chronos_correlated_lambda0p01 = 'Correlated', chronos_relaxed_lambda0p01 = 'Relaxed'
 )
 col_terap_many <- c(
-  RelTime_MEGA = '#d7301f', chronos_clock_lambda1 = '#1b9e77',
+  RelTime_MEGA = '#d7301f', RelTime_MEGA_with_bootstrap_CI = '#fc8d59',
+  RelTime_MEGA_with_tao_CI = '#d7301f',
+  chronos_clock_lambda1 = '#1b9e77',
   chronos_discrete_lambda1_k2 = '#2c7fb8', treePL_smooth0p01 = '#6baed6',
   chronos_correlated_lambda0p01 = '#d95f0e', chronos_relaxed_lambda0p01 = '#7570b3'
 )
@@ -187,12 +206,20 @@ make_figure(
   short_terap_many, col_terap_many
 )
 
-## ---- Other 3 datasets ----
+## ---- Gobiaria (single scheme, McCraney minus kurtiform) ----
+make_figure(
+  file.path(base_dir, 'GOBIES', 'GOBY_TREES',
+            'McCraney_minus_kurtiform_cals_plus_eosphaeramia_apogoninae',
+            'pcr_output', 'summary_pcr_metrics.csv'),
+  file.path(out_fig, 'gobiaria_postfit.png'),
+  'Gobiaria (75 congruified calibrations): post-fit evaluation, 3 families',
+  short_gobi, col_gobi
+)
+
+## ---- Other 2 datasets (vertebrate, tetraodontiformes) ----
 datasets <- list(
   list(name = 'vertebrate', few_ncal = 18, many_ncal = 57,
        short = short_vert, cols = col_vert),
-  list(name = 'gobiaria', few_ncal = 24, many_ncal = 75,
-       short = short_gobi, cols = col_gobi),
   list(name = 'tetraodontiformes', few_ncal = 38, many_ncal = 120,
        short = short_tforms, cols = col_tforms)
 )
@@ -218,16 +245,16 @@ for (ds in datasets) {
 ## chronos_correlated, treePL.  All CI-embedded trees except chronos_correlated.
 short_ostario <- c(
   RelTime_tao_CI = 'RelTime(Tao)', RelTime_bootstrap_CI = 'RelTime(Boot)',
-  chronos_clock = 'Clock', chronos_correlated = 'Correlated', treePL = 'treePL'
+  chronos_clock = 'Clock', treePL = 'treePL'
 )
 col_ostario <- c(
   RelTime_tao_CI = '#d7301f', RelTime_bootstrap_CI = '#fc8d59',
-  chronos_clock = '#1b9e77', chronos_correlated = '#d95f0e', treePL = '#6baed6'
+  chronos_clock = '#1b9e77', treePL = '#6baed6'
 )
 ostario_csv <- file.path(base_dir, '..', 'Ostario', 'run1_plusAfro_plusCall', 'pcr_output', 'summary_pcr_metrics.csv')
 make_figure(
   ostario_csv,
-  file.path(out_fig, 'ostariophysi_postfit.png'),
+  file.path(out_fig, 'ostariophysi_postfit_v2.png'),
   'Ostariophysi (56 calibrations): post-fit evaluation, 3 families',
   short_ostario, col_ostario
 )

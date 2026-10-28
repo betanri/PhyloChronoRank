@@ -1,12 +1,26 @@
 ##############################################################
-## treepl_bootstrap_helpers.R
+## treepl_helpers.R
 ##
-## Repo-local treePL bootstrap CI support.
-## Branch lengths are perturbed with the same Poisson resampling
-## scheme used in the shared PCR uncertainty layer, treePL is rerun
-## on each perturbed phylogram, and node ages are summarized with
-## empirical quantiles after matching internal nodes by descendant
-## tip-set signatures.
+## Repo-local treePL support (Smith & O'Meara 2012). The dating
+## engine runs treePL in the standard order:
+##
+##   1. prime  — treePL tests optimizers and prints the best
+##               opt/optad/optcvad/moredetail lines, then exits
+##   2. cv     — cross-validation over a geometric smoothing series
+##               (cvstart -> cvstop by cvmultstep); the smoothing
+##               with the lowest CV chi-square is selected
+##   3. final  — one thorough run with the selected smoothing and
+##               the primed optimizer lines
+##
+## treePL's penalized-likelihood objective is not comparable across
+## smoothing values (the penalty grows with smoothing), so it is
+## never used to pick smoothing.
+##
+## Bootstrap CIs: branch lengths are perturbed with the same Poisson
+## resampling scheme used for chronos and RelTime, treePL is rerun
+## on each perturbed phylogram with the selected smoothing and primed
+## lines, and node ages are summarized with empirical quantiles after
+## matching internal nodes by descendant tip sets.
 ##############################################################
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
@@ -33,73 +47,8 @@ treepl_resolve_bin <- function(user_bin, repo_dir) {
   ""
 }
 
-.treepl_children_lookup <- function(phy) {
-  total <- ape::Ntip(phy) + phy$Nnode
-  ch <- vector("list", total)
-  for (k in seq_len(nrow(phy$edge))) {
-    ch[[phy$edge[k, 1L]]] <- c(ch[[phy$edge[k, 1L]]], phy$edge[k, 2L])
-  }
-  ch
-}
-
-.treepl_descendant_tip_labels <- function(phy, node, children = NULL) {
-  if (is.null(children)) children <- .treepl_children_lookup(phy)
-  n_tip <- ape::Ntip(phy)
-  stack <- node
-  tips <- integer(0)
-  while (length(stack)) {
-    cur <- stack[[1L]]
-    stack <- stack[-1L]
-    if (cur <= n_tip) {
-      tips <- c(tips, cur)
-    } else {
-      stack <- c(children[[cur]], stack)
-    }
-  }
-  sort(phy$tip.label[unique(tips)])
-}
-
-.treepl_select_node_pair <- function(phy, node, children = NULL) {
-  if (is.null(children)) children <- .treepl_children_lookup(phy)
-  kids <- children[[node]]
-  if (length(kids) < 2L) {
-    stop("Could not identify two child clades for treePL node ", node, ".")
-  }
-  child_min_tips <- vapply(
-    kids,
-    function(nd) .treepl_descendant_tip_labels(phy, nd, children)[1L],
-    FUN.VALUE = character(1)
-  )
-  kids <- kids[order(child_min_tips)]
-  c(
-    .treepl_descendant_tip_labels(phy, kids[1L], children)[1L],
-    .treepl_descendant_tip_labels(phy, kids[2L], children)[1L]
-  )
-}
-
-.treepl_build_node_bounds <- function(phy, calibration_df) {
-  if (!exists("reltime_merge_calibration_bounds", mode = "function")) {
-    stop("treePL bootstrap helper requires reltime_merge_calibration_bounds() from reltime_helpers.R.")
-  }
-  bounds <- reltime_merge_calibration_bounds(phy, calibration_df)
-  children <- .treepl_children_lookup(phy)
-  pairs <- t(vapply(
-    bounds$node,
-    function(nd) .treepl_select_node_pair(phy, as.integer(nd), children),
-    FUN.VALUE = c("", "")
-  ))
-  data.frame(
-    node = bounds$node,
-    taxonA = pairs[, 1L],
-    taxonB = pairs[, 2L],
-    age_min = bounds$age_min,
-    age_max = bounds$age_max,
-    stringsAsFactors = FALSE
-  )
-}
-
 treepl_write_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsites,
-                             node_bounds, thorough = TRUE, prime = TRUE,
+                             node_bounds, thorough = TRUE, prime = FALSE,
                              opt = NULL, plsimaniter = NULL, pliter = NULL,
                              extra_lines = NULL) {
   lines <- c(
@@ -138,6 +87,17 @@ treepl_write_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsite
   writeLines(lines, cfg_path)
 }
 
+treepl_run_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
+  if (file.exists(log_path)) unlink(log_path)
+  suppressWarnings(system2(
+    treepl_bin,
+    args = cfg_path,
+    stdout = log_path,
+    stderr = log_path,
+    env = paste0("OMP_NUM_THREADS=", as.integer(omp_threads))
+  ))
+}
+
 treepl_parse_prime_lines <- function(log_path) {
   if (!file.exists(log_path)) return(character(0))
   txt <- readLines(log_path, warn = FALSE)
@@ -151,15 +111,107 @@ treepl_parse_prime_lines <- function(log_path) {
   unique(out[nzchar(out)])
 }
 
-treepl_run_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
-  if (file.exists(log_path)) unlink(log_path)
-  suppressWarnings(system2(
-    treepl_bin,
-    args = cfg_path,
-    stdout = log_path,
-    stderr = log_path,
-    env = paste0("OMP_NUM_THREADS=", as.integer(omp_threads))
-  ))
+## Step 1. Prime on the tree that will be dated. treePL exits after priming
+## and writes an empty outfile, so the outfile is a throwaway temp path.
+treepl_run_prime <- function(treepl_bin, tree_path, node_bounds, smooth, numsites,
+                         cfg_path, log_path, thorough = TRUE,
+                         opt = NULL, plsimaniter = NULL, pliter = NULL,
+                         omp_threads = 1L) {
+  junk_out <- tempfile(pattern = "treepl_prime_", fileext = ".tre")
+  on.exit(unlink(c(junk_out, paste0(junk_out, ".r8s")), force = TRUE), add = TRUE)
+  treepl_write_cfg(
+    cfg_path, tree_path, junk_out, smooth, numsites, node_bounds,
+    thorough = thorough, prime = TRUE,
+    opt = opt, plsimaniter = plsimaniter, pliter = pliter
+  )
+  treepl_run_one(treepl_bin, cfg_path, log_path, omp_threads = omp_threads)
+  lines <- treepl_parse_prime_lines(log_path)
+  if (!length(lines)) {
+    stop("treePL prime step did not report optimizer settings; see ", log_path)
+  }
+  lines
+}
+
+## treePL CV walks a geometric series, so the smoothing grid must be one.
+## A single-value series (cvstart == cvstop) returns junk scores in treePL,
+## so at least two values are required. cvstop is set half a step below the
+## smallest value so floating-point rounding cannot drop it.
+treepl_cv_settings <- function(smoothing) {
+  s <- sort(unique(as.numeric(smoothing)), decreasing = TRUE)
+  s <- s[is.finite(s) & s > 0]
+  if (length(s) < 2L) {
+    stop("--treepl-smoothing needs at least two positive values for treePL cross-validation.")
+  }
+  ratio <- s[-1L] / s[-length(s)]
+  if (max(abs(log(ratio) - log(ratio[1L]))) > 1e-6) {
+    stop(
+      "--treepl-smoothing must be a geometric series (constant ratio between values), ",
+      "because treePL cross-validation steps from cvstart to cvstop by cvmultstep. ",
+      "Got: ", paste(s, collapse = ",")
+    )
+  }
+  list(
+    grid = s,
+    cvstart = s[1L],
+    cvstop = s[length(s)] * sqrt(ratio[1L]),
+    cvmultstep = ratio[1L]
+  )
+}
+
+treepl_cv_lines <- function(cv_settings, cv_type = c("loo", "random"), cvoutfile) {
+  cv_type <- match.arg(cv_type)
+  c(
+    "cv",
+    if (identical(cv_type, "random")) "randomcv" else NULL,
+    paste0("cvstart = ", .treepl_fmt_num(cv_settings$cvstart)),
+    paste0("cvstop = ", .treepl_fmt_num(cv_settings$cvstop)),
+    paste0("cvmultstep = ", .treepl_fmt_num(cv_settings$cvmultstep)),
+    paste0("cvoutfile = ", cvoutfile)
+  )
+}
+
+## treePL writes one line per smoothing value: "chisq: (<smooth>) <score>".
+## Printed smoothing values are rounded, so each is snapped to the nearest
+## grid value on the log scale.
+treepl_parse_cv_scores <- function(cvoutfile, grid) {
+  if (!file.exists(cvoutfile)) return(data.frame(smooth = numeric(0), cv_chisq = numeric(0)))
+  txt <- readLines(cvoutfile, warn = FALSE)
+  hits <- regmatches(txt, regexec("^chisq:\\s*\\(([^)]+)\\)\\s*(\\S+)", txt))
+  hits <- Filter(function(h) length(h) == 3L, hits)
+  if (!length(hits)) return(data.frame(smooth = numeric(0), cv_chisq = numeric(0)))
+  printed <- suppressWarnings(as.numeric(vapply(hits, `[`, "", 2L)))
+  chisq <- suppressWarnings(as.numeric(vapply(hits, `[`, "", 3L)))
+  snapped <- vapply(printed, function(x) grid[which.min(abs(log(grid) - log(x)))], numeric(1))
+  data.frame(smooth = snapped, cv_chisq = chisq, stringsAsFactors = FALSE)
+}
+
+## Step 2. Cross-validate the smoothing grid. Returns one row per grid value.
+treepl_cross_validate <- function(treepl_bin, tree_path, node_bounds, cv_settings,
+                                  cv_type, numsites, prime_lines,
+                                  cfg_path, log_path, cvoutfile, thorough = TRUE,
+                                  opt = NULL, plsimaniter = NULL, pliter = NULL,
+                                  omp_threads = 1L) {
+  junk_out <- tempfile(pattern = "treepl_cv_", fileext = ".tre")
+  on.exit(unlink(c(junk_out, paste0(junk_out, ".r8s")), force = TRUE), add = TRUE)
+  if (file.exists(cvoutfile)) unlink(cvoutfile)
+  treepl_write_cfg(
+    cfg_path, tree_path, junk_out, cv_settings$cvstart, numsites, node_bounds,
+    thorough = thorough, prime = FALSE,
+    opt = opt, plsimaniter = plsimaniter, pliter = pliter,
+    extra_lines = c(prime_lines, treepl_cv_lines(cv_settings, cv_type, cvoutfile))
+  )
+  treepl_run_one(treepl_bin, cfg_path, log_path, omp_threads = omp_threads)
+  scores <- treepl_parse_cv_scores(cvoutfile, cv_settings$grid)
+  out <- data.frame(smooth = cv_settings$grid, stringsAsFactors = FALSE)
+  out$cv_chisq <- scores$cv_chisq[match(out$smooth, scores$smooth)]
+  out
+}
+
+treepl_select_smoothing <- function(cv_scores) {
+  ok <- is.finite(cv_scores$cv_chisq)
+  if (!any(ok)) return(NA_real_)
+  z <- cv_scores[ok, , drop = FALSE]
+  z$smooth[which.min(z$cv_chisq)]
 }
 
 .treepl_read_valid_tree <- function(path) {
@@ -183,24 +235,17 @@ treepl_run_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
   out
 }
 
+## Internal-node signatures (sorted descendant tip labels), named by node number.
 .treepl_signature_index <- function(phy) {
-  n_tip <- ape::Ntip(phy)
-  int_nodes <- seq.int(n_tip + 1L, n_tip + phy$Nnode)
-  children <- .treepl_children_lookup(phy)
-  sig <- vapply(
-    int_nodes,
-    function(nd) paste(.treepl_descendant_tip_labels(phy, nd, children), collapse = "\r"),
-    FUN.VALUE = character(1)
-  )
-  names(sig) <- as.character(int_nodes)
+  parts <- ape::prop.part(phy)
+  labs <- attr(parts, "labels")
+  sig <- vapply(parts, function(p) paste(sort(labs[p]), collapse = "\r"), character(1))
+  names(sig) <- as.character(seq.int(ape::Ntip(phy) + 1L, length.out = length(parts)))
   sig
 }
 
 .treepl_node_age_vector <- function(dated_tree) {
   depths <- ape::node.depth.edgelength(dated_tree)
-  if (length(depths) != ape::Ntip(dated_tree) + dated_tree$Nnode) {
-    stop("treePL bootstrap could not compute node depths for the dated tree.")
-  }
   root_to_tip <- max(depths[seq_len(ape::Ntip(dated_tree))], na.rm = TRUE)
   ages <- root_to_tip - depths
   storage.mode(ages) <- "double"
@@ -219,10 +264,9 @@ treepl_run_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
 .treepl_bootstrap_one <- function(i, phy, ref_sig, treepl_bin, smooth, numsites,
                                   node_bounds, prime_lines, thorough, opt,
                                   plsimaniter, pliter, omp_threads, min_edge,
-                                  n_sites, workdir, prefix, quiet,
+                                  n_sites, workdir, prefix,
                                   return_tree = FALSE, seed = NULL) {
   if (is.finite(seed)) set.seed(as.integer(seed))
-  if (!quiet) cat("\rRunning treePL bootstrap:", i)
   phy_boot <- try(.treepl_poisson_perturb_phy(phy, n_sites, min_edge = min_edge), silent = TRUE)
   if (inherits(phy_boot, "try-error")) {
     return(list(ok = FALSE, ages = NULL, tree = NULL))
@@ -249,10 +293,13 @@ treepl_run_one <- function(treepl_bin, cfg_path, log_path, omp_threads = 1L) {
   list(ok = TRUE, ages = ages_i, tree = if (isTRUE(return_tree)) tr_i else NULL)
 }
 
-treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
-                                dated_tree = NULL, B = 100L,
+## node_bounds: the shared merged bounds (node, taxonA, taxonB, age_min,
+## age_max) mapped on `phy`. smooth and prime_lines come from the main run,
+## so every replicate uses the same settings as the point estimate.
+treepl_bootstrap_ci <- function(treepl_bin, phy, node_bounds, smooth, dated_tree,
+                                prime_lines = character(0), B = 100L,
                                 n_sites = 1000L, numsites = as.integer(n_sites),
-                                thorough = TRUE, prime = TRUE,
+                                thorough = TRUE,
                                 opt = NULL, plsimaniter = NULL, pliter = NULL,
                                 quiet = FALSE, omp_threads = 1L,
                                 jobs = 1L,
@@ -271,47 +318,10 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
   if (!nzchar(treepl_bin) || !file.exists(treepl_bin)) {
     stop("A valid treePL binary is required for treePL bootstrap.")
   }
+  if (!inherits(dated_tree, "phylo")) stop("treePL bootstrap needs the dated point-estimate tree.")
 
   dir.create(workdir, recursive = TRUE, showWarnings = FALSE)
-  node_bounds <- .treepl_build_node_bounds(phy, calibration_df)
   ref_sig <- .treepl_signature_index(phy)
-
-  base_tree_path <- file.path(workdir, paste0(prefix, "_base_input.tre"))
-  ape::write.tree(phy, base_tree_path)
-
-  prime_lines <- character(0)
-  if (isTRUE(prime)) {
-    prime_cfg <- file.path(workdir, paste0(prefix, "_prime.cfg"))
-    prime_out <- file.path(workdir, paste0(prefix, "_prime_out.tre"))
-    prime_log <- file.path(workdir, paste0(prefix, "_prime.log"))
-    treepl_write_cfg(
-      prime_cfg, base_tree_path, prime_out, smooth, numsites, node_bounds,
-      thorough = thorough, prime = TRUE, opt = opt,
-      plsimaniter = plsimaniter, pliter = pliter
-    )
-    treepl_run_one(treepl_bin, prime_cfg, prime_log, omp_threads = omp_threads)
-    prime_lines <- treepl_parse_prime_lines(prime_log)
-    if (file.exists(prime_out)) unlink(prime_out)
-    if (file.exists(paste0(prime_out, ".r8s"))) unlink(paste0(prime_out, ".r8s"))
-  }
-
-  if (is.null(dated_tree)) {
-    base_cfg <- file.path(workdir, paste0(prefix, "_base.cfg"))
-    base_out <- file.path(workdir, paste0(prefix, "_base.tre"))
-    base_log <- file.path(workdir, paste0(prefix, "_base.log"))
-    treepl_write_cfg(
-      base_cfg, base_tree_path, base_out, smooth, numsites, node_bounds,
-      thorough = thorough, prime = FALSE, opt = opt,
-      plsimaniter = plsimaniter, pliter = pliter, extra_lines = prime_lines
-    )
-    treepl_run_one(treepl_bin, base_cfg, base_log, omp_threads = omp_threads)
-    dated_tree <- .treepl_read_valid_tree(base_out)
-    if (is.null(dated_tree)) stop("treePL bootstrap could not generate a valid base dated tree.")
-  } else if (is.character(dated_tree)) {
-    dated_tree <- .treepl_read_valid_tree(dated_tree)
-    if (is.null(dated_tree)) stop("treePL bootstrap could not read the supplied dated tree.")
-  }
-
   int_nodes <- as.integer(names(ref_sig))
   base_age <- .treepl_ages_by_signature(dated_tree, ref_sig)
   if (!all(is.finite(base_age))) {
@@ -336,91 +346,37 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
     TRUE
   }
 
-  if (jobs <= 1L || .Platform$OS.type != "unix") {
-    while (n_ok < B && attempt_i < max_attempts) {
+  run_one <- function(i) {
+    .treepl_bootstrap_one(
+      i = i, phy = phy, ref_sig = ref_sig, treepl_bin = treepl_bin,
+      smooth = smooth, numsites = numsites, node_bounds = node_bounds,
+      prime_lines = prime_lines, thorough = thorough, opt = opt,
+      plsimaniter = plsimaniter, pliter = pliter, omp_threads = omp_threads,
+      min_edge = min_edge, n_sites = n_sites, workdir = workdir, prefix = prefix,
+      return_tree = trees, seed = rep_seeds[i]
+    )
+  }
+
+  if (jobs > 1L && .Platform$OS.type == "unix" && !quiet) {
+    cat("Running treePL bootstrap in parallel with ", jobs, " workers\n", sep = "")
+  }
+  while (n_ok < B && attempt_i < max_attempts) {
+    if (jobs <= 1L || .Platform$OS.type != "unix") {
       attempt_i <- attempt_i + 1L
-      if (!quiet) {
-        cat(
-          "\rRunning treePL bootstrap:",
-          n_ok + 1L, "/", B,
-          " (attempt ", attempt_i, ")",
-          sep = ""
-        )
-      }
-      res_i <- .treepl_bootstrap_one(
-        i = attempt_i,
-        phy = phy,
-        ref_sig = ref_sig,
-        treepl_bin = treepl_bin,
-        smooth = smooth,
-        numsites = numsites,
-        node_bounds = node_bounds,
-        prime_lines = prime_lines,
-        thorough = thorough,
-        opt = opt,
-        plsimaniter = plsimaniter,
-        pliter = pliter,
-        omp_threads = omp_threads,
-        min_edge = min_edge,
-        n_sites = n_sites,
-        workdir = workdir,
-        prefix = prefix,
-        quiet = TRUE,
-        return_tree = trees,
-        seed = rep_seeds[attempt_i]
-      )
-      record_bootstrap_success(res_i)
-    }
-  } else {
-    if (!quiet) {
-      cat("Running treePL bootstrap in parallel with ", jobs, " workers\n", sep = "")
-    }
-    while (n_ok < B && attempt_i < max_attempts) {
-      batch_n <- min(as.integer(jobs), max_attempts - attempt_i)
-      batch_ids <- seq.int(attempt_i + 1L, length.out = batch_n)
+      res_list <- list(run_one(attempt_i))
+    } else {
+      batch_ids <- seq.int(attempt_i + 1L, length.out = min(jobs, max_attempts - attempt_i))
       attempt_i <- max(batch_ids)
-      res_list <- parallel::mclapply(
-        batch_ids,
-        function(i) {
-          .treepl_bootstrap_one(
-            i = i,
-            phy = phy,
-            ref_sig = ref_sig,
-            treepl_bin = treepl_bin,
-            smooth = smooth,
-            numsites = numsites,
-            node_bounds = node_bounds,
-            prime_lines = prime_lines,
-            thorough = thorough,
-            opt = opt,
-            plsimaniter = plsimaniter,
-            pliter = pliter,
-            omp_threads = omp_threads,
-            min_edge = min_edge,
-            n_sites = n_sites,
-            workdir = workdir,
-            prefix = prefix,
-            quiet = TRUE,
-            return_tree = trees,
-            seed = rep_seeds[i]
-          )
-        },
-        mc.cores = jobs,
-        mc.preschedule = FALSE,
-        mc.set.seed = FALSE
-      )
-      for (res_i in res_list) {
-        record_bootstrap_success(res_i)
-        if (n_ok >= B) break
-      }
-      if (!quiet) {
-        cat(
-          "\rRunning treePL bootstrap:",
-          min(n_ok + 1L, B), "/", B,
-          " (attempt ", attempt_i, ")",
-          sep = ""
-        )
-      }
+      res_list <- parallel::mclapply(batch_ids, run_one, mc.cores = jobs,
+                                     mc.preschedule = FALSE, mc.set.seed = FALSE)
+    }
+    for (res_i in res_list) {
+      record_bootstrap_success(res_i)
+      if (n_ok >= B) break
+    }
+    if (!quiet) {
+      cat("\rRunning treePL bootstrap: ", min(n_ok + 1L, B), "/", B,
+          " (attempt ", attempt_i, ")", sep = "")
     }
   }
   if (!quiet) cat("\n")
@@ -432,10 +388,9 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
     )
   }
 
-  boot_ok <- boot_age[, seq_len(n_ok), drop = FALSE]
   qfun <- function(probs) {
     apply(
-      boot_ok,
+      boot_age,
       1L,
       stats::quantile,
       probs = probs,
@@ -460,7 +415,6 @@ treepl_bootstrap_ci <- function(treepl_bin, phy, calibration_df, smooth,
     tree = dated_tree,
     ci = ci_df,
     bounds = node_bounds,
-    bootstrap_ok = rep(TRUE, n_ok),
     n_bootstrap_ok = n_ok,
     n_bootstrap_attempts = attempt_i
   )

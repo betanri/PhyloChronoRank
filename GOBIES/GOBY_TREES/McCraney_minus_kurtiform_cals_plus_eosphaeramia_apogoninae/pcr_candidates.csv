@@ -1,0 +1,7 @@
+"candidate","tree_file"
+"chronos_clock","chronos_clock_lambda1_with_CI.tre"
+"chronos_correlated","chronos_correlated_lambda1_with_CI.tre"
+"chronos_discrete","chronos_discrete_lambda1_k2_with_CI.tre"
+"treePL","treePL_smooth0p01_with_CI.tre"
+"RelTime_with_tao_CI","RelTime_with_tao_CI.tre"
+"RelTime_with_bootstrap_CI","RelTime_with_bootstrap_CI.tre"

@@ -5,3 +5,4 @@
 examples/.DS_Store
 examples/*/pcr_run_test/
 out/
+scripts/__pycache__/
