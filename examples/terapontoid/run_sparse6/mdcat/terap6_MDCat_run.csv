@@ -1,0 +1,2 @@
+"candidate","method","model","lambda","nb_rate_cat","smooth","status","tree_file","ci_file","mdcat_reps","mdcat_ncat","log_likelihood","seconds","mdcat_rounds_max","rounds_used","n_cal_point","n_cal_fixed_at_bound","n_cal_free","n_cal_outside_bounds","solver","max_time_drift","error"
+"MDCat","MDCat","MDCat",NA,NA,NA,"OK","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/mdcat/terap6_MDCat.tre","",10,50,943.256393108881,22.1,5,1,6,0,0,0,"OSQP",0,NA

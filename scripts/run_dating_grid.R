@@ -48,9 +48,18 @@ usage <- function() {
     "    --calibrations-csv    Pairwise calibration CSV with taxonA,taxonB,age_min[,age_max].\n",
     "    --reference-time-tree Reference ultrametric tree for congruification.\n\n",
     "Optional arguments:\n",
-    "  --methods               Comma list from chronos,treepl,reltime_mega. Default: chronos,treepl,reltime_mega.\n",
+    "  --methods               Comma list from chronos,treepl,reltime_mega,mdcat. Default: chronos,treepl,reltime_mega.\n",
     "                          RelTime runs only through MEGA-CC; 'reltime' is accepted as an alias for reltime_mega.\n",
     "  --megacc-bin            megacc executable for MEGA RelTime. Default: MEGACC_BIN env, PATH megacc.\n",
+    "  --mdcat-bin             md_cat.py of an MD-Cat install (github.com/uym2/MD-Cat). Default: MDCAT_BIN env, PATH.\n",
+    "  --mdcat-reps            MD-Cat random starts (-p). Default: 10.\n",
+    "  --mdcat-ncat            MD-Cat rate categories (-k). Default: 50.\n",
+    "  --mdcat-threads         MD-Cat solver threads. Default: 1.\n",
+    "  --mdcat-jobs            Run the random starts as parallel single-start processes. Default: 1.\n",
+    "  --mdcat-rounds          Active-set rounds for bounds (fix crossed bounds, rerun). Default: 5.\n",
+    "                          MD-Cat takes fixed ages only: point bounds are fixed; a node that ends outside\n",
+    "                          its bounds is fixed at the crossed bound and MD-Cat reruns. Sequence length (-l)\n",
+    "                          is --treepl-numsites.\n",
     "  --phylogram-tree-name   Select named tree from a named-Newick or multi-tree file.\n",
     "  --phylogram-tree-index  1-based fallback tree index. Default: 1.\n",
     "  --reference-tree-name   Optional named tree selector for the reference time tree.\n",
@@ -84,7 +93,8 @@ usage <- function() {
     "  --treepl-opt-check      Date the full tree under each distinct prime result, treePL defaults and\n",
     "                          two extra seeds; keep the lowest objective and report the age spread. Default: TRUE.\n",
     "  --treepl-cv-reps        Replicates of each random-CV run (--treepl-cv=random); each smoothing value is\n",
-    "                          scored by the median of its accepted replicates. Default: 10.\n",
+    "                          ranked inside each replicate (folds before any blow-up); lowest mean rank\n",
+    "                          wins. Default: 10.\n",
     "  --treepl-opt-screen     prime (default) or full. full adds A. Pyron's VGP optimizer screen: 144 settings\n",
     "                          (opt 0-5 x optad 0-5 x moredetail x moredetailad) x --treepl-opt-seeds seeds at\n",
     "                          --treepl-screen-pliter, then the best two settings x --treepl-deep-seeds seeds at\n",
@@ -145,6 +155,7 @@ repo_dir <- normalizePath(file.path(script_dir, ".."), winslash = "/", mustWork 
 source(file.path(script_dir, "chronos_ci_helpers.R"))
 source(file.path(script_dir, "treepl_helpers.R"))
 source(file.path(script_dir, "reltime_mega_helpers.R"))
+source(file.path(script_dir, "mdcat_helpers.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0L) b else a
 
@@ -1131,6 +1142,17 @@ build_representative_candidates <- function(all_df) {
     )
   }
 
+  mdcat_df <- all_df[all_df$method == "MDCat" & all_df$status == "OK" & nzchar(all_df$tree_file), , drop = FALSE]
+  if (nrow(mdcat_df)) {
+    add_i <- add_i + 1L
+    reps[[add_i]] <- data.frame(
+      candidate = "MDCat", tree_file = mdcat_df$tree_file[1L], method = "MDCat", model = "MDCat",
+      lambda = NA_real_, nb_rate_cat = NA_integer_, smooth = NA_real_,
+      selected_from_candidate = "MDCat", selection_score = NA_real_,
+      selection_rule = "mdcat_run", stringsAsFactors = FALSE
+    )
+  }
+
   bind_rows_fill(reps)
 }
 
@@ -1482,7 +1504,7 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
 
 methods <- tolower(parse_chr_grid(kv[["methods"]] %||% "chronos,treepl,reltime_mega", "--methods"))
 methods <- unique(sub("^reltime$", "reltime_mega", methods))
-valid_methods <- c("chronos", "treepl", "reltime_mega")
+valid_methods <- c("chronos", "treepl", "reltime_mega", "mdcat")
 bad_methods <- setdiff(methods, valid_methods)
 if (length(bad_methods)) {
   stop("Unknown methods: ", paste(bad_methods, collapse = ", "))
@@ -2065,24 +2087,26 @@ if ("treepl" %in% methods) {
       write.csv(cv_scores, cv_scores_csv, row.names = FALSE)
     }
     for (j in seq_len(nrow(cv_scores))) {
-      msg("    smooth=", fmt_num(cv_scores$smooth[j]), "  CV chisq=", fmt_num(cv_scores$cv_chisq[j]),
-          if (isTRUE(cv_scores$cv_folds_used[j] < cv_scores$cv_folds[j]))
+      replicated <- isTRUE(cv_scores$cv_reps[j] > 1L) && "cv_score" %in% names(cv_scores)
+      msg("    smooth=", fmt_num(cv_scores$smooth[j]),
+          if (replicated) paste0("  mean rank=", fmt_num(cv_scores$cv_score[j]), " over ",
+                                 cv_scores$cv_reps_ranked[j], "/", cv_scores$cv_reps[j], " replicates",
+                                 "  (median CV chisq of accepted replicates=", fmt_num(cv_scores$cv_chisq[j]), ")")
+          else paste0("  CV chisq=", fmt_num(cv_scores$cv_chisq[j])),
+          if (!replicated && isTRUE(cv_scores$cv_folds_used[j] < cv_scores$cv_folds[j]))
             paste0("  (", cv_scores$cv_folds_used[j], "/", cv_scores$cv_folds[j],
                    " folds used; a later fold blew up)") else "",
-          if (isTRUE(cv_scores$cv_reps[j] > 1L))
-            paste0("  (median of ", cv_scores$cv_reps_accepted[j], "/", cv_scores$cv_reps[j],
-                   " accepted replicates)") else "",
           if (cv_scores$cv_run[j] > 1L) paste0("  (extension run ", cv_scores$cv_run[j] - 1L, ")") else "")
     }
     if (!is.finite(best_smooth)) {
       stop("treePL cross-validation produced no usable scores; see ", tp_log("cv"))
     }
-    if (any(cv_scores$cv_folds_used < 0.5 * cv_scores$cv_folds, na.rm = TRUE)) {
+    if (!isTRUE(cv_reps_used > 1L) && any(cv_scores$cv_folds_used < 0.5 * cv_scores$cv_folds, na.rm = TRUE)) {
       msg("  WARNING: treePL blew up early in some CV folds, so some CV scores rest on fewer than half ",
           "of the folds", if (identical(treepl_cv_type, "random")) "; use --treepl-cv-reps > 1 or --treepl-cv=loo" else "", ".")
     }
-    if (any(is.finite(cv_scores$cv_reps_accepted) & cv_scores$cv_reps_accepted < cv_scores$cv_reps)) {
-      msg("  note: some random-CV replicates blew up and were rejected; see ", cv_reps_csv, ".")
+    if (any(is.finite(cv_scores$cv_reps_ranked) & cv_scores$cv_reps_ranked < cv_scores$cv_reps)) {
+      msg("  note: in some random-CV replicates the first fold already blew up; they were skipped. See ", cv_reps_csv, ".")
     }
     msg("  CV-selected smoothing: ", fmt_num(best_smooth))
     if (isTRUE(cv_at_edge)) {
@@ -2405,6 +2429,86 @@ if ("reltime_mega" %in% methods) {
   all_rows[[length(all_rows) + 1L]] <- mega_df
 }
 
+## ---------------------------------------------------------------------------
+## MD-Cat: maximum-likelihood dating with a categorical rate model (EM).
+## Always runs on the full tree. MD-Cat takes fixed ages only; see
+## mdcat_helpers.R for how the shared bounds are converted.
+## ---------------------------------------------------------------------------
+if ("mdcat" %in% methods) {
+  mdcat_bin <- mdcat_resolve_bin(kv[["mdcat-bin"]] %||% NULL)
+  if (!nzchar(mdcat_bin)) {
+    stop("mdcat requested, but no md_cat.py was found. Pass --mdcat-bin or set MDCAT_BIN.")
+  }
+  mdcat_reps <- max(1L, as.integer(kv[["mdcat-reps"]] %||% "10"))
+  mdcat_ncat <- max(2L, as.integer(kv[["mdcat-ncat"]] %||% "50"))
+  mdcat_threads <- max(1L, as.integer(kv[["mdcat-threads"]] %||% "1"))
+  mdcat_jobs <- max(1L, as.integer(kv[["mdcat-jobs"]] %||% "1"))
+  mdcat_rounds <- max(1L, as.integer(kv[["mdcat-rounds"]] %||% "5"))
+  msg("Running MD-Cat with ", mdcat_bin, " (", mdcat_reps, " random starts, k=", mdcat_ncat, ")")
+  md_dir <- file.path(outdir, "mdcat")
+  md_tree <- file.path(md_dir, paste0(prefix, "_MDCat.tre"))
+  md_run_csv <- file.path(md_dir, paste0(prefix, "_MDCat_run.csv"))
+  md_prev <- read_csv_if_exists(md_run_csv)
+  md_status <- "OK"
+  md_error <- NA_character_
+  if (tree_has_expected_tips(md_tree, Ntip(phy)) && nrow(md_prev) &&
+      identical(as.integer(md_prev$mdcat_reps[1L]), mdcat_reps) &&
+      identical(as.integer(md_prev$mdcat_ncat[1L]), mdcat_ncat) &&
+      identical(as.integer(md_prev$mdcat_rounds_max[1L] %||% NA), mdcat_rounds)) {
+    msg("  checkpoint: reusing MD-Cat tree")
+    md_df <- md_prev
+  } else {
+    md_res <- try(mdcat_run(mdcat_bin, phy, node_bounds, md_dir, prefix,
+                            reps = mdcat_reps, ncat = mdcat_ncat, seq_len = treepl_numsites,
+                            seed = as.integer(kv[["seed"]] %||% "1"), threads = mdcat_threads,
+                            jobs = mdcat_jobs, rounds = mdcat_rounds),
+                  silent = TRUE)
+    if (inherits(md_res, "try-error")) {
+      md_status <- "FAILED"
+      md_error <- conditionMessage(attr(md_res, "condition"))
+      msg("MD-Cat failed: ", md_error)
+    } else {
+      cal <- md_res$calibrations
+      msg("  MD-Cat calibrations: ", sum(cal$fixed == "point"), " fixed point ages, ",
+          sum(grepl("^(min|max)_round", cal$fixed)), " fixed at a crossed bound, ",
+          sum(cal$fixed == "start_midpoint"), " fixed at an interval midpoint (time scale), ",
+          sum(!nzchar(cal$fixed)), " free inside their bounds")
+      msg("  MD-Cat finished in ", round(md_res$seconds), " s (", md_res$rounds, " round(s)); log-likelihood ",
+          fmt_num(md_res$log_likelihood), "; solver ", md_res$solver)
+      if (any(!cal$within_bounds)) {
+        msg("  WARNING: ", sum(!cal$within_bounds), " of ", nrow(cal), " calibrated nodes are still outside ",
+            "the shared bounds after ", md_res$rounds, " round(s); raise --mdcat-rounds.")
+      }
+    }
+    md_df <- data.frame(
+      candidate = "MDCat", method = "MDCat", model = "MDCat",
+      lambda = NA_real_, nb_rate_cat = NA_integer_, smooth = NA_real_,
+      status = md_status, tree_file = if (identical(md_status, "OK")) md_tree else "",
+      ci_file = "",
+      mdcat_reps = mdcat_reps, mdcat_ncat = mdcat_ncat,
+      log_likelihood = if (identical(md_status, "OK")) md_res$log_likelihood else NA_real_,
+      seconds = if (identical(md_status, "OK")) round(md_res$seconds, 1) else NA_real_,
+      mdcat_rounds_max = mdcat_rounds,
+      rounds_used = if (identical(md_status, "OK")) md_res$rounds else NA_integer_,
+      n_cal_point = if (identical(md_status, "OK")) sum(md_res$calibrations$fixed == "point") else NA_integer_,
+      n_cal_fixed_at_bound = if (identical(md_status, "OK")) sum(grepl("^(min|max)_round", md_res$calibrations$fixed)) else NA_integer_,
+      n_cal_free = if (identical(md_status, "OK")) sum(!nzchar(md_res$calibrations$fixed)) else NA_integer_,
+      n_cal_outside_bounds = if (identical(md_status, "OK")) sum(!md_res$calibrations$within_bounds) else NA_integer_,
+      solver = if (identical(md_status, "OK")) md_res$solver else NA_character_,
+      max_time_drift = if (identical(md_status, "OK")) md_res$max_drift else NA_real_,
+      error = md_error, stringsAsFactors = FALSE
+    )
+    dir.create(md_dir, recursive = TRUE, showWarnings = FALSE)
+    write.csv(md_df, md_run_csv, row.names = FALSE)
+  }
+  if (identical(md_df$status[1L], "OK")) {
+    candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(
+      candidate = "MDCat", tree_file = md_tree, stringsAsFactors = FALSE
+    )
+  }
+  all_rows[[length(all_rows) + 1L]] <- md_df
+}
+
 all_df <- dedupe_rows_last(bind_rows_fill(all_rows), c("candidate", "method"))
 all_runs_csv <- file.path(outdir, paste0(prefix, "_all_runs_summary.csv"))
 write.csv(all_df, all_runs_csv, row.names = FALSE)
@@ -2652,6 +2756,9 @@ meta_lines <- c(
   paste0("Target tree id: ", phy_loaded$tree_id),
   paste0("Output prefix: ", prefix),
   paste0("Methods requested: ", paste(methods, collapse = ",")),
+  if ("mdcat" %in% methods) paste0("MD-Cat: ", kv[["mdcat-reps"]] %||% "10", " random starts, k=",
+                                   kv[["mdcat-ncat"]] %||% "50", "; bounds by active set (points fixed, crossed bounds fixed, up to ",
+                                   kv[["mdcat-rounds"]] %||% "5", " rounds)") else NULL,
   paste0("Calibration source: ", if (has_csv) "csv" else "congruify",
          if ("additional-calibrations-csv" %in% names(kv)) " + additional CSV" else ""),
   if ("additional-calibrations-csv" %in% names(kv)) paste0("Additional calibration CSV: ",
@@ -2664,7 +2771,9 @@ meta_lines <- c(
   paste0("chronos bootstrap CI models: ", paste(chronos_ci_models, collapse = ",")),
   paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
   if ("treepl" %in% methods) paste0("treePL smoothing selection: ", treepl_cv_type, " cross-validation over ",
-                                    paste(fmt_num(treepl_cv$grid), collapse = ","), " (lowest CV chi-square wins; up to ",
+                                    paste(fmt_num(treepl_cv$grid), collapse = ","),
+                                    if (identical(treepl_cv_type, "random") && treepl_cv_reps > 1) " (lowest mean rank across replicates wins; up to "
+                                    else " (lowest CV chi-square wins; up to ",
                                     treepl_cv_extend, " edge extension runs)") else NULL,
   if ("treepl" %in% methods) paste0("treePL prime replicates: ", treepl_prime_reps,
                                     "; optimizer check: ", if (treepl_opt_check) "yes" else "no",

@@ -1,0 +1,16 @@
+[stage] stage1_reltime_mega.log
+[stage] stage2_treepl_plain.log
+Traceback (most recent call last):
+  File "/private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/frozen1/scripts/run_dating_grid_staged.py", line 232, in <module>
+    main()
+  File "/private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/frozen1/scripts/run_dating_grid_staged.py", line 206, in main
+    run_cmd(build_args(args, "treepl", 0, 0, 0), out / "stage2_treepl_plain.log")
+  File "/private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/frozen1/scripts/run_dating_grid_staged.py", line 35, in run_cmd
+    raise RuntimeError(f"command failed ({rc}): {' '.join(map(str, args))}; see {log_path}")
+RuntimeError: command failed (1): Rscript /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/frozen1/scripts/run_dating_grid.R --phylogram=/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre --outdir=/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19 --out-prefix=terap19 --methods=treepl --chronos-ci-models=clock,correlated,discrete --chronos-ci-reps=0 --chronos-allow-cal-drop=FALSE --treepl-bootstrap-reps=0 --treepl-bootstrap-jobs=4 --treepl-smoothing=0.01,0.1,1,10,100 --treepl-cv=loo --treepl-numsites=1000 --reltime-bootstrap-reps=0 --ci-sites=1000 --seed=1 --calibrations-csv=/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/Terapontoid_congruified_19.csv --megacc-bin=/usr/local/bin/megacc --mdcat-bin=/private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py --mdcat-jobs=5; see /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/stage2_treepl_plain.log
+[stage] stage2_treepl_plain.log
+Using treePL tree to seed chronos: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/treepl/trees/terap19_treePL_smooth1000.tre
+[stage] stage3_chronos_plain.log
+[stage] stage4_treepl_ci.log
+[stage] stage5_chronos_ci.log
+[stage] stage6_mdcat.log

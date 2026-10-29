@@ -313,11 +313,20 @@ treepl_cross_validate <- function(treepl_bin, tree_path, node_bounds, cv_setting
 ## Random CV with replicates (after A. Pyron's VGP treePL benchmark). One
 ## random-CV run draws 10 groups of 10% of the tips, so a single run is noisy
 ## and a single blown-up fold ruins it. The series is run `reps` times with
-## seeds seed + 1..reps. For each smoothing value, a replicate is rejected if
-## its score is not finite or is above the ceiling: 1e12 until three scores
-## are accepted, then `outlier_factor` x the median accepted score (applied
-## again until no more scores are rejected). Each value is scored by the
-## median of its accepted replicates and needs at least half of them.
+## seeds seed + 1..reps.
+##
+## Selection (cv_score): within each replicate every smoothing value uses the
+## same tip groups, so the values are compared inside the replicate, on the
+## folds before the first blow-up (treepl_robust_cv_scores), and ranked. The
+## smoothing with the lowest mean rank across replicates wins. A replicate
+## whose first fold already blows up carries no information and is skipped.
+## On some trees most replicates contain a blow-up, so whole-replicate
+## rejection would leave too few scores.
+##
+## Diagnostic (cv_chisq): Pyron's rule. A replicate's full score is rejected
+## if it is not finite or above 1e12 (until three are accepted) or above
+## `outlier_factor` x the median accepted score; the value's cv_chisq is the
+## median of the accepted scores when at least half are accepted.
 ## cfg_path, log_path and cvoutfile are functions of the replicate index.
 treepl_cv_replicated <- function(treepl_bin, tree_path, node_bounds, cv_settings, reps, seed,
                                  cfg_path, log_path, cvoutfile, ...,
@@ -329,7 +338,8 @@ treepl_cv_replicated <- function(treepl_bin, tree_path, node_bounds, cv_settings
                                 cfg_path = cfg_path(r), log_path = log_path(r),
                                 cvoutfile = cvoutfile(r), seed = seed + r, ...)
     long[[r]] <- data.frame(smooth = sc$smooth, rep = r, seed = seed + r,
-                            score = sc$cv_chisq_treepl, stringsAsFactors = FALSE)
+                            score = sc$cv_chisq_treepl, score_folds_before_blowup = sc$cv_chisq,
+                            folds_used = sc$cv_folds_used, stringsAsFactors = FALSE)
     ## Builds without the `seed` option seed random CV from the clock (in
     ## seconds), so keep replicate starts at least one second apart.
     if (!any(grepl("random number seed", readLines(log_path(r), warn = FALSE), fixed = TRUE))) {
@@ -350,9 +360,22 @@ treepl_cv_replicated <- function(treepl_bin, tree_path, node_bounds, cv_settings
     }
     long$accepted[i] <- ok
   }
+  ## paired ranks inside each informative replicate
+  long$rank_in_rep <- NA_real_
+  for (r in unique(long$rep)) {
+    i <- which(long$rep == r)
+    if (all(is.finite(long$score_folds_before_blowup[i]))) {
+      long$rank_in_rep[i] <- rank(signif(long$score_folds_before_blowup[i], 6), ties.method = "average")
+    }
+  }
   need <- ceiling(reps / 2)
   out <- data.frame(smooth = cv_settings$grid, stringsAsFactors = FALSE)
   out$cv_reps <- reps
+  out$cv_reps_ranked <- vapply(out$smooth, function(sm) sum(is.finite(long$rank_in_rep[long$smooth == sm])), integer(1))
+  out$cv_score <- vapply(out$smooth, function(sm) {
+    z <- long$rank_in_rep[long$smooth == sm]
+    if (any(is.finite(z))) mean(z, na.rm = TRUE) else NA_real_
+  }, numeric(1))
   out$cv_reps_accepted <- vapply(out$smooth, function(sm) sum(long$accepted & long$smooth == sm), integer(1))
   out$cv_chisq <- vapply(out$smooth, function(sm) {
     z <- long$score[long$accepted & long$smooth == sm]
@@ -364,12 +387,14 @@ treepl_cv_replicated <- function(treepl_bin, tree_path, node_bounds, cv_settings
   list(scores = out, replicates = long)
 }
 
-## Lowest score wins; exact ties favour the larger smoothing.
+## Lowest score wins (cv_score for replicated random CV, else cv_chisq);
+## exact ties favour the larger smoothing.
 .treepl_best_smooth <- function(sc) {
-  ok <- is.finite(sc$cv_chisq)
+  v <- if (!is.null(sc$cv_score)) sc$cv_score else sc$cv_chisq
+  ok <- is.finite(v)
   if (!any(ok)) return(NA_real_)
   z <- sc[ok, , drop = FALSE]
-  z <- z[order(z$cv_chisq, -z$smooth), , drop = FALSE]
+  z <- z[order(v[ok], -z$smooth), , drop = FALSE]
   z$smooth[1L]
 }
 

@@ -8,6 +8,7 @@ Runs scripts/run_dating_grid.R five times in ONE output folder:
   3. chronos grid for all four clock models (no CI yet), seeded by treePL
   4. treePL bootstrap CI for the stage-2 tree
   5. chronos bootstrap CI for the stage-3 winners
+  6. MD-Cat (only with --mdcat-bin or MDCAT_BIN)
 
 Each stage reuses the checkpointed trees of earlier stages, so the CI stages
 add intervals to the same trees instead of refitting them. The R engine
@@ -16,6 +17,7 @@ candidate (CI tree when available, plain tree otherwise).
 """
 import argparse
 import csv
+import os
 import subprocess
 from pathlib import Path
 
@@ -117,7 +119,10 @@ def build_args(args, methods: str, chronos_ci_reps: int, treepl_bootstrap_reps: 
                         ("treepl-deep-pliter", args.treepl_deep_pliter),
                         ("treepl-jobs", args.treepl_jobs),
                         ("subset-tips", args.subset_tips), ("subset-min", args.subset_min),
-                        ("subset-max", args.subset_max)):
+                        ("subset-max", args.subset_max),
+                        ("mdcat-bin", args.mdcat_bin), ("mdcat-reps", args.mdcat_reps),
+                        ("mdcat-ncat", args.mdcat_ncat), ("mdcat-threads", args.mdcat_threads),
+                        ("mdcat-jobs", args.mdcat_jobs), ("mdcat-rounds", args.mdcat_rounds)):
         if value:
             cmd.append(f"--{flag}={value}")
     if chronos_age_start_tree is not None:
@@ -167,7 +172,14 @@ def parse_args():
     p.add_argument("--ci-sites", type=int, default=1000)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--tip-label-map-csv", default="")
-    p.add_argument("--start-stage", type=int, default=1, choices=range(1, 6))
+    p.add_argument("--mdcat-bin", default=os.environ.get("MDCAT_BIN", ""),
+                   help="md_cat.py of an MD-Cat install; stage 6 runs only when this is set")
+    p.add_argument("--mdcat-reps", default="")
+    p.add_argument("--mdcat-ncat", default="")
+    p.add_argument("--mdcat-threads", default="")
+    p.add_argument("--mdcat-jobs", default="")
+    p.add_argument("--mdcat-rounds", default="")
+    p.add_argument("--start-stage", type=int, default=1, choices=range(1, 7))
     return p.parse_args()
 
 
@@ -209,6 +221,10 @@ def main():
     if args.start_stage <= 5:
         run_cmd(build_args(args, "chronos", args.chronos_ci_reps, 0, 0, chronos_age_start_tree=seed),
                 out / "stage5_chronos_ci.log")
+        relabel_main_trees(out, tip_map)
+
+    if args.start_stage <= 6 and args.mdcat_bin:
+        run_cmd(build_args(args, "mdcat", 0, 0, 0), out / "stage6_mdcat.log")
         relabel_main_trees(out, tip_map)
 
 

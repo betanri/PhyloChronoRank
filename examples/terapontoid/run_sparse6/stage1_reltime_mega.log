@@ -1,0 +1,21 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram 
+Output prefix: terap6 
+Calibration rows input: 6 
+Calibration rows mapped: 6 
+Merged node bounds retained: 6 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=6 
+Running MEGA-CC RelTime with binary: /usr/local/bin/megacc 
+  MEGA Tao analytical CI written: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/reltime_mega/terap6_RelTime_MEGA_tao_ci.csv 
+  MEGA RelTime bootstrap CI (100 megacc reruns)... 
+  -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/reltime_mega/terap6_RelTime_MEGA_bootstrap_ci.csv 
+MEGA-CC RelTime finished successfully. 
+Computing CIs for selected candidates... 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits 
+Done. 

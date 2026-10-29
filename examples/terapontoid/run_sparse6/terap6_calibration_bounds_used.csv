@@ -1,0 +1,7 @@
+"node","taxonA","taxonB","age_min","age_max","n_merged","pair_indices","calibration_sources"
+106,"Centrarchidae_Micropterus_dolomieu","Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis",100.27727149,100.27727149,1,"1","csv"
+109,"Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis","Eupercaria_Centrarchiformes_Girellidae_Girella_zebra",57.82127866,57.82127866,1,"2","csv"
+110,"Eupercaria_Centrarchiformes_Microcanthidae_Neatypus_obliquus","Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis",53.956658207,53.956658207,1,"3","csv"
+123,"Kyphosidae_Kyphosus_sectatrix","Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis",52.780263599,52.780263599,1,"4","csv"
+134,"Eupercaria_Centrarchiformes_Kuhliidae_Kuhlia_salelea","Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis",50.874643604,50.874643604,1,"5","csv"
+146,"Terapontidae_Terapon_jarbua","Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis",37.174841014,37.174841014,1,"6","csv"

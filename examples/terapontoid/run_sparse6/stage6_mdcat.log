@@ -1,0 +1,24 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram 
+Output prefix: terap6 
+Calibration rows input: 6 
+Calibration rows mapped: 6 
+Merged node bounds retained: 6 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=6 
+Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50) 
+    MD-Cat round 1: 6 fixed, log-likelihood 943.256, 0 free node(s) outside bounds
+  MD-Cat calibrations: 6 fixed point ages, 0 fixed at a crossed bound, 0 fixed at an interval midpoint (time scale), 0 free inside their bounds 
+  MD-Cat finished in 22 s (1 round(s)); log-likelihood 943.256393108881; solver OSQP 
+Computing CIs for selected candidates... 
+  checkpoint: reusing CI for chronos_clock_lambda1 
+  checkpoint: reusing CI for chronos_correlated_lambda0p01 
+  checkpoint: reusing CI for chronos_discrete_lambda1_k2 
+  checkpoint: reusing CI for treePL_smooth1000 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits 
+Done. 

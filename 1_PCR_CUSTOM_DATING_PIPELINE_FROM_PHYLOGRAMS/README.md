@@ -2,13 +2,14 @@
 
 This page documents `scripts/run_dating_grid.R`, the repo-local helper for generating candidate chronograms before running PCR.
 
-> **For PCR-targeted runs, the default runner is `scripts/run_dating_grid_staged.py`, not `run_dating_grid.R` directly.** The staged runner calls the same `run_dating_grid.R` engine five times in one output folder. `MAIN_OUTPUT_TREES/` is refreshed after each stage, so PCR-ready trees appear as soon as each stage finishes. See [`PCR_DATING_STAGED_WORKFLOW.md`](../PCR_DATING_STAGED_WORKFLOW.md) for the full spec. The stage order is:
+> **For PCR-targeted runs, the default runner is `scripts/run_dating_grid_staged.py`, not `run_dating_grid.R` directly.** The staged runner calls the same `run_dating_grid.R` engine once per stage (five stages, plus an optional sixth for MD-Cat) in one output folder. `MAIN_OUTPUT_TREES/` is refreshed after each stage, so PCR-ready trees appear as soon as each stage finishes. See [`PCR_DATING_STAGED_WORKFLOW.md`](../PCR_DATING_STAGED_WORKFLOW.md) for the full spec. The stage order is:
 >
 > 1. `RelTime_MEGA` with both CIs (Tao analytical and bootstrap)
 > 2. `treePL`: prime, cross-validation of smoothing, final dating
 > 3. `chronos` winners for all four clock models (`clock`, `correlated`, `discrete`, `relaxed`), seeded by the treePL tree
 > 4. `treePL` bootstrap CI for the stage-2 tree — replaces plain treePL in `MAIN_OUTPUT_TREES`
 > 5. `chronos` bootstrap CI for `clock`, `correlated`, `discrete` — replaces their plain trees in `MAIN_OUTPUT_TREES`; `chronos_relaxed` stays plain
+> 6. `MD-Cat` (only when `--mdcat-bin` is given or `MDCAT_BIN` is set; see [MD-Cat](#md-cat))
 >
 > Stages 4 and 5 reuse the trees from stages 2 and 3 (checkpoints in the same folder). They add intervals to those trees; they do not refit them. After stage 3, `MAIN_OUTPUT_TREES` already holds a usable PCR candidate set. The sections below describe `run_dating_grid.R` and also apply to the staged runner.
 >
@@ -27,9 +28,10 @@ This page documents `scripts/run_dating_grid.R`, the repo-local helper for gener
 - `chronos` across a lambda grid and the four supported clock models: `clock`, `correlated`, `relaxed`, `discrete`
 - `treePL` in the standard three steps: `prime`, cross-validation over a smoothing grid, then one `thorough` dating run with the CV-selected smoothing (see [treePL](#treepl))
 - `RelTime` via MEGA-CC (`megacc` binary required; freely available from [megasoftware.net](https://www.megasoftware.net)). MEGA-CC is the only RelTime engine in this repo
-- optional uncertainty summaries: all three methods (`chronos`, `treePL`, `RelTime`) compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). Each `treePL` and `RelTime` replicate reruns the real program (`treePL` or `megacc`) on the perturbed phylogram. `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
+- `MD-Cat` (optional, `--methods=...,mdcat`): maximum-likelihood dating with a categorical rate model ([Mai, Charvel and Mirarab](https://github.com/uym2/MD-Cat)); see [MD-Cat](#md-cat)
+- optional uncertainty summaries: `chronos`, `treePL` and `RelTime` compute bootstrap CIs via Poisson branch-length resampling (the staged runner turns them on by default; `run_dating_grid.R` alone needs `--chronos-ci-reps`, `--treepl-bootstrap-reps`, `--reltime-bootstrap-reps`; MD-Cat has no CI yet) ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). Each `treePL` and `RelTime` replicate reruns the real program (`treePL` or `megacc`) on the perturbed phylogram. `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
 
-The main point is calibration consistency: all three methods receive exactly the same age constraints. The script reads one shared calibration table, finds the tree node that corresponds to each calibration (MRCAs of the two taxa listed), combines any rows that map to the same node by keeping only the overlap of their age ranges, drops any calibrations that cannot be placed (taxa not found in the tree) or that produce contradictory constraints on the same node (e.g., one row says ≥10 Ma while another says ≤5 Ma), and then passes that single cleaned set of node-age bounds identically to chronos, treePL, and RelTime. The script reports any dropped calibrations at runtime and writes them to `*_calibration_bounds_dropped.csv` (see [Outputs](#outputs)). This ensures that any differences among the resulting chronograms come from the dating methods themselves, not from differences in calibration input.
+The main point is calibration consistency: all three methods receive exactly the same age constraints. The script reads one shared calibration table, finds the tree node that corresponds to each calibration (MRCAs of the two taxa listed), combines any rows that map to the same node by keeping only the overlap of their age ranges, drops any calibrations that cannot be placed (taxa not found in the tree) or that produce contradictory constraints on the same node (e.g., one row says ≥10 Ma while another says ≤5 Ma), and then passes that single cleaned set of node-age bounds identically to chronos, treePL, and RelTime (MD-Cat gets the same set as fixed ages; see [MD-Cat](#md-cat)). The script reports any dropped calibrations at runtime and writes them to `*_calibration_bounds_dropped.csv` (see [Outputs](#outputs)). This ensures that any differences among the resulting chronograms come from the dating methods themselves, not from differences in calibration input.
 
 ## What You Get
 
@@ -41,12 +43,15 @@ In the standard full-method comparison, the pipeline returns six candidate chron
 - `chronos_relaxed`
 - `treePL`
 - `RelTime_MEGA` — produced by MEGA-CC's RelTime implementation
+- `MDCat` — optional seventh candidate when MD-Cat is run (stage 6)
+
+If two candidates end up as the same tree (for example `chronos_relaxed` and `chronos_correlated` can converge to one solution), PCR scores that tree once.
 
 The `chronos` side is kept as four separate trees, one per clock model, rather than collapsed to a single selected `chronos` result. Variation among `chronos` clock models is often large, and in practice can exceed the difference between some `chronos` models and `treePL` or `RelTime`. Keeping all four therefore avoids hiding biologically meaningful variation before PCR evaluates it.
 
-**Example output (terapontoid dataset, 105 tips, 19 calibrations from congruification):**
+**Example output (Terapontoidei, 105 tips, 19 congruified ages; `examples/terapontoid/run_dense19`):** 95% intervals are drawn where the tree has them; `chronos_relaxed` has no CI (the staged runner leaves it plain) and MD-Cat has no CI yet. Redraw with `Rscript scripts/make_pipeline_example_figure.R`.
 
-<img src="https://raw.githubusercontent.com/betanri/PhyloChronoRank/main/figures/terapontoid_pipeline_output.png" alt="Terapontoid pipeline output" width="100%">
+<img src="../figures/terapontoid_pipeline_output.png" alt="Terapontoid pipeline output" width="100%">
 
 ## Method Provenance
 
@@ -62,9 +67,10 @@ Operationally, all methods are exposed here through one R-driven workflow:
 
 - `chronos` is run directly through `ape::chronos`
 - `treePL` is driven from R by writing the control files and calling the external `treePL` binary from the script
+- `MD-Cat` is driven from R by calling its `md_cat.py` (Python) with fixed calibration ages
 - `RelTime` requires the `megacc` binary (MEGA-CC, freely available from [megasoftware.net](https://www.megasoftware.net) for all platforms). The pipeline auto-generates all MEGA input files (.mao settings, calibration file, outgroup file), grafts a temporary mock outgroup at the root (MEGA's RelTime cannot calibrate the root node of the input tree, so the outgroup turns the ingroup root into a calibratable node), runs `megacc`, strips the outgroup from the output, and cleans tip labels
-- all three methods compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
-- all CI-annotated trees are written as FigTree-ready NEXUS files with `height_95%_HPD` node-bar annotations
+- `chronos`, `treePL` and `RelTime` compute bootstrap CIs via Poisson branch-length resampling ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); `chronos` helper adapted from [josephwb/chronos](https://github.com/josephwb/chronos)). `RelTime` also reports analytical CIs parsed from MEGA's native output ([Tao et al. 2020](https://academic.oup.com/mbe/article/37/1/280/5602325))
+- all CI-annotated trees are written as FigTree-ready NEXUS files with `height_95%_HPD` (and `height_50%_HPD`) node-bar annotations; PCR reads the 95% bars
 
 This repo can generate a comparable multi-method candidate set in one place, using one shared calibration resolution step before PCR scoring.
 
@@ -75,7 +81,7 @@ This workflow is easiest to read if you keep four layers separate:
 - dating / fit layer
   - `run_dating_grid.R` generates dated trees and method-specific run summaries for each candidate (`chronos`, `treePL`, `RelTime_MEGA`)
 - model-selection layer (`chronos` only)
-  - `chronos` is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`). The best-fitting model is selected by `PHIIC` ([Paradis 2013](https://doi.org/10.1016/j.ympev.2013.02.008)) before candidates enter post-fit scoring. `treePL` and `RelTime_MEGA` each produce a single candidate — no model selection applies
+  - `chronos` is the only method in this comparison that supports multiple clock models (`clock`, `correlated`, `relaxed`, `discrete`). Within each model, `PHIIC` ([Paradis 2013](https://doi.org/10.1016/j.ympev.2013.02.008)) picks the setting; all four models then go to post-fit scoring (they are not collapsed to one model). `treePL`, `RelTime_MEGA` and `MDCat` each produce a single candidate — no model selection applies
 - tuning layer
   - `chronos`: the `--chronos-lambdas` grid (default `0.01,0.1,1,10,100`) controls the smoothing penalty across all four clock models. For the `discrete` model only, `--chronos-discrete-k` (default `2,3,5`) additionally searches the number of rate categories. The best lambda (and k, for discrete) per model is selected by `PHIIC`
   - `treePL`: the `--treepl-smoothing` grid (default `0.01,0.1,1,10,100`) sets the smoothing values that treePL cross-validates. The value with the lowest CV chi-square is used for the one dated `treePL` tree
@@ -170,8 +176,8 @@ Without the rate outliers the subset looks more clock-like than the full tree, a
 - subset trees never go into `MAIN_OUTPUT_TREES`
 - `<prefix>_tuning_subset.tre` is the subset, and `<prefix>_tuning_subset_tips.csv` lists every tip with its scores and its role (`calibration`, `rate_outlier`, `fill`, `dropped`)
 
-The subset is built with a fixed seed (`--seed`, default `1`), so every stage of a staged run uses the same subset. For a 713-tip catfish tree with 47 fossil calibrations, the 500-tip subset kept all 47 calibrations, 104 rate-outlier tips and all 53 families. Its spread of root-to-tip distances (CV 0.106) was close to that of the full tree (0.096).
-Tree size also affects method behavior itself: [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652) showed that coverage and CI width vary with `n`, and our companion benchmark (`P1` and `P2`) tests this directly by comparing `MAE` across `n = 50`, `150`, and `300` tips for `treePL`, `chronos`, and `RelTime` under the same calibration design.
+The subset is built with a fixed seed (`--seed`, default `1`), so every stage of a staged run uses the same subset. In a test on a 713-tip catfish tree with 47 fossil calibrations (`--subset-tips=600`), the 500-tip subset kept all 47 calibrations (71 calibration tips) and 113 rate-outlier tips. Its spread of root-to-tip distances (CV 0.106) was close to that of the full tree (0.096).
+Tree size also affects method behavior itself: [Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652) showed that coverage and CI width vary with `n`.
 
 ## Basic Usage
 
@@ -237,24 +243,25 @@ Rscript scripts/run_dating_grid.R \
 
 ## Terapontoidei Example
 
-Using the bundled Terapontoidei phylogram and calibration CSV:
+The bundled example runs the full staged workflow on the Terapontoidei phylogram (105 tips) with the 19 ages congruified from `examples/terapontoid/ref_timetree.tre`:
 
 ```bash
-Rscript scripts/run_dating_grid.R \
-  --phylogram=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree \
-  --calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv \
-  --outdir=examples/terapontoid/dating_grid_out \
-  --chronos-lambdas=0.01,0.1,1,10,100 \
-  --treepl-smoothing=0.01,0.1,1,10,100 \
-  --chronos-discrete-k=5
+python3 scripts/run_dating_grid_staged.py \
+  --phylogram=examples/terapontoid/phylogram.tre \
+  --calibrations-csv=examples/terapontoid/Terapontoid_congruified_19.csv \
+  --outdir=examples/terapontoid/run_dense19 \
+  --out-prefix=terap19 \
+  --mdcat-bin=PATH/TO/md_cat.py
 ```
+
+`examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES` holds its candidate trees and `candidates.csv` points to them. `run_sparse6` is the same run with 6 of the 19 ages (`Terapontoid_congruified_6.csv`, chosen as the deepest major nodes). Both feed Example 2 of [PCR Postfit Metrics](../2_PCR_POSTFIT_METRICS/README.md).
 
 If you want a fast smoke test first:
 
 ```bash
 Rscript scripts/run_dating_grid.R \
-  --phylogram=examples/terapontoid/Terapontoid_ML_MAIN_phylogram_used.tree \
-  --calibrations-csv=examples/terapontoid/Terapontoid_ML_MAIN_calibrations_used.csv \
+  --phylogram=examples/terapontoid/phylogram.tre \
+  --calibrations-csv=examples/terapontoid/Terapontoid_congruified_6.csv \
   --outdir=/tmp/pcr_dating_grid_smoke \
   --chronos-lambdas=0.1 \
   --treepl-smoothing=0.1,1 \
@@ -401,7 +408,7 @@ The practical rule is simple: do not force those layers into one synthetic winne
 
 Smoothing is never chosen by comparing treePL's final penalized-likelihood score across smoothing values. That score always gets smaller as smoothing gets smaller, so it would always pick the smallest value.
 
-On the Terapontoidei tree at smoothing `10`, treePL's defaults gave a worse objective (`438.0` against `432.2`) and node ages up to 7.6 Myr different from the primed run. The optimizer settings change the dates, so the pipeline records them and picks among them by objective, not by habit.
+In the Terapontoidei example (`examples/terapontoid/run_dense19`, 19 congruified ages, leave-one-out CV), the default grid stopped at its edge (best value `100`, CV chi-square `404.3`). The extension run found an interior optimum at `1000` (`391.8`, against `398.8` at `10000`). At that smoothing, treePL's defaults reached a worse objective than the primed settings (`573.5` against `568.2`), with node ages up to 2.1 Myr different (median 2.5%). The optimizer settings change the dates, so the pipeline records them and picks among them by objective, not by habit.
 
 Set `--treepl-numsites` to your alignment length. treePL uses it in the likelihood and in CV, and the default (`1000`) is only a placeholder.
 
@@ -438,6 +445,32 @@ Rscript scripts/run_dating_grid.R \
   --megacc-bin=/path/to/megacc
 ```
 
+## MD-Cat
+
+MD-Cat ([Mai, Charvel and Mirarab](https://github.com/uym2/MD-Cat), "Expectation-Maximization enables Phylogenetic Dating under a Categorical Rate Model") dates the phylogram by maximum likelihood. Branch rates come from `k` rate categories (default `50`) whose probabilities are estimated by EM. So the rate distribution is not forced to be lognormal, autocorrelated or clock-like, which can help with strong rate heterogeneity. Add it with `--methods=...,mdcat`; it always runs on the full tree, and its candidate is `MDCat`.
+
+Install it once in its own Python environment and point the pipeline at its `md_cat.py`:
+
+```bash
+python3 -m venv mdcat_venv
+mdcat_venv/bin/pip install git+https://github.com/uym2/MD-Cat
+Rscript scripts/run_dating_grid.R ... --methods=chronos,treepl,reltime_mega,mdcat \
+  --mdcat-bin=mdcat_venv/bin/md_cat.py
+```
+
+MD-Cat takes calibrations only as **fixed node ages**. The shared node bounds are converted node by node:
+
+- `age_min == age_max` (for example congruified ages): used as given
+- finite interval: its midpoint
+- minimum only (for example most fossil calibrations): left out, because MD-Cat cannot use a minimum
+
+Midpoints of nested intervals can be out of order (ancestor `[10, 20]` gives 15, descendant `[12, 30]` gives 21) even when the intervals are consistent. So the fixed ages are put in order inside their bounds first. The dated tree is then checked against the full shared bounds, and `mdcat/<prefix>_MDCat_calibrations_used.csv` lists each calibration, its rule, the MD-Cat age and whether it is inside the bounds. With mostly minimum-only fossil calibrations, MD-Cat has very little to work with; read its result with that in mind.
+
+- `--mdcat-reps` random starts (MD-Cat `-p`, default `10`). On the Terapontoidei tree, 100 starts took 7.3 min against 1 min for 10, and moved node ages by a median of 0.3% (at most 0.15 Myr)
+- `--mdcat-ncat` rate categories (`-k`, default `50`); `--mdcat-threads` solver threads; the sequence length (`-l`) is `--treepl-numsites`
+- without a MOSEK license MD-Cat uses the free OSQP solver. OSQP is less exact, so calibrated ages can drift slightly from their fixed values; `max_time_drift` in `mdcat/<prefix>_MDCat_run.csv` reports it. A free academic MOSEK license removes the drift
+- MD-Cat has no bootstrap CI in this pipeline yet, so its uncertainty width is not scored
+
 ## Requirements
 
 R packages:
@@ -450,6 +483,7 @@ External binaries:
 
 - `treePL` is required only if `treepl` is included in `--methods`
 - `megacc` (MEGA-CC) is required only if `reltime_mega` is included in `--methods`
+- `md_cat.py` (MD-Cat, Python) is required only if `mdcat` is included in `--methods`
 
 The script looks for `treePL` in this order:
 
@@ -470,7 +504,7 @@ So if you want the repo fallback to work without passing `--treepl-bin` or setti
 
 ## Important Behavior
 
-- all three methods use the same resolved calibration set after MRCA mapping and duplicate-node merging
+- all methods use the same resolved calibration set after MRCA mapping and duplicate-node merging (MD-Cat as fixed ages; see [MD-Cat](#md-cat))
 - duplicate-node bounds are merged by interval intersection; when sources disagree, source priority decides (see [Option 3](#option-3-congruification-plus-fossils))
 - empty intersections within one source are dropped for everyone, not just for one method
 - `RelTime` is run via MEGA-CC (`megacc`); the pipeline auto-generates all input files, grafts a mock outgroup, runs `megacc`, strips the outgroup, and cleans tip labels

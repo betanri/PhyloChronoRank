@@ -58,6 +58,14 @@ if (!length(panel)) stop('Could not build pulse panel from reference tree.')
 cand <- read.csv(candidates_csv, stringsAsFactors = FALSE)
 if (!all(c('candidate', 'tree_file') %in% names(cand))) stop('Candidates CSV must contain candidate,tree_file')
 cand$tree_path <- vapply(cand$tree_file, pcr_resolve_path, FUN.VALUE = character(1), base_dir = candidates_base)
+dup_of <- pcr_duplicate_trees(cand$tree_path)
+if (any(!is.na(dup_of))) {
+  for (i in which(!is.na(dup_of))) {
+    message('Candidate ', cand$candidate[i], ' is the same tree as ', cand$candidate[dup_of[i]],
+            '; it is scored once, as ', cand$candidate[dup_of[i]], '.')
+  }
+  cand <- cand[is.na(dup_of), , drop = FALSE]
+}
 
 calibrations <- NULL
 if ('calibrations-csv' %in% names(kv)) {

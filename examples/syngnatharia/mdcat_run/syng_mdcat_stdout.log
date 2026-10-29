@@ -1,0 +1,25 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre | tree_id=backbone_Raxml_besttree_matrix75 
+Output prefix: syng 
+Calibration rows input: 13 
+Calibration rows mapped: 13 
+Merged node bounds retained: 13 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=13 
+Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50) 
+    MD-Cat round 1: 1 fixed, log-likelihood 1502.826, 9 free node(s) outside bounds
+    MD-Cat round 2: 10 fixed, log-likelihood 1487.916, 0 free node(s) outside bounds
+    MD-Cat round 3: 9 fixed, log-likelihood 1488.093, 0 free node(s) outside bounds
+  MD-Cat calibrations: 0 fixed point ages, 9 fixed at a crossed bound, 0 fixed at an interval midpoint (time scale), 4 free inside their bounds 
+  MD-Cat finished in 1198 s (3 round(s)); log-likelihood 1488.09330255497; solver OSQP 
+Computing CIs for selected candidates... 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/syng_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits 
+Done. 
+real 1203.81
+user 238.69
+sys 11.48

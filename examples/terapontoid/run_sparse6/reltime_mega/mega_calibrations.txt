@@ -1,0 +1,6 @@
+!MRCA='cal_106' TaxonA='Centrarchidae_Micropterus_dolomieu' TaxonB='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' MinTime=100.27727149000 MaxTime=100.27727149000 calibrationName='cal_106';
+!MRCA='cal_109' TaxonA='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' TaxonB='Eupercaria_Centrarchiformes_Girellidae_Girella_zebra' MinTime=57.82127866000 MaxTime=57.82127866000 calibrationName='cal_109';
+!MRCA='cal_110' TaxonA='Eupercaria_Centrarchiformes_Microcanthidae_Neatypus_obliquus' TaxonB='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' MinTime=53.95665820700 MaxTime=53.95665820700 calibrationName='cal_110';
+!MRCA='cal_123' TaxonA='Kyphosidae_Kyphosus_sectatrix' TaxonB='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' MinTime=52.78026359900 MaxTime=52.78026359900 calibrationName='cal_123';
+!MRCA='cal_134' TaxonA='Eupercaria_Centrarchiformes_Kuhliidae_Kuhlia_salelea' TaxonB='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' MinTime=50.87464360400 MaxTime=50.87464360400 calibrationName='cal_134';
+!MRCA='cal_146' TaxonA='Terapontidae_Terapon_jarbua' TaxonB='Eupercaria_Centrarchiformes_Terapontidae_Amniataba_affinis' MinTime=37.17484101400 MaxTime=37.17484101400 calibrationName='cal_146';

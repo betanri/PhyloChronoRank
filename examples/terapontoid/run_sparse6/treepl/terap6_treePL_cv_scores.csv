@@ -1,0 +1,9 @@
+"smooth","cv_chisq_treepl","cv_chisq","cv_folds","cv_folds_used","cv_run","cv_type","cv_reps","cv_selected","cv_at_edge"
+100,394.7,394.6996,105,105,1,"loo",1,FALSE,FALSE
+10,409.907,409.90665,105,105,1,"loo",1,FALSE,FALSE
+1,458.953,458.95318,105,105,1,"loo",1,FALSE,FALSE
+0.1,494.981,494.98091,105,105,1,"loo",1,FALSE,FALSE
+0.01,501.235,501.23523,105,105,1,"loo",1,FALSE,FALSE
+10000,399.069,399.06938,105,105,2,"loo",1,FALSE,FALSE
+1000,394.416,394.41609,105,105,2,"loo",1,TRUE,FALSE
+100,394.7,394.6996,105,105,2,"loo",1,FALSE,FALSE

@@ -1,0 +1,19 @@
+[2026-10-28 19:14:37] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre | tree_id=backbone_Raxml_besttree_matrix75
+[2026-10-28 19:14:37] Output prefix: syng
+[2026-10-28 19:14:37] Calibration rows input: 13
+[2026-10-28 19:14:37] Calibration rows mapped: 13
+[2026-10-28 19:14:37] Merged node bounds retained: 13
+[2026-10-28 19:14:37] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:14:37] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:14:37] Calibration sources: csv=13
+[2026-10-28 19:14:38] Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50)
+[2026-10-28 19:34:37]   MD-Cat calibrations: 0 fixed point ages, 9 fixed at a crossed bound, 0 fixed at an interval midpoint (time scale), 4 free inside their bounds
+[2026-10-28 19:34:37]   MD-Cat finished in 1198 s (3 round(s)); log-likelihood 1488.09330255497; solver OSQP
+[2026-10-28 19:34:37] Computing CIs for selected candidates...
+[2026-10-28 19:34:37] Post-selection CI computation done.
+[2026-10-28 19:34:38] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/syng_all_runs_summary.csv
+[2026-10-28 19:34:38] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/candidates.csv
+[2026-10-28 19:34:38] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/candidates.csv
+[2026-10-28 19:34:38] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES
+[2026-10-28 19:34:38] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits
+[2026-10-28 19:34:38] Done.

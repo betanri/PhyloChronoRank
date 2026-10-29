@@ -1,0 +1,31 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram 
+Output prefix: terap6 
+Calibration rows input: 6 
+Calibration rows mapped: 6 
+Merged node bounds retained: 6 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=6 
+Running treePL with binary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/treePL 
+  checkpoint: reusing treePL cross-validation scores 
+    smooth=100  CV chisq=394.6996 
+    smooth=10  CV chisq=409.90665 
+    smooth=1  CV chisq=458.95318 
+    smooth=0.1  CV chisq=494.98091 
+    smooth=0.01  CV chisq=501.23523 
+    smooth=10000  CV chisq=399.06938  (extension run 1) 
+    smooth=1000  CV chisq=394.41609  (extension run 1) 
+    smooth=100  CV chisq=394.6996  (extension run 1) 
+  CV-selected smoothing: 1000 
+  checkpoint: reusing treePL_smooth1000 
+treePL finished: treePL_smooth1000 dated 
+Computing CIs for selected candidates... 
+  treePL CI for treePL_smooth1000 (smooth=1000, 100 reps)... 
+  -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_treePL_smooth1000_ci.csv 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits 
+Done. 

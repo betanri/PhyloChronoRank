@@ -1,0 +1,8 @@
+"candidate","tree_file"
+"chronos_clock_lambda1","../run_sparse6/MAIN_OUTPUT_TREES/chronos_clock_lambda1_with_CI.tre"
+"chronos_correlated_lambda0p01","../run_sparse6/MAIN_OUTPUT_TREES/chronos_correlated_lambda0p01_with_CI.tre"
+"chronos_discrete_lambda1_k2","../run_sparse6/MAIN_OUTPUT_TREES/chronos_discrete_lambda1_k2_with_CI.tre"
+"chronos_relaxed_lambda0p01","../run_sparse6/MAIN_OUTPUT_TREES/chronos_relaxed_lambda0p01.tre"
+"MDCat","../run_sparse6/MAIN_OUTPUT_TREES/MDCat.tre"
+"RelTime_MEGA","../run_sparse6/MAIN_OUTPUT_TREES/RelTime_MEGA_with_bootstrap_CI.tre"
+"treePL_smooth1000","../run_sparse6/MAIN_OUTPUT_TREES/treePL_smooth1000_with_CI.tre"

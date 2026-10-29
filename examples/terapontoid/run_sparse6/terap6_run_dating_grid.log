@@ -1,0 +1,405 @@
+[2026-10-28 19:30:51] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 19:30:51] Output prefix: terap6
+[2026-10-28 19:30:51] Calibration rows input: 6
+[2026-10-28 19:30:51] Calibration rows mapped: 6
+[2026-10-28 19:30:51] Merged node bounds retained: 6
+[2026-10-28 19:30:51] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:30:51] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:30:51] Calibration sources: csv=6
+[2026-10-28 19:30:52] Running MEGA-CC RelTime with binary: /usr/local/bin/megacc
+[2026-10-28 19:30:53]   MEGA Tao analytical CI written: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/reltime_mega/terap6_RelTime_MEGA_tao_ci.csv
+[2026-10-28 19:30:53]   MEGA RelTime bootstrap CI (100 megacc reruns)...
+[2026-10-28 19:31:11]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/reltime_mega/terap6_RelTime_MEGA_bootstrap_ci.csv
+[2026-10-28 19:31:11] MEGA-CC RelTime finished successfully.
+[2026-10-28 19:31:11] Computing CIs for selected candidates...
+[2026-10-28 19:31:11] Post-selection CI computation done.
+[2026-10-28 19:31:11] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 19:31:11] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 19:31:11] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 19:31:11] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 19:31:11] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 19:31:11] Done.
+[2026-10-28 19:31:14] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 19:31:14] Output prefix: terap6
+[2026-10-28 19:31:14] Calibration rows input: 6
+[2026-10-28 19:31:14] Calibration rows mapped: 6
+[2026-10-28 19:31:14] Merged node bounds retained: 6
+[2026-10-28 19:31:14] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:31:14] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:31:14] Calibration sources: csv=6
+[2026-10-28 19:48:48] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 19:48:48] Output prefix: terap6
+[2026-10-28 19:48:48] Calibration rows input: 6
+[2026-10-28 19:48:48] Calibration rows mapped: 6
+[2026-10-28 19:48:48] Merged node bounds retained: 6
+[2026-10-28 19:48:48] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:48:48] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:48:48] Calibration sources: csv=6
+[2026-10-28 19:48:49] Running treePL with binary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/treePL
+[2026-10-28 19:48:49]   priming treePL optimizer (3 replicates)...
+[2026-10-28 19:48:52]     prime: 1/3 replicates agree on opt = 2; moredetail; optad = 2; moredetailad; optcvad = 5
+[2026-10-28 19:48:52]   treePL loo cross-validation, smoothing 100.00,10.00,1.00,0.10,0.01...
+[2026-10-28 19:55:22]     smooth=100  CV chisq=394.6996
+[2026-10-28 19:55:22]     smooth=10  CV chisq=409.90665
+[2026-10-28 19:55:22]     smooth=1  CV chisq=458.95318
+[2026-10-28 19:55:22]     smooth=0.1  CV chisq=494.98091
+[2026-10-28 19:55:22]     smooth=0.01  CV chisq=501.23523
+[2026-10-28 19:55:22]     smooth=10000  CV chisq=399.06938  (extension run 1)
+[2026-10-28 19:55:22]     smooth=1000  CV chisq=394.41609  (extension run 1)
+[2026-10-28 19:55:22]     smooth=100  CV chisq=394.6996  (extension run 1)
+[2026-10-28 19:55:22]   CV-selected smoothing: 1000
+[2026-10-28 19:55:22]   priming treePL on the full tree at smoothing 1000 (3 replicates)...
+[2026-10-28 19:55:25]     prime: 2/3 replicates agree on opt = 2; moredetail; optad = 2; moredetailad; optcvad = 5
+[2026-10-28 19:55:25]   treePL optimizer check: dating the full tree under 5 settings...
+[2026-10-28 19:55:31]     prime_modal: objective=550.36715  root=100.277273  max |age diff|=0  <- selected
+[2026-10-28 19:55:31]     prime_alt1: objective=550.36715  root=100.277273  max |age diff|=0
+[2026-10-28 19:55:31]     treePL_default: objective=556.16861  root=100.277273  max |age diff|=1.921288
+[2026-10-28 19:55:31]     prime_modal_seed2: objective=550.36715  root=100.277273  max |age diff|=0
+[2026-10-28 19:55:31]     prime_modal_seed3: objective=550.36715  root=100.277273  max |age diff|=0
+[2026-10-28 19:55:31] treePL finished: treePL_smooth1000 dated
+[2026-10-28 19:55:32] Computing CIs for selected candidates...
+[2026-10-28 19:55:32] Post-selection CI computation done.
+[2026-10-28 19:55:32] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 19:55:32] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 19:55:32] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 19:55:32] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 19:55:32] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 19:55:32] Done.
+[2026-10-28 19:55:33] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 19:55:33] Output prefix: terap6
+[2026-10-28 19:55:33] Calibration rows input: 6
+[2026-10-28 19:55:33] Calibration rows mapped: 6
+[2026-10-28 19:55:33] Merged node bounds retained: 6
+[2026-10-28 19:55:33] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:55:33] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:55:33] Calibration sources: csv=6
+[2026-10-28 19:55:33] Running chronos grid...
+[2026-10-28 19:55:38]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda0p01.tre
+[2026-10-28 19:55:44]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda0p1.tre
+[2026-10-28 19:55:49]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:55:54]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:55:59]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:01]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:01]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:09]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:09]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:15]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:15]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:23]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:24]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:24]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:24]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:25]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:25]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:25]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:33]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:33]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:33]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:33]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre
+[2026-10-28 19:56:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre
+[2026-10-28 19:56:58]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:56:58]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:56:58]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:56:58]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre
+[2026-10-28 19:57:06]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:57:06]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:57:06]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:57:06]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre
+[2026-10-28 19:57:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:57:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:57:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:57:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre
+[2026-10-28 19:57:31]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:57:31]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:57:31]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:57:31]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre
+[2026-10-28 19:57:39]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:57:39]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:57:39]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:57:39]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:57:51]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:57:51]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:57:51]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:57:51]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:58:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:58:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:58:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:58:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:58:11]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:58:11]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:58:11]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:58:11]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:58:21]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:58:21]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:58:21]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:58:21]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:58:34]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:58:34]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:58:34]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:58:34]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:58:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:58:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:58:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:58:45]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:59:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:59:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:59:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:59:03]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:59:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 19:59:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 19:59:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 19:59:18]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 19:59:18] chronos finished: 30/30 successful.
+[2026-10-28 19:59:19] Computing CIs for selected candidates...
+[2026-10-28 19:59:19] Post-selection CI computation done.
+[2026-10-28 19:59:19] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 19:59:19] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 19:59:19] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 19:59:19] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 19:59:19] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 19:59:19] Done.
+[2026-10-28 19:59:21] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 19:59:21] Output prefix: terap6
+[2026-10-28 19:59:21] Calibration rows input: 6
+[2026-10-28 19:59:21] Calibration rows mapped: 6
+[2026-10-28 19:59:21] Merged node bounds retained: 6
+[2026-10-28 19:59:21] Dropped calibrations (missing taxa): 0
+[2026-10-28 19:59:21] Dropped calibrations (bad MRCA): 0
+[2026-10-28 19:59:21] Calibration sources: csv=6
+[2026-10-28 19:59:21] Running treePL with binary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/treePL
+[2026-10-28 19:59:21]   checkpoint: reusing treePL cross-validation scores
+[2026-10-28 19:59:21]     smooth=100  CV chisq=394.6996
+[2026-10-28 19:59:21]     smooth=10  CV chisq=409.90665
+[2026-10-28 19:59:21]     smooth=1  CV chisq=458.95318
+[2026-10-28 19:59:21]     smooth=0.1  CV chisq=494.98091
+[2026-10-28 19:59:21]     smooth=0.01  CV chisq=501.23523
+[2026-10-28 19:59:21]     smooth=10000  CV chisq=399.06938  (extension run 1)
+[2026-10-28 19:59:21]     smooth=1000  CV chisq=394.41609  (extension run 1)
+[2026-10-28 19:59:21]     smooth=100  CV chisq=394.6996  (extension run 1)
+[2026-10-28 19:59:21]   CV-selected smoothing: 1000
+[2026-10-28 19:59:21]   checkpoint: reusing treePL_smooth1000
+[2026-10-28 19:59:21] treePL finished: treePL_smooth1000 dated
+[2026-10-28 19:59:22] Computing CIs for selected candidates...
+[2026-10-28 19:59:22]   treePL CI for treePL_smooth1000 (smooth=1000, 100 reps)...
+[2026-10-28 20:00:05]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_treePL_smooth1000_ci.csv
+[2026-10-28 20:00:05] Post-selection CI computation done.
+[2026-10-28 20:00:05] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 20:00:05] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 20:00:05] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 20:00:05] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 20:00:05] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 20:00:05] Done.
+[2026-10-28 20:00:07] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 20:00:07] Output prefix: terap6
+[2026-10-28 20:00:07] Calibration rows input: 6
+[2026-10-28 20:00:07] Calibration rows mapped: 6
+[2026-10-28 20:00:07] Merged node bounds retained: 6
+[2026-10-28 20:00:07] Dropped calibrations (missing taxa): 0
+[2026-10-28 20:00:07] Dropped calibrations (bad MRCA): 0
+[2026-10-28 20:00:07] Calibration sources: csv=6
+[2026-10-28 20:00:07] Running chronos grid...
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_clock_lambda0p01
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_clock_lambda0p1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_clock_lambda1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_clock_lambda10
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_clock_lambda100
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_correlated_lambda0p01
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_correlated_lambda0p1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_correlated_lambda1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_correlated_lambda10
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_correlated_lambda100
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_relaxed_lambda0p01
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_relaxed_lambda0p1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_relaxed_lambda1
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_relaxed_lambda10
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_relaxed_lambda100
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p01_k2
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p01_k3
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p01_k5
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p1_k2
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p1_k3
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:07]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:07]   checkpoint: reusing chronos_discrete_lambda0p1_k5
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda1_k2
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda1_k3
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda1_k5
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda10_k2
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda10_k3
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda10_k5
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda100_k2
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda100_k3
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   checkpoint: reusing chronos_discrete_lambda100_k5
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre
+[2026-10-28 20:00:08]   promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre
+[2026-10-28 20:00:08] chronos finished: 30/30 successful.
+[2026-10-28 20:00:08] Computing CIs for selected candidates...
+[2026-10-28 20:00:08]   chronos CI for chronos_clock_lambda1 (100 reps)...
+[2026-10-28 20:00:51]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_chronos_clock_lambda1_ci.csv
+[2026-10-28 20:00:51]   chronos CI for chronos_correlated_lambda0p01 (100 reps)...
+[2026-10-28 20:03:15]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_chronos_correlated_lambda0p01_ci.csv
+[2026-10-28 20:03:15]   chronos CI skipped for chronos_relaxed_lambda0p01 (model relaxed not requested in --chronos-ci-models)
+[2026-10-28 20:03:15]   chronos CI for chronos_discrete_lambda1_k2 (100 reps)...
+[2026-10-28 20:04:06]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_chronos_discrete_lambda1_k2_ci.csv
+[2026-10-28 20:04:06]   checkpoint: reusing CI for treePL_smooth1000
+[2026-10-28 20:04:06] Post-selection CI computation done.
+[2026-10-28 20:04:07] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 20:04:07] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 20:04:07] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 20:04:07] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 20:04:07] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 20:04:07] Done.
+[2026-10-28 20:04:08] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-28 20:04:08] Output prefix: terap6
+[2026-10-28 20:04:08] Calibration rows input: 6
+[2026-10-28 20:04:08] Calibration rows mapped: 6
+[2026-10-28 20:04:08] Merged node bounds retained: 6
+[2026-10-28 20:04:08] Dropped calibrations (missing taxa): 0
+[2026-10-28 20:04:08] Dropped calibrations (bad MRCA): 0
+[2026-10-28 20:04:08] Calibration sources: csv=6
+[2026-10-28 20:04:09] Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50)
+[2026-10-28 20:04:31]   MD-Cat calibrations: 6 fixed point ages, 0 fixed at a crossed bound, 0 fixed at an interval midpoint (time scale), 0 free inside their bounds
+[2026-10-28 20:04:31]   MD-Cat finished in 22 s (1 round(s)); log-likelihood 943.256393108881; solver OSQP
+[2026-10-28 20:04:31] Computing CIs for selected candidates...
+[2026-10-28 20:04:31]   checkpoint: reusing CI for chronos_clock_lambda1
+[2026-10-28 20:04:31]   checkpoint: reusing CI for chronos_correlated_lambda0p01
+[2026-10-28 20:04:31]   checkpoint: reusing CI for chronos_discrete_lambda1_k2
+[2026-10-28 20:04:31]   checkpoint: reusing CI for treePL_smooth1000
+[2026-10-28 20:04:31] Post-selection CI computation done.
+[2026-10-28 20:04:31] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-28 20:04:31] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-28 20:04:31] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-28 20:04:31] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-28 20:04:31] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-28 20:04:31] Done.

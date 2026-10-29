@@ -1,0 +1,32 @@
+Target phylogram: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre
+Target tree id: phylogram
+Output prefix: terap6
+Methods requested: mdcat
+MD-Cat: 10 random starts, k=50; bounds by active set (points fixed, crossed bounds fixed, up to 5 rounds)
+Calibration source: csv
+Calibration CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/Terapontoid_congruified_6.csv
+Root age appended: none
+Subset tuning: no
+chronos bootstrap type: parametric
+chronos bootstrap replicates: 0
+chronos bootstrap CI models: clock,correlated,discrete
+chronos bootstrap pml source: parametric_proxy_from_phylogram
+treePL numsites: 1000
+treePL bootstrap replicates: 0
+treePL bootstrap jobs: 4
+RelTime (MEGA) bootstrap replicates: 0 (megacc rerun per replicate)
+RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present
+Calibration pairs input: 6
+Calibration pairs mapped: 6
+Calibration bounds retained: 6
+Calibration bounds dropped as inconsistent: 0
+Successful full-grid candidates written: 33
+Representative candidates written: 7
+Combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+Full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+Full-grid uncertainty summary CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/uncertainty_summary_long.csv
+Candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+MAIN_OUTPUT_TREES folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+CI CSVs folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES/ci
+Model fits folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+Representative uncertainty summary CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/uncertainty_summary_long.csv
