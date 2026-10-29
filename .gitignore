@@ -6,3 +6,6 @@ examples/.DS_Store
 examples/*/pcr_run_test/
 out/
 scripts/__pycache__/
+
+# MD-Cat bootstrap replicate trees (rebuilt from their seeds)
+**/mdcat/bootstrap/

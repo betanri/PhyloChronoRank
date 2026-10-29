@@ -14,6 +14,7 @@ chronos bootstrap pml source: parametric_proxy_from_phylogram
 treePL numsites: 1000
 treePL bootstrap replicates: 0
 treePL bootstrap jobs: 1
+MD-Cat bootstrap replicates: 100 (one random start each; jobs 6)
 RelTime (MEGA) bootstrap replicates: 100 (megacc rerun per replicate)
 RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present
 Calibration pairs input: 13
@@ -24,9 +25,9 @@ Successful full-grid candidates written: 1
 Representative candidates written: 1
 Combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/syng_all_runs_summary.csv
 Full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/candidates.csv
-Full-grid uncertainty summary CSV: none
+Full-grid uncertainty summary CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/uncertainty_summary_long.csv
 Candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/candidates.csv
 MAIN_OUTPUT_TREES folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES
-CI CSVs folder: none
+CI CSVs folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES/ci
 Model fits folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits
 Representative uncertainty summary CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/uncertainty_summary_long.csv

@@ -52,7 +52,7 @@ For each branch, dividing the phylogram branch length (substitutions) by the chr
 
 ### Uncertainty Width (Optional Precision Layer)
 
-Measures how wide the confidence or credible intervals are around estimated node ages. Narrower intervals indicate greater precision, though precision and accuracy are distinct properties. Frequentist confidence intervals and Bayesian credibility intervals arise from different statistical frameworks and are not directly commensurable ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Bromham 2019](https://doi.org/10.1016/j.tree.2019.01.017); [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325); [Tao et al. 2020b](https://academic.oup.com/mbe/article/37/6/1819/5771370)), so they are usually reported side by side rather than collapsed into one score ([Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). PCR reports the mean width of the 95% intervals (when a tree carries 95% and 50% intervals, only the 95% ones are used). It does not check that the intervals of different candidates come from comparable methods, so compare widths only among candidates with the same kind of interval (for example the Poisson branch-length bootstrap used for `chronos`, `treePL` and `RelTime` in this repo). The analytical `RelTime` CI of [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325) can differ sharply from bootstrap widths; in the examples below the `RelTime` candidate carries its bootstrap intervals.
+Measures how wide the confidence or credible intervals are around estimated node ages. Narrower intervals indicate greater precision, though precision and accuracy are distinct properties. Frequentist confidence intervals and Bayesian credibility intervals arise from different statistical frameworks and are not directly commensurable ([Paradis et al. 2023](https://doi.org/10.1016/j.ympev.2022.107652); [Drummond et al. 2006](https://doi.org/10.1371/journal.pbio.0040088); [Bromham 2019](https://doi.org/10.1016/j.tree.2019.01.017); [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325); [Tao et al. 2020b](https://academic.oup.com/mbe/article/37/6/1819/5771370)), so they are usually reported side by side rather than collapsed into one score ([Costa et al. 2022](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-022-09030-5); [Beavan et al. 2020](https://academic.oup.com/gbe/article/12/7/1087/5842139)). PCR reports the mean width of the 95% intervals (when a tree carries 95% and 50% intervals, only the 95% ones are used). It does not check that the intervals of different candidates come from comparable methods, so compare widths only among candidates with the same kind of interval (for example the Poisson branch-length bootstrap used for `chronos`, `treePL`, `RelTime` and `MD-Cat` in this repo). The analytical `RelTime` CI of [Tao et al. 2020a](https://academic.oup.com/mbe/article/37/1/280/5602325) can differ sharply from bootstrap widths; in the examples below the `RelTime` candidate carries its bootstrap intervals where they exist. A node that a method fixes at a calibration (a point age, or a bound it ends on) gets a zero-width interval, so with many calibrations the mean width is smaller.
 
 ### Scoring Procedure
 
@@ -212,7 +212,7 @@ This example does not start from a `chronos` fit search. It starts from an earli
 - `RelTime` is the core PCR winner (1.33), then `MDCat` (2.17) and `MCMCTree` (2.50)
 - `RelTime` wins Family 1 (radiation-zone fidelity) and Family 2 (global fidelity)
 - Family 3 (rate and calibration) is a three-way tie: `RelTime` has the most regular rates, `MDCat` the smallest calibration gap
-- `MCMCTree` has narrower intervals than `RelTime` (6.24 vs 11.41 Ma); `MDCat` has no intervals
+- `MCMCTree` (6.24 Ma) and `MDCat` (6.58 Ma) have narrower intervals than `RelTime` (11.41 Ma). These are three kinds of interval (HPD, Poisson bootstrap and the paper's `RelTime` CI), so compare the widths with care
 - `Figure A` is the original visual rationale from the paper; `Figure B` is the quantitative post-fit follow-up
 
 ### Figure A: Original visual rationale from the paper
@@ -223,13 +223,13 @@ This is the original paper figure from [Santaquiteria et al. 2024](https://www.j
 
 ### Ranked post-fit results (lower is better, except int. concordance and depth R²)
 
-The gap layer is informative here because the calibrations are fossil minimum ages and intervals (Table S2 of the paper), not congruified ages. The two published trees were dated with different calibration sets (13 rows for `RelTime`, 14 for `MCMCTree`, including a root interval of 92–103.5 Ma that only `MCMCTree` used), so each candidate is checked against its own set; `MDCat` uses the `RelTime` set. The interval widths of the two published trees were measured from the paper figure (`syngnatharia_HPD_widths_extracted.csv`), so they are approximate.
+The gap layer is informative here because the calibrations are fossil minimum ages and intervals (Table S2 of the paper), not congruified ages. The two published trees were dated with different calibration sets (13 rows for `RelTime`, 14 for `MCMCTree`, including a root interval of 92–103.5 Ma that only `MCMCTree` used), so each candidate is checked against its own set; `MDCat` uses the `RelTime` set. The interval widths of the two published trees were measured from the paper figure (`syngnatharia_HPD_widths_extracted.csv`), so they are approximate. The `MDCat` intervals come from its Poisson branch-length bootstrap (100 replicates).
 
 <!-- pcr-table: examples/syngnatharia/pcr_rebuild/summary_pcr_metrics.csv -->
 | candidate | burst loss | int. concordance | compression | depth R² | rate irregularity | mean relative gap | uncertainty width (Ma) | Fam 1 | Fam 2 | Fam 3 | core rank |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `RelTime` | 0.162 | 0.925 | 0.000 | 0.113 | 1.151 | 0.269 | 11.41 | 1.00 | 1.00 | 2.00 | **1.33** |
-| `MDCat` | 0.170 | 0.738 | 0.000 | 0.078 | 2.065 | 0.100 | NA | 2.50 | 2.00 | 2.00 | 2.17 |
+| `MDCat` | 0.170 | 0.738 | 0.000 | 0.078 | 2.065 | 0.100 | 6.58 | 2.50 | 2.00 | 2.00 | 2.17 |
 | `MCMCTree` | 0.240 | 0.810 | 0.000 | 0.058 | 1.553 | 0.218 | 6.24 | 2.50 | 3.00 | 2.00 | 2.50 |
 
 ### Figure B: Post-fit comparison across metric families
@@ -255,7 +255,7 @@ The uncertainty-width separation is deliberate. The RelTime literature does not 
 - `examples/syngnatharia/CalibratedTree_backbone_MCMCTree_matrix75_RAXML.tre`
 - `examples/syngnatharia/CalibratedTree_backbone_RelTime_matrix75_RAXML.tre`
 - `examples/syngnatharia/calibrations_by_candidate.csv`
-- `examples/syngnatharia/mdcat_run/` (MD-Cat run; `MAIN_OUTPUT_TREES/MDCat.tre`)
+- `examples/syngnatharia/mdcat_run/` (MD-Cat run; `MAIN_OUTPUT_TREES/MDCat_with_CI.tre`)
 - `examples/syngnatharia/syngnatharia_HPD_widths_extracted.csv`, `uncertainty_summary_long.csv`
 - `examples/syngnatharia/pcr_rebuild/` (`candidates.csv`, `summary_pcr_metrics.csv`)
 - `examples/syngnatharia/Fig_S5_Burst_preservation.png`
@@ -285,7 +285,7 @@ This figure illustrates the pulse layer on alternative `chronos` trees (clock, d
 | `chronos_clock_lambda1` | 0.133 | 0.904 | 0.000 | 0.239 | 2.516 | 2.91 | 2.50 | 5.50 | 3.00 | 3.67 |
 | `chronos_correlated_lambda0p01` | 0.125 | 0.604 | 0.000 | 0.261 | 4.517 | 0.56 | 4.00 | 2.00 | 6.00 | 4.00 |
 | `treePL_smooth1000` | 0.185 | 0.775 | 0.000 | 0.254 | 3.360 | 5.76 | 5.00 | 3.00 | 4.00 | 4.00 |
-| `MDCat` | 0.202 | 0.787 | 0.000 | 0.245 | 3.464 | NA | 5.00 | 4.00 | 5.00 | 4.67 |
+| `MDCat` | 0.202 | 0.787 | 0.000 | 0.245 | 3.464 | 8.17 | 5.00 | 4.00 | 5.00 | 4.67 |
 
 ### Scheme 2: Dense calibrations (19 congruified ages)
 
@@ -296,7 +296,7 @@ This figure illustrates the pulse layer on alternative `chronos` trees (clock, d
 | `chronos_discrete_lambda1_k2` | 0.112 | 0.893 | 0.000 | 0.235 | 2.584 | 1.80 | 2.00 | 3.50 | 2.00 | 2.50 |
 | `chronos_clock_lambda1` | 0.112 | 0.893 | 0.000 | 0.235 | 2.587 | 1.66 | 2.00 | 3.50 | 3.00 | 2.83 |
 | `treePL_smooth1000` | 0.157 | 0.762 | 0.000 | 0.242 | 3.463 | 4.15 | 5.00 | 2.00 | 4.00 | 3.67 |
-| `MDCat` | 0.172 | 0.783 | 0.000 | 0.233 | 3.507 | NA | 5.00 | 5.00 | 5.00 | 5.00 |
+| `MDCat` | 0.172 | 0.783 | 0.000 | 0.233 | 3.507 | 5.58 | 5.00 | 5.00 | 5.00 | 5.00 |
 | `chronos_correlated_lambda0p01` | 0.117 | 0.590 | 0.000 | 0.230 | 4.484 | 0.20 | 5.00 | 6.00 | 6.00 | 5.67 |
 
 ### Figure B: Post-fit comparison — sparse calibrations
@@ -314,6 +314,7 @@ This figure illustrates the pulse layer on alternative `chronos` trees (clock, d
 - `treePL` (cross-validation picks smoothing 1000 in both schemes) is mid-field: 4.00 sparse, 3.67 dense
 - `MDCat` is 4.67 sparse and 5.00 dense. With fixed point ages it smooths the radiation zones more than `RelTime` (burst loss 0.202 sparse, 0.172 dense) and has less regular rates (about 3.5)
 - `chronos_correlated` (= `chronos_relaxed`) has the narrowest intervals but the lowest concordance (about 0.60) and the least regular rates (about 4.5)
+- `MDCat`, `treePL` and `RelTime` all have Poisson-bootstrap intervals here. `MDCat`'s are wider than `treePL`'s (8.17 vs 5.76 Ma sparse, 5.58 vs 4.15 dense) and a little narrower than `RelTime`'s (9.23, 5.84). Part of the `MDCat` width is the spread between its random starts ([Part 1](../1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md#md-cat))
 - Going from 6 to 19 ages changes the scores but not the order at the top: `RelTime` first, then the clock-like `chronos` models
 
 <details>
@@ -340,7 +341,7 @@ Candidates: four `chronos` models and `RelTime` from the earlier pipeline runs, 
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `RelTime_MEGA` | 0.081 | 0.906 | 0.041 | 0.189 | 1.320 | 0.042 | 51.79 | 1.00 | 4.00 | 1.00 | **2.00** |
 | `treePL_smooth100` | 0.154 | 0.897 | 0.003 | 0.139 | 1.418 | 0.217 | NA | 2.50 | 3.00 | 3.50 | 3.00 |
-| `MDCat` | 0.144 | 0.860 | 0.005 | 0.099 | 2.273 | 0.144 | NA | 3.50 | 4.50 | 4.50 | 4.17 |
+| `MDCat` | 0.144 | 0.860 | 0.005 | 0.099 | 2.273 | 0.144 | 24.56 | 3.50 | 4.50 | 4.50 | 4.17 |
 | `chronos_discrete_lambda100_k2` | 0.160 | 0.876 | 0.012 | 0.086 | 1.498 | 0.084 | NA | 4.00 | 6.00 | 2.75 | 4.25 |
 | `chronos_clock_lambda100` | 0.160 | 0.876 | 0.012 | 0.086 | 1.500 | 0.084 | NA | 4.00 | 6.00 | 3.25 | 4.42 |
 | `chronos_relaxed_lambda0p01` | 0.330 | 0.480 | 0.000 | 0.140 | 3.607 | 0.460 | NA | 6.00 | 1.75 | 6.50 | 4.75 |
@@ -357,13 +358,13 @@ Cross-validation picks smoothing 100 for `treePL`. The treePL optimizer settings
 | `treePL_smooth1000` | 0.155 | 0.892 | 0.003 | 0.133 | 1.581 | 0.164 | NA | 2.00 | 2.50 | 3.00 | **2.50** |
 | `chronos_discrete_lambda0p01_k2` | 0.161 | 0.885 | 0.007 | 0.092 | 1.593 | 0.124 | 22.37 | 3.50 | 5.00 | 2.25 | 3.58 |
 | `chronos_clock_lambda0p1` | 0.161 | 0.885 | 0.009 | 0.091 | 1.593 | 0.126 | 27.68 | 3.50 | 6.00 | 2.75 | 4.08 |
-| `MDCat` | 0.163 | 0.868 | 0.014 | 0.102 | 2.648 | 0.131 | NA | 5.00 | 5.50 | 4.50 | 5.00 |
+| `MDCat` | 0.163 | 0.868 | 0.014 | 0.102 | 2.648 | 0.131 | 21.70 | 5.00 | 5.50 | 4.50 | 5.00 |
 | `chronos_relaxed_lambda0p1` | 0.320 | 0.494 | 0.000 | 0.129 | 3.635 | 0.431 | NA | 6.00 | 2.25 | 7.00 | 5.08 |
 | `chronos_correlated_lambda0p01` | 0.337 | 0.492 | 0.000 | 0.127 | 3.631 | 0.370 | 19.35 | 7.00 | 2.75 | 6.00 | 5.25 |
 
 Cross-validation picks smoothing 1000 for `treePL`, but the signal is weak. In every CV replicate the CV chi-square blew up after 1–9 folds, so the ranks use only the folds before that point. Smoothing 100 and 1000 tie (mean rank 1.6 over 5 replicates), and a tie goes to the larger value. treePL's default optimizer settings reach a much worse objective and give node ages that differ from the chosen tree by a median of 9%. The other settings agree with the chosen tree.
 
-`MDCat` puts 49 of the 57 calibrated nodes on a bound of their interval; the other 8 are free inside their bounds. In this scheme `RelTime` (bootstrap) and three `chronos` models (parametric bootstrap) carry intervals.
+`MDCat` puts 49 of the 57 calibrated nodes on a bound of their interval; the other 8 are free inside their bounds. In this scheme `RelTime` (bootstrap), three `chronos` models (parametric bootstrap) and `MDCat` (Poisson bootstrap) carry intervals.
 
 ### Figure B: Vertebrate — sparse calibrations
 
@@ -383,6 +384,7 @@ Cross-validation picks smoothing 1000 for `treePL`, but the signal is weak. In e
 - Dense scheme: `RelTime` and `treePL` tie for first (2.50). `RelTime` has the lowest burst loss (0.130), the best concordance (0.897), the best depth R² (0.151) and the smallest gap (0.109). `treePL` has the most regular rates (1.581) and is second on burst loss (0.155), concordance (0.892) and depth R² (0.133)
 - With more calibrations, `RelTime` drops from first to fourth on rate regularity (1.638). This is what lets `treePL` draw level
 - Dense scheme: `chronos_discrete` (3.58) and `chronos_clock` (4.08) are third and fourth. `MDCat` is fifth (5.00); its rates (2.648) are less regular than all but the correlated/relaxed pair
+- Intervals: in the sparse scheme only `RelTime` (Tao, 51.79 Ma) and `MDCat` (24.56 Ma) have them, and Tao intervals are wider than bootstrap ones. In the dense scheme the bootstrap widths are close: 19.35–27.68 Ma for `chronos`, 20.12 Ma for `RelTime` and 21.70 Ma for `MDCat`
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
@@ -396,7 +398,7 @@ Raw trees, calibration tables, and PCR output CSVs are withheld because the data
 
 ## Example 4: Unpublished Gobiaria dataset (495 tips)
 
-This goby-dominated dataset is the McCraney RAxML phylogram (495 tips: 404 Gobiiformes and 91 Kurtiformes; 140 pulse-panel clades, 74 radiation zones). The calibration set (75 ages congruified from the McCraney chronogram, without the kurtiform calibrations and with *Eosphaeramia* added to Apogoninae) has 74 point ages and one interval (48.5–85.9 Ma). The source chronogram was in units of 100 Myr; this example now uses Ma throughout: the calibrations and the `chronos` and `MDCat` trees were multiplied by 100 (an exact change of units), and `treePL` and `RelTime` were dated in Ma. In 100-Myr units treePL's cross-validation was about 300 times slower, because every branch duration is tiny.
+This goby-dominated dataset is the McCraney RAxML phylogram (495 tips: 404 Gobiiformes and 91 Kurtiformes; 140 pulse-panel clades, 74 radiation zones). The calibration set (75 ages congruified from the McCraney chronogram, without the kurtiform calibrations and with *Eosphaeramia* added to Apogoninae) has 74 point ages and one interval (48.5–85.9 Ma). The source chronogram was in units of 100 Myr; this example now uses Ma throughout: the calibrations and the `chronos` and `MDCat` trees (with their intervals) were multiplied by 100 (an exact change of units), and `treePL` and `RelTime` were dated in Ma. In 100-Myr units treePL's cross-validation was about 300 times slower, because every branch duration is tiny.
 
 Candidates: three `chronos` models from the earlier pipeline run, `treePL` (cross-validated smoothing 0.00001; the CV curve is flat below 0.0001), `RelTime` via MEGA-CC (the earlier `RelTime` trees came from the removed R implementation), and `MDCat`. `chronos_relaxed` is left out: its root (257 Ma) breaks the 85.9 Ma root calibration.
 
@@ -410,7 +412,7 @@ Candidates: three `chronos` models from the earlier pipeline run, `treePL` (cros
 | `chronos_clock_lambda1` | 0.356 | 0.839 | 0.000 | 0.035 | 1.548 | 0.000 | 3.42 | 4.00 | 4.25 | 3.00 | 3.75 |
 | `chronos_discrete_lambda1_k2` | 0.356 | 0.839 | 0.000 | 0.035 | 1.548 | 0.000 | 2.94 | 4.00 | 4.25 | 3.00 | 3.75 |
 | `RelTime_MEGA` | 0.364 | 0.872 | 0.006 | 0.132 | 1.268 | 0.038 | 4.16 | 3.50 | 4.00 | 4.00 | 3.83 |
-| `MDCat` | 0.352 | 0.831 | 0.000 | 0.037 | 1.765 | 0.001 | NA | 3.50 | 3.00 | 5.50 | 4.00 |
+| `MDCat` | 0.352 | 0.831 | 0.000 | 0.037 | 1.765 | 0.001 | 4.11 | 3.50 | 3.00 | 5.50 | 4.00 |
 
 ### Figure: Post-fit comparison across metric families
 
@@ -423,7 +425,7 @@ Candidates: three `chronos` models from the earlier pipeline run, `treePL` (cros
 - `RelTime` has the best internode concordance (0.872) and rates almost as regular as `chronos_correlated` (1.268), but it puts the interval-calibrated node furthest above its minimum (gap 0.038; the others are at or near 0) and it has some compression (0.006), which puts it fifth (3.83)
 - `MDCat` is last (4.00): its burst loss is the lowest (0.352), but its rates are the least regular (1.765)
 - The six candidates are close on radiation-zone fidelity (burst loss 0.352–0.364), so Families 2 and 3 decide the order
-- Interval widths are in Ma; `chronos_correlated` has the narrowest bootstrap intervals (0.95 Ma), `RelTime` the widest (4.16 Ma)
+- Interval widths are in Ma; `chronos_correlated` has the narrowest bootstrap intervals (0.95 Ma), `RelTime` (4.16 Ma) and `MDCat` (4.11 Ma) the widest
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
@@ -437,7 +439,7 @@ Raw trees, calibration tables, and PCR output CSVs are withheld because the data
 
 ## Example 5: Unpublished Tetraodontiformes dataset (327 tips)
 
-This pufferfish-dominated dataset (327 tips; 95 pulse-panel clades, 47 radiation zones) is dated under a **sparse** scheme (38 congruified point ages) and a **dense** scheme (120 congruified point ages; the sparse set is a subset). All calibrations are fixed ages, so `mean_relative_gap` is NA. The `chronos` and `RelTime` trees come from the earlier pipeline runs; `treePL` was redated with cross-validated smoothing (random CV with replicates; smoothing 1 sparse, 0.00001 dense, where the CV curve is nearly flat below 0.0001), and `MDCat` was added. `chronos_relaxed` gives the same tree as `chronos_correlated` in both schemes and is scored once. In the sparse scheme only `RelTime` carries intervals (Tao).
+This pufferfish-dominated dataset (327 tips; 95 pulse-panel clades, 47 radiation zones) is dated under a **sparse** scheme (38 congruified point ages) and a **dense** scheme (120 congruified point ages; the sparse set is a subset). All calibrations are fixed ages, so `mean_relative_gap` is NA. The `chronos` and `RelTime` trees come from the earlier pipeline runs; `treePL` was redated with cross-validated smoothing (random CV with replicates; smoothing 1 sparse, 0.00001 dense, where the CV curve is nearly flat below 0.0001), and `MDCat` was added. `chronos_relaxed` gives the same tree as `chronos_correlated` in both schemes and is scored once. In the sparse scheme only `RelTime` (Tao) and `MDCat` (Poisson bootstrap) carry intervals.
 
 In both schemes treePL's own default optimizer settings reached a better objective than the primed settings, and the settings disagree on node ages by a median of about 8% (sparse). The pipeline keeps the best objective, but these treePL dates are sensitive to optimizer settings.
 
@@ -451,7 +453,7 @@ In both schemes treePL's own default optimizer settings reached a better objecti
 | `treePL_smooth1` | 0.289 | 0.816 | 0.000 | 0.061 | 3.658 | NA | 3.50 | 2.25 | 4.00 | 3.25 |
 | `chronos_discrete_lambda1_k2` | 0.238 | 0.808 | 0.003 | 0.060 | 3.415 | NA | 3.50 | 4.00 | 3.00 | 3.50 |
 | `chronos_correlated_lambda0p01` | 0.425 | 0.428 | 0.000 | 0.066 | 5.023 | NA | 6.00 | 1.50 | 6.00 | 4.50 |
-| `MDCat` | 0.276 | 0.801 | 0.003 | 0.054 | 3.941 | NA | 4.50 | 5.00 | 5.00 | 4.83 |
+| `MDCat` | 0.276 | 0.801 | 0.003 | 0.054 | 3.941 | 5.30 | 4.50 | 5.00 | 5.00 | 4.83 |
 
 ### Scheme 2: Dense calibrations (120 congruified ages)
 
@@ -462,7 +464,7 @@ In both schemes treePL's own default optimizer settings reached a better objecti
 | `chronos_clock_lambda1` | 0.267 | 0.837 | 0.000 | 0.076 | 3.334 | 1.81 | 3.50 | 2.50 | 2.50 | 2.83 |
 | `chronos_discrete_lambda1_k2` | 0.267 | 0.837 | 0.000 | 0.076 | 3.334 | 1.87 | 3.50 | 2.50 | 2.50 | 2.83 |
 | `treePL_smooth0p00001` | 0.275 | 0.871 | 0.000 | 0.076 | 4.015 | NA | 2.50 | 2.50 | 5.00 | 3.33 |
-| `MDCat` | 0.279 | 0.849 | 0.006 | 0.075 | 3.986 | NA | 3.50 | 5.00 | 4.00 | 4.17 |
+| `MDCat` | 0.279 | 0.849 | 0.006 | 0.075 | 3.986 | 2.73 | 3.50 | 5.00 | 4.00 | 4.17 |
 | `chronos_correlated_lambda0p01` | 0.303 | 0.769 | 0.003 | 0.073 | 4.973 | 0.03 | 6.00 | 5.00 | 6.00 | 5.67 |
 
 ### Figure B: Tetraodontiformes — sparse calibrations
@@ -480,6 +482,7 @@ In both schemes treePL's own default optimizer settings reached a better objecti
 - `treePL` is third or fourth (3.25 sparse, 3.33 dense). In the dense scheme it has the best internode concordance (0.871), but its rates are the second least regular
 - `MDCat` is fifth (4.83 sparse, 4.17 dense). Its burst loss and concordance are close to the field, but its rates are less regular than those of `RelTime` and the clock-like `chronos` models
 - `chronos_correlated` (= `chronos_relaxed`) has the best global fidelity in the sparse scheme but the worst radiation-zone and rate scores in both
+- Intervals: `MDCat`'s are narrower than `RelTime`'s in both schemes (5.30 vs 7.07 Ma sparse, where `RelTime` has Tao intervals; 2.73 vs 3.41 Ma dense) and wider than those of the clock-like `chronos` models in the dense scheme (1.81–1.87 Ma). With 120 point ages many nodes are fixed, which pulls every mean width down
 
 <details>
 <summary><strong>Files behind this example</strong></summary>
@@ -576,6 +579,6 @@ Six datasets, nine comparisons (Syngnatharia, Gobiaria and Ostariophysi have one
 - Trees that are the same after rounding (for example `chronos_relaxed` and `chronos_correlated` in several datasets) are scored once.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- The optional `uncertainty width` layer uses the 95% intervals stored with each tree (`RelTime`: bootstrap or Tao; `chronos`: parametric bootstrap; `MCMCTree`: HPD). It speaks to precision, not accuracy, and **does not contribute to the core rank**. Not every candidate has intervals: `treePL` and `MDCat` have none in these examples.
+- The optional `uncertainty width` layer uses the 95% intervals stored with each tree (`RelTime`: bootstrap or Tao; `chronos`: parametric bootstrap; `treePL` and `MDCat`: Poisson branch-length bootstrap; `MCMCTree`: HPD). It speaks to precision, not accuracy, and **does not contribute to the core rank**. Not every candidate has intervals: `treePL` has them only in Terapontoidei, and some `chronos` trees have none.
 
 </details>

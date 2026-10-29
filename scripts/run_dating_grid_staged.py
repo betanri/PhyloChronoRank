@@ -8,7 +8,8 @@ Runs scripts/run_dating_grid.R five times in ONE output folder:
   3. chronos grid for all four clock models (no CI yet), seeded by treePL
   4. treePL bootstrap CI for the stage-2 tree
   5. chronos bootstrap CI for the stage-3 winners
-  6. MD-Cat (only with --mdcat-bin or MDCAT_BIN)
+  6. MD-Cat, plus its bootstrap CI with --mdcat-bootstrap-reps (only with
+     --mdcat-bin or MDCAT_BIN)
 
 Each stage reuses the checkpointed trees of earlier stages, so the CI stages
 add intervals to the same trees instead of refitting them. The R engine
@@ -122,7 +123,9 @@ def build_args(args, methods: str, chronos_ci_reps: int, treepl_bootstrap_reps: 
                         ("subset-max", args.subset_max),
                         ("mdcat-bin", args.mdcat_bin), ("mdcat-reps", args.mdcat_reps),
                         ("mdcat-ncat", args.mdcat_ncat), ("mdcat-threads", args.mdcat_threads),
-                        ("mdcat-jobs", args.mdcat_jobs), ("mdcat-rounds", args.mdcat_rounds)):
+                        ("mdcat-jobs", args.mdcat_jobs), ("mdcat-rounds", args.mdcat_rounds),
+                        ("mdcat-bootstrap-reps", args.mdcat_bootstrap_reps),
+                        ("mdcat-bootstrap-jobs", args.mdcat_bootstrap_jobs)):
         if value:
             cmd.append(f"--{flag}={value}")
     if chronos_age_start_tree is not None:
@@ -179,6 +182,9 @@ def parse_args():
     p.add_argument("--mdcat-threads", default="")
     p.add_argument("--mdcat-jobs", default="")
     p.add_argument("--mdcat-rounds", default="")
+    p.add_argument("--mdcat-bootstrap-reps", type=int, default=100,
+                   help="MD-Cat bootstrap replicates for its CI in stage 6 (0 = no CI)")
+    p.add_argument("--mdcat-bootstrap-jobs", default="")
     p.add_argument("--start-stage", type=int, default=1, choices=range(1, 7))
     return p.parse_args()
 

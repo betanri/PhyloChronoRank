@@ -1,2 +1,2 @@
 "candidate","tree_file","method","model","lambda","nb_rate_cat","smooth","selected_from_candidate","selection_score","selection_rule"
-"MDCat","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES/MDCat.tre","MDCat","MDCat",NA,NA,NA,"MDCat",NA,"mdcat_run"
+"MDCat","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES/MDCat_with_CI.tre","MDCat","MDCat",NA,NA,NA,"MDCat",NA,"mdcat_run"
