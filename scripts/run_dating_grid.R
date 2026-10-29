@@ -56,8 +56,9 @@ usage <- function() {
     "  --reference-tree-name   Optional named tree selector for the reference time tree.\n",
     "  --reference-tree-index  1-based fallback index for the reference tree. Default: 1.\n",
     "  --calibration-tag       If the calibration CSV has a candidate column, keep rows tagged with this value plus blank/all rows.\n",
-    "  --additional-calibrations-csv  Optional CSV with additional calibrations (e.g., fossil min-ages) to merge\n",
-    "                          with the primary calibration set (from --calibrations-csv or congruification).\n",
+    "  --additional-calibrations-csv  Optional CSV with additional calibrations (e.g., fossils) merged with the\n",
+    "                          primary set (--calibrations-csv or congruification). When sources disagree, the\n",
+    "                          priority is --root-age > additional CSV > primary CSV > congruified ages.\n",
     "                          Format: taxonA,taxonB,age_min[,age_max]. Min-only constraints leave age_max blank.\n",
     "  --root-age              Optional exact root age appended to the shared calibration set for all methods.\n",
     "  --out-prefix            Prefix for output files. Default: target tree id.\n",
@@ -77,6 +78,18 @@ usage <- function() {
     "  --treepl-threads        OMP_NUM_THREADS for treePL. Default: 1.\n",
     "  --treepl-thorough       Use thorough optimization in treePL (strongly recommended). Default: TRUE.\n",
     "  --treepl-prime          Prime treePL optimizer settings before CV and dating. Default: TRUE.\n",
+    "  --treepl-prime-reps     Prime replicates (different seeds); the most frequent result is used. Default: 5.\n",
+    "  --treepl-cv-extend      Extra CV runs allowed when the best smoothing is at the grid edge; each run\n",
+    "                          extends the series by two values outward. Default: 2 (0 = off).\n",
+    "  --treepl-opt-check      Date the full tree under each distinct prime result, treePL defaults and\n",
+    "                          two extra seeds; keep the lowest objective and report the age spread. Default: TRUE.\n",
+    "  --treepl-cv-reps        Replicates of each random-CV run (--treepl-cv=random); each smoothing value is\n",
+    "                          scored by the median of its accepted replicates. Default: 10.\n",
+    "  --treepl-opt-screen     prime (default) or full. full adds A. Pyron's VGP optimizer screen: 144 settings\n",
+    "                          (opt 0-5 x optad 0-5 x moredetail x moredetailad) x --treepl-opt-seeds seeds at\n",
+    "                          --treepl-screen-pliter, then the best two settings x --treepl-deep-seeds seeds at\n",
+    "                          --treepl-deep-pliter (thorough off). Defaults: 3, 200, 50, 2500.\n",
+    "  --treepl-jobs           Parallel treePL fits in the optimizer screen. Default: 1.\n",
     "  --treepl-opt            treePL optimization algorithm (1=LM, 2=stochastic, 4=auto). Default: not set.\n",
     "  --treepl-plsimaniter    Simulated-annealing iterations for treePL. Default: not set (treePL default).\n",
     "  --treepl-pliter         Penalty-likelihood iterations for treePL. Default: not set (treePL default).\n",
@@ -89,7 +102,9 @@ usage <- function() {
     "  --treepl-bootstrap-jobs Parallel workers for treePL bootstrap replicates. Default: 1.\n",
     "  --reltime-bootstrap-reps MEGA RelTime bootstrap replicates (megacc rerun per replicate). Default: 100.\n",
     "  --chronos-pml-rds       Optional RDS containing a phangorn pml.output for nonparametric/semiparametric chronos bootstrap.\n",
-    "  --subset-tips           Trees with more tips than this tune chronos/treePL on a ~200-tip subset. Default: 500.\n",
+    "  --subset-tips           Trees with more tips than this tune chronos/treePL on a subset. Default: 1000.\n",
+    "  --subset-min, --subset-max  Subset size is Ntip/2 clamped to [min, max]. The subset keeps calibration\n",
+    "                          taxa and rate-outlier tips (heterotachous lineages). Default: 500, 2000.\n",
     "  --seed                  Random seed (tuning subset, bootstraps). Default: 1.\n",
     "  --help                  Print this message.\n",
     sep = ""
@@ -469,10 +484,28 @@ map_pairwise_calibrations_to_nodes <- function(phy, pair_df) {
   keep_n <- 0L
   drop_n <- 0L
 
+  conflict_rows <- list()
   for (nd in sort(unique(mapped_df$node))) {
     z <- mapped_df[mapped_df$node == nd, , drop = FALSE]
     mn <- max(z$age_min, na.rm = TRUE)
     mx <- min(z$age_max, na.rm = TRUE)
+    if (!(is.finite(mn) && !is.na(mx) && mn <= mx)) {
+      ## Sources disagree at this node: keep the highest-priority source.
+      pr <- calibration_source_priority(z$calibration_source)
+      top <- z[pr == max(pr), , drop = FALSE]
+      if (nrow(top) < nrow(z)) {
+        conflict_rows[[length(conflict_rows) + 1L]] <- data.frame(
+          node = as.integer(nd), conflict = "same_node",
+          kept_sources = paste(unique(top$calibration_source), collapse = ";"),
+          dropped_sources = paste(unique(z$calibration_source[pr < max(pr)]), collapse = ";"),
+          action = "dropped lower-priority bounds at this node",
+          stringsAsFactors = FALSE
+        )
+        z <- top
+        mn <- max(z$age_min, na.rm = TRUE)
+        mx <- min(z$age_max, na.rm = TRUE)
+      }
+    }
     if (is.finite(mn) && !is.na(mx) && mn <= mx) {
       keep_n <- keep_n + 1L
       merged_rows[[keep_n]] <- data.frame(
@@ -505,110 +538,213 @@ map_pairwise_calibrations_to_nodes <- function(phy, pair_df) {
     stop("All mapped calibration nodes became inconsistent after duplicate-node intersection.")
   }
 
+  resolved <- resolve_nested_calibration_conflicts(phy, merged_df)
+  conflicts_df <- bind_rows_fill(c(conflict_rows, list(resolved$conflicts)))
+
   list(
     mapped = mapped_df,
-    merged = merged_df,
+    merged = resolved$bounds,
     dropped_inconsistent = dropped_df,
+    conflicts = conflicts_df,
     dropped_missing_taxa = missing_taxa,
     dropped_bad_mrca = bad_mrca
   )
 }
 
-## ---------------------------------------------------------------------------
-## build_calibration_preserving_subset
-## Prunes a large phylogram to ~target_n tips while preserving:
-##   1. All calibration-defining taxa (tip pairs for each MRCA calibration)
-##   2. Phylogenetic diversity (tips spread across tree depth)
-##   3. Heterotachous extremes (tips on longest and shortest terminal branches)
-## ---------------------------------------------------------------------------
-build_calibration_preserving_subset <- function(phy, node_bounds, target_n = 200L) {
-  n_tip <- ape::Ntip(phy)
-  if (n_tip <= target_n) return(list(subset_phy = phy, subset_bounds = node_bounds,
-    n_original = n_tip, n_subset = n_tip))
+## Priority when calibration sources disagree: an explicit root age, then the
+## additional (fossil) CSV, then the primary CSV, then congruified ages.
+calibration_source_priority <- function(sources) {
+  rank <- c(root_age_arg = 4L, additional = 3L, csv = 2L, congruify = 1L)
+  vapply(strsplit(as.character(sources), ";", fixed = TRUE), function(x) {
+    r <- rank[x]
+    if (all(is.na(r))) 2L else max(r, na.rm = TRUE)
+  }, integer(1))
+}
 
-  ## 1. Calibration-defining tips: two tips per calibrated node that preserve MRCA
-  cal_tips <- character(0)
-  for (i in seq_len(nrow(node_bounds))) {
-    nd <- node_bounds$node[i]
-    kids <- phy$edge[phy$edge[, 1] == nd, 2]
-    for (k in kids) {
-      if (k <= n_tip) {
-        cal_tips <- union(cal_tips, phy$tip.label[k])
-      } else {
-        clade_tips <- sort(ape::extract.clade(phy, k)$tip.label)
-        cal_tips <- union(cal_tips, clade_tips[1])
+## A calibrated node cannot be younger than a calibrated descendant. For each
+## pair where the descendant's minimum is older than the ancestor's maximum:
+##   - different priority: the lower-priority calibration node is dropped
+##   - same priority: the ancestor calibration is dropped. Its minimum is
+##     already implied by the descendant's (older) minimum, so this only
+##     removes the ancestor's maximum: minimum ages are the harder evidence.
+## Conflicts are resolved one at a time, worst first, until none are left.
+## A typical cause is a calibration pair that is not monophyletic in the
+## target tree, so its MRCA lands much deeper than intended.
+resolve_nested_calibration_conflicts <- function(phy, bounds) {
+  conflicts <- list()
+  if (nrow(bounds) < 2L) return(list(bounds = bounds, conflicts = data.frame()))
+  parent <- integer(ape::Ntip(phy) + phy$Nnode)
+  parent[phy$edge[, 2L]] <- phy$edge[, 1L]
+  repeat {
+    worst <- NULL
+    for (d in seq_len(nrow(bounds))) {
+      a_node <- parent[bounds$node[d]]
+      while (a_node > 0L) {
+        a <- match(a_node, bounds$node)
+        if (!is.na(a) && bounds$age_min[d] > bounds$age_max[a]) {
+          gap <- bounds$age_min[d] - bounds$age_max[a]
+          if (is.null(worst) || gap > worst$gap) worst <- list(a = a, d = d, gap = gap)
+        }
+        a_node <- parent[a_node]
       }
     }
+    if (is.null(worst)) break
+    pa <- calibration_source_priority(bounds$calibration_sources[worst$a])
+    pd <- calibration_source_priority(bounds$calibration_sources[worst$d])
+    action <- if (pa < pd) "dropped ancestor calibration (lower priority)" else
+      if (pd < pa) "dropped descendant calibration (lower priority)" else
+        "dropped ancestor calibration (its maximum is younger than a descendant minimum)"
+    conflicts[[length(conflicts) + 1L]] <- data.frame(
+      node = bounds$node[worst$a], conflict = "nested",
+      descendant_node = bounds$node[worst$d],
+      ancestor_max = bounds$age_max[worst$a], descendant_min = bounds$age_min[worst$d],
+      kept_sources = if (pa < pd) bounds$calibration_sources[worst$d] else bounds$calibration_sources[worst$a],
+      dropped_sources = if (pd < pa) bounds$calibration_sources[worst$d] else bounds$calibration_sources[worst$a],
+      action = action, stringsAsFactors = FALSE
+    )
+    bounds <- bounds[-(if (pd < pa) worst$d else worst$a), , drop = FALSE]
   }
+  list(bounds = bounds, conflicts = bind_rows_fill(conflicts))
+}
 
-  ## 2. Heterotachous extremes: tips with longest and shortest terminal branches
-  tip_edges <- which(phy$edge[, 2] <= n_tip)
-  tip_bl <- phy$edge.length[tip_edges]
-  tip_ids <- phy$tip.label[phy$edge[tip_edges, 2]]
-  names(tip_bl) <- tip_ids
-  n_extreme <- max(10L, target_n %/% 10L)
-  extreme_long  <- names(sort(tip_bl, decreasing = TRUE))[seq_len(min(n_extreme, length(tip_bl)))]
-  extreme_short <- names(sort(tip_bl, decreasing = FALSE))[seq_len(min(n_extreme, length(tip_bl)))]
-  must_keep <- unique(c(cal_tips, extreme_long, extreme_short))
+## ---------------------------------------------------------------------------
+## Rate-outlier scores per tip. The tips of a phylogram of living taxa are all
+## the same age, so differences in root-to-tip distance are rate differences:
+##   z_global  log root-to-tip distance (fast lineages high, slow ones low)
+##   z_local   log of the tip's root-to-tip distance over the mean of its
+##             sister lineage(s); catches recent rate shifts inside a clade
+## Both are robust z-scores (median and MAD).
+## ---------------------------------------------------------------------------
+tip_rate_outlier_scores <- function(phy) {
+  n_tip <- ape::Ntip(phy)
+  total <- n_tip + phy$Nnode
+  rtt <- pmax(ape::node.depth.edgelength(phy)[seq_len(n_tip)], 1e-12)
+  sum_rtt <- c(rtt, numeric(phy$Nnode))
+  n_desc <- c(rep(1, n_tip), numeric(phy$Nnode))
+  po <- ape::reorder.phylo(phy, "postorder")$edge
+  for (k in seq_len(nrow(po))) {
+    sum_rtt[po[k, 1L]] <- sum_rtt[po[k, 1L]] + sum_rtt[po[k, 2L]]
+    n_desc[po[k, 1L]] <- n_desc[po[k, 1L]] + n_desc[po[k, 2L]]
+  }
+  parent <- integer(total)
+  parent[phy$edge[, 2L]] <- phy$edge[, 1L]
+  par_tip <- parent[seq_len(n_tip)]
+  sister_mean <- (sum_rtt[par_tip] - rtt) / (n_desc[par_tip] - 1)
+  robust_z <- function(x) {
+    s <- stats::mad(x)
+    if (!is.finite(s) || s <= 0) s <- stats::sd(x)
+    if (!is.finite(s) || s <= 0) return(rep(0, length(x)))
+    (x - stats::median(x)) / s
+  }
+  out <- data.frame(
+    tip = phy$tip.label,
+    root_to_tip = rtt,
+    sister_mean_root_to_tip = sister_mean,
+    z_global = robust_z(log(rtt)),
+    z_local = robust_z(log(rtt) - log(sister_mean)),
+    stringsAsFactors = FALSE
+  )
+  out$rate_score <- pmax(abs(out$z_global), abs(out$z_local))
+  out
+}
 
-  ## 3. Fill remaining slots with phylo-diversity-spread tips
-  remaining <- setdiff(phy$tip.label, must_keep)
-  n_add <- max(0L, target_n - length(must_keep))
-  if (n_add > 0 && length(remaining) > 0) {
-    ## Use node depth to spread tips across the tree
-    depths <- ape::node.depth.edgelength(phy)[seq_len(n_tip)]
-    names(depths) <- phy$tip.label
-    rem_depths <- depths[remaining]
-    ## Stratified: divide depth range into n_add bins, pick one per bin
-    breaks <- seq(min(rem_depths), max(rem_depths) + 1e-12, length.out = n_add + 1L)
-    selected <- character(0)
-    for (b in seq_len(n_add)) {
-      in_bin <- names(rem_depths[rem_depths >= breaks[b] & rem_depths < breaks[b + 1]])
-      in_bin <- setdiff(in_bin, selected)
-      if (length(in_bin)) selected <- c(selected, sample(in_bin, 1))
+## Split the largest clade again and again until at least n clades hold no
+## kept tip, then draw one random tip from each of the n largest such clades.
+## This spreads the fill tips over the topology, not over branch lengths.
+spread_tips_by_clade <- function(phy, keep, n, children = NULL) {
+  if (n <= 0L) return(character(0))
+  if (is.null(children)) children <- build_children_lookup(phy)
+  n_tip <- ape::Ntip(phy)
+  size <- c(rep(1L, n_tip), integer(phy$Nnode))
+  kept <- c(as.integer(phy$tip.label %in% keep), integer(phy$Nnode))
+  po <- ape::reorder.phylo(phy, "postorder")$edge
+  for (k in seq_len(nrow(po))) {
+    size[po[k, 1L]] <- size[po[k, 1L]] + size[po[k, 2L]]
+    kept[po[k, 1L]] <- kept[po[k, 1L]] + kept[po[k, 2L]]
+  }
+  clades <- n_tip + 1L
+  repeat {
+    if (sum(kept[clades] == 0L) >= n) break
+    splittable <- clades[clades > n_tip]
+    if (!length(splittable)) break
+    big <- splittable[which.max(size[splittable])]
+    clades <- c(clades[clades != big], children[[big]])
+  }
+  free <- clades[kept[clades] == 0L]
+  free <- free[order(-size[free], stats::runif(length(free)))][seq_len(min(n, length(free)))]
+  vapply(free, function(nd) {
+    tips <- descendant_tip_labels(phy, nd, children)
+    tips[sample.int(length(tips), 1L)]
+  }, character(1))
+}
+
+## ---------------------------------------------------------------------------
+## build_calibration_preserving_subset
+## Prunes a large phylogram to target_n tips for grid tuning. Keeps:
+##   1. calibration taxa: one tip from each child of every calibrated node,
+##      so each calibrated MRCA survives
+##   2. rate outliers (heterotachous lineages): tips with rate_score above
+##      z_cut, most extreme first, up to outlier_frac of target_n; the
+##      min_outliers most extreme tips are always kept
+##   3. fill: tips spread over the topology (spread_tips_by_clade)
+## Without the outliers the subset looks more clock-like than the full tree,
+## and tuning would favour too much smoothing.
+## ---------------------------------------------------------------------------
+build_calibration_preserving_subset <- function(phy, node_bounds, target_n = 500L,
+                                                outlier_frac = 0.25, z_cut = 2.5,
+                                                min_outliers = 10L) {
+  n_tip <- ape::Ntip(phy)
+  scores <- tip_rate_outlier_scores(phy)
+  if (n_tip <= target_n) {
+    scores$role <- "kept"
+    return(list(subset_phy = phy, subset_bounds = node_bounds, tips = scores,
+                n_original = n_tip, n_subset = n_tip))
+  }
+  children <- build_children_lookup(phy)
+
+  cal_tips <- character(0)
+  for (nd in node_bounds$node) {
+    for (k in children[[nd]]) {
+      cal_tips <- union(cal_tips, descendant_tip_labels(phy, k, children)[1L])
     }
-    must_keep <- unique(c(must_keep, selected))
   }
 
-  ## 4. Prune
-  tips_to_keep <- intersect(must_keep, phy$tip.label)
+  ord <- order(-scores$rate_score)
+  n_out <- max(min(min_outliers, n_tip), sum(scores$rate_score > z_cut))
+  n_out <- min(n_out, floor(outlier_frac * target_n))
+  rate_tips <- setdiff(scores$tip[ord[seq_len(n_out)]], cal_tips)
+
+  must_keep <- unique(c(cal_tips, rate_tips))
+  fill_tips <- spread_tips_by_clade(phy, must_keep, target_n - length(must_keep), children)
+  tips_to_keep <- unique(c(must_keep, fill_tips))
   subset_phy <- ape::drop.tip(phy, setdiff(phy$tip.label, tips_to_keep))
 
-  ## 5. Remap calibrations
+  ## Remap calibrations onto the subset tree
+  sub_children <- build_children_lookup(subset_phy)
   keep_cal <- logical(nrow(node_bounds))
   new_nodes <- integer(nrow(node_bounds))
   new_taxonA <- rep(NA_character_, nrow(node_bounds))
   new_taxonB <- rep(NA_character_, nrow(node_bounds))
   for (i in seq_len(nrow(node_bounds))) {
-    clade_tips <- ape::extract.clade(phy, node_bounds$node[i])$tip.label
-    sub_tips <- intersect(clade_tips, subset_phy$tip.label)
-    if (length(sub_tips) >= 2) {
-      new_nd <- ape::getMRCA(subset_phy, sub_tips)
-      if (!is.null(new_nd)) {
-        kids <- subset_phy$edge[subset_phy$edge[, 1] == new_nd, 2]
-        if (length(kids) >= 2) {
-          pick_tip <- function(node_id) {
-            if (node_id <= ape::Ntip(subset_phy)) {
-              subset_phy$tip.label[node_id]
-            } else {
-              sort(ape::extract.clade(subset_phy, node_id)$tip.label)[1]
-            }
-          }
-          new_nodes[i] <- new_nd
-          new_taxonA[i] <- pick_tip(kids[1])
-          new_taxonB[i] <- pick_tip(kids[2])
-          keep_cal[i] <- nzchar(new_taxonA[i]) && nzchar(new_taxonB[i]) &&
-            !identical(new_taxonA[i], new_taxonB[i])
-        }
-      }
-    }
+    sub_tips <- intersect(descendant_tip_labels(phy, node_bounds$node[i], children), subset_phy$tip.label)
+    if (length(sub_tips) < 2L) next
+    new_nd <- ape::getMRCA(subset_phy, sub_tips)
+    kids <- sub_children[[new_nd]]
+    if (is.null(new_nd) || length(kids) < 2L) next
+    new_nodes[i] <- new_nd
+    new_taxonA[i] <- descendant_tip_labels(subset_phy, kids[1L], sub_children)[1L]
+    new_taxonB[i] <- descendant_tip_labels(subset_phy, kids[2L], sub_children)[1L]
+    keep_cal[i] <- !identical(new_taxonA[i], new_taxonB[i])
   }
   subset_bounds <- node_bounds[keep_cal, , drop = FALSE]
   subset_bounds$node <- new_nodes[keep_cal]
   if ("taxonA" %in% names(subset_bounds)) subset_bounds$taxonA <- new_taxonA[keep_cal]
   if ("taxonB" %in% names(subset_bounds)) subset_bounds$taxonB <- new_taxonB[keep_cal]
 
-  list(subset_phy = subset_phy, subset_bounds = subset_bounds,
+  scores$role <- ifelse(scores$tip %in% cal_tips, "calibration",
+                 ifelse(scores$tip %in% rate_tips, "rate_outlier",
+                 ifelse(scores$tip %in% fill_tips, "fill", "dropped")))
+  list(subset_phy = subset_phy, subset_bounds = subset_bounds, tips = scores,
        n_original = n_tip, n_subset = ape::Ntip(subset_phy))
 }
 
@@ -1388,6 +1524,17 @@ if (!is.finite(treepl_numsites) || treepl_numsites < 1L) stop("--treepl-numsites
 if (!is.finite(treepl_threads) || treepl_threads < 1L) stop("--treepl-threads must be >= 1.")
 treepl_thorough <- !identical(tolower(kv[["treepl-thorough"]] %||% "TRUE"), "false")
 treepl_prime <- !identical(tolower(kv[["treepl-prime"]] %||% "TRUE"), "false")
+treepl_prime_reps <- max(1L, as.integer(kv[["treepl-prime-reps"]] %||% "5"))
+treepl_cv_extend <- max(0L, as.integer(kv[["treepl-cv-extend"]] %||% "2"))
+treepl_opt_check <- !identical(tolower(kv[["treepl-opt-check"]] %||% "TRUE"), "false")
+treepl_cv_reps <- max(1L, as.integer(kv[["treepl-cv-reps"]] %||% "10"))
+treepl_opt_screen <- tolower(kv[["treepl-opt-screen"]] %||% "prime")
+if (!(treepl_opt_screen %in% c("prime", "full"))) stop("--treepl-opt-screen must be prime or full.")
+treepl_opt_seeds <- max(1L, as.integer(kv[["treepl-opt-seeds"]] %||% "3"))
+treepl_deep_seeds <- max(1L, as.integer(kv[["treepl-deep-seeds"]] %||% "50"))
+treepl_screen_pliter <- max(1L, as.integer(kv[["treepl-screen-pliter"]] %||% "200"))
+treepl_deep_pliter <- max(1L, as.integer(kv[["treepl-deep-pliter"]] %||% "2500"))
+treepl_jobs <- max(1L, as.integer(kv[["treepl-jobs"]] %||% "1"))
 treepl_opt <- kv[["treepl-opt"]] %||% NULL
 treepl_plsimaniter <- kv[["treepl-plsimaniter"]] %||% NULL
 treepl_pliter <- kv[["treepl-pliter"]] %||% NULL
@@ -1508,6 +1655,7 @@ if ("additional-calibrations-csv" %in% names(kv)) {
     ## Ensure consistent columns; fill missing age_max with NA (min-only constraint)
     for (col in setdiff(names(pair_df), names(add_df))) add_df[[col]] <- NA
     for (col in setdiff(names(add_df), names(pair_df))) pair_df[[col]] <- NA
+    add_df$calibration_source <- "additional"
     pair_df <- rbind(pair_df, add_df[, names(pair_df), drop = FALSE])
     message(sprintf("  Appended %d additional calibration(s) from %s", nrow(add_df), basename(add_csv)))
   }
@@ -1535,6 +1683,12 @@ write.csv(node_bounds, bounds_csv, row.names = FALSE)
 if (nrow(pair_map$dropped_inconsistent)) {
   write.csv(pair_map$dropped_inconsistent, drop_csv, row.names = FALSE)
 }
+conflict_csv <- file.path(outdir, paste0(prefix, "_calibration_conflicts.csv"))
+if (nrow(pair_map$conflicts)) {
+  write.csv(pair_map$conflicts, conflict_csv, row.names = FALSE)
+} else if (file.exists(conflict_csv)) {
+  unlink(conflict_csv)
+}
 
 msg("Target tree: ", phy_file, " | tree_id=", phy_loaded$tree_id)
 msg("Output prefix: ", prefix)
@@ -1546,6 +1700,16 @@ msg("Dropped calibrations (bad MRCA): ", pair_map$dropped_bad_mrca)
 if (nrow(pair_map$dropped_inconsistent)) {
   msg("Dropped calibration nodes (inconsistent after merge): ", nrow(pair_map$dropped_inconsistent))
 }
+if (nrow(pair_map$conflicts)) {
+  msg("Calibration conflicts resolved by source priority: ", nrow(pair_map$conflicts), " (see ", conflict_csv, ")")
+  for (j in seq_len(nrow(pair_map$conflicts))) {
+    cj <- pair_map$conflicts[j, ]
+    msg("  node ", cj$node, " [", cj$conflict, "]: ", cj$action,
+        if (nzchar(cj$dropped_sources %||% "")) paste0(" (", cj$dropped_sources, ")") else "")
+  }
+}
+msg("Calibration sources: ", paste(names(table(unlist(strsplit(node_bounds$calibration_sources, ";")))),
+    table(unlist(strsplit(node_bounds$calibration_sources, ";"))), sep = "=", collapse = ", "))
 
 candidate_rows <- if (nrow(existing_full_candidates_df)) list(existing_full_candidates_df) else list()
 all_rows <- if (nrow(existing_all_df)) list(existing_all_df) else list()
@@ -1555,26 +1719,40 @@ chronos_trees_cache <- list()   ## in-memory chronos trees for post-selection CI
 treepl_bin <- ""
 treepl_runs_csv <- ""
 treepl_prime_lines_full <- character(0)
+treepl_final_thorough <- NULL   ## settings of the kept treePL run, reused by its bootstrap
+treepl_final_pliter <- NULL
 megacc_run_csv <- ""
 
 ## Fixed seed so every stage of a staged run builds the same tuning subset.
 set.seed(as.integer(kv[["seed"]] %||% "1"))
 
 ## ---------------------------------------------------------------------------
-## Large-tree subset tuning (auto for >500 tips, override with --subset-tips)
-## When active: tune lambda/k/smooth grids on a ~200-tip subset, then rerun
-## only the winning settings on the full tree.
+## Large-tree subset tuning. Trees with more than --subset-tips tips tune the
+## chronos lambda/k grid and the treePL smoothing on a subset of
+## clamp(Ntip / 2, --subset-min, --subset-max) tips that keeps the calibration
+## taxa and the rate-outlier tips; the selected settings are then run on the
+## full tree.
 ## ---------------------------------------------------------------------------
-subset_threshold <- suppressWarnings(as.integer(kv[["subset-tips"]] %||% "500"))
-if (!is.finite(subset_threshold) || subset_threshold < 50L) subset_threshold <- 500L
-use_subset_tuning <- Ntip(phy) > subset_threshold
+subset_threshold <- suppressWarnings(as.integer(kv[["subset-tips"]] %||% "1000"))
+if (!is.finite(subset_threshold) || subset_threshold < 50L) subset_threshold <- 1000L
+subset_min <- suppressWarnings(as.integer(kv[["subset-min"]] %||% "500"))
+subset_max <- suppressWarnings(as.integer(kv[["subset-max"]] %||% "2000"))
+if (!is.finite(subset_min) || !is.finite(subset_max) || subset_min < 20L || subset_max < subset_min) {
+  stop("--subset-min and --subset-max must be integers with 20 <= min <= max.")
+}
+subset_target_n <- as.integer(min(subset_max, max(subset_min, round(Ntip(phy) / 2))))
+use_subset_tuning <- Ntip(phy) > subset_threshold && subset_target_n < Ntip(phy)
 
 if (use_subset_tuning) {
-  subset_target_n <- min(200L, Ntip(phy) %/% 2L)
   msg("Large tree detected (", Ntip(phy), " tips > ", subset_threshold, "). ",
-      "Tuning grids on ~", subset_target_n, "-tip subset, then rerunning winners on full tree.")
+      "Tuning grids on a ", subset_target_n, "-tip subset, then running the winners on the full tree.")
   sub <- build_calibration_preserving_subset(phy, node_bounds, target_n = subset_target_n)
-  msg("  Subset: ", sub$n_subset, " tips (", nrow(sub$subset_bounds), " calibrations retained)")
+  role_n <- table(factor(sub$tips$role, levels = c("calibration", "rate_outlier", "fill")))
+  msg("  Subset: ", sub$n_subset, " tips (", role_n[["calibration"]], " calibration, ",
+      role_n[["rate_outlier"]], " rate-outlier, ", role_n[["fill"]], " fill); ",
+      nrow(sub$subset_bounds), " of ", nrow(node_bounds), " calibrations retained")
+  write.csv(sub$tips, file.path(outdir, paste0(prefix, "_tuning_subset_tips.csv")), row.names = FALSE)
+  ape::write.tree(sub$subset_phy, file.path(outdir, paste0(prefix, "_tuning_subset.tre")))
   phy_tune <- sub$subset_phy
   node_bounds_tune <- sub$subset_bounds
 } else {
@@ -1801,16 +1979,26 @@ if ("treepl" %in% methods) {
   }
   msg("Running treePL with binary: ", treepl_bin)
   tp_dir <- file.path(outdir, "treepl")
+  tp_seed <- as.integer(kv[["seed"]] %||% "1")
   tp_cfg <- function(name) file.path(tp_dir, "configs", paste0(prefix, "_treePL_", name, ".cfg"))
   tp_log <- function(name) file.path(tp_dir, "logs", paste0(prefix, "_treePL_", name, ".log"))
-  tp_prime <- function(tree_path, bounds, name) {
-    treepl_run_prime(
-      treepl_bin, tree_path, bounds,
-      smooth = exp(mean(log(treepl_cv$grid))), numsites = treepl_numsites,
-      cfg_path = tp_cfg(name), log_path = tp_log(name), thorough = treepl_thorough,
-      opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
-      omp_threads = treepl_threads
-    )
+  tp_file <- function(suffix) file.path(tp_dir, paste0(prefix, "_treePL_", suffix))
+  tp_common <- list(numsites = treepl_numsites, thorough = treepl_thorough, opt = treepl_opt,
+                    plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
+                    omp_threads = treepl_threads)
+  ## Repeated prime; writes <name>_prime_runs.csv and returns the outcomes.
+  tp_prime <- function(tree_path, bounds, smooth, name) {
+    pc <- do.call(treepl_prime_consensus, c(list(
+      treepl_bin, tree_path, bounds, smooth = smooth, reps = treepl_prime_reps, seed = tp_seed,
+      cfg_path = function(i) tp_cfg(sprintf("%s_rep%02d", name, i)),
+      log_path = function(i) tp_log(sprintf("%s_rep%02d", name, i))
+    ), tp_common))
+    reps <- pc$reps
+    reps$smooth <- smooth
+    write.csv(reps, tp_file(paste0(name, "_runs.csv")), row.names = FALSE)
+    msg("    prime: ", pc$outcomes$n[1L], "/", sum(reps$ok), " replicates agree on ",
+        pc$outcomes$lines_key[1L])
+    pc
   }
   full_tree_path <- file.path(tp_dir, paste0(prefix, "_phylogram_for_treepl.tre"))
   ape::write.tree(phy, file = full_tree_path)
@@ -1819,88 +2007,241 @@ if ("treepl" %in% methods) {
     cv_tree_path <- file.path(tp_dir, paste0(prefix, "_phylogram_for_treepl_cv_subset.tre"))
     ape::write.tree(phy_tune, file = cv_tree_path)
   }
-  cv_scores_csv <- file.path(tp_dir, paste0(prefix, "_treePL_cv_scores.csv"))
-  cv_outfile <- file.path(tp_dir, paste0(prefix, "_treePL_cv.out"))
+  cv_scores_csv <- tp_file("cv_scores.csv")
+  cv_reps_csv <- tp_file("cv_replicates.csv")
+  cv_name <- function(r, k = NULL) paste0(if (r == 1L) "cv" else paste0("cv_ext", r - 1L),
+                                          if (!is.null(k)) sprintf("_rep%02d", k) else "")
+  cv_reps_used <- if (identical(treepl_cv_type, "random")) treepl_cv_reps else 1L
+  opt_check_csv <- tp_file("optimizer_check.csv")
   final_status <- "FAILED"
   final_error <- NA_character_
   final_exit <- NA_integer_
   best_smooth <- NA_real_
   final_candidate <- ""
   final_tree <- ""
+  final_variant <- if (isTRUE(treepl_prime)) "prime_modal" else "treePL_default"
 
   treepl_res <- try({
     ## Step 1-2: prime + cross-validation (checkpointed by the CV score table)
     cv_scores <- read_csv_if_exists(cv_scores_csv)
     cv_reusable <- nrow(cv_scores) &&
-      all(c("smooth", "cv_chisq", "cv_type") %in% names(cv_scores)) &&
-      isTRUE(all.equal(sort(cv_scores$smooth), sort(treepl_cv$grid))) &&
+      all(c("smooth", "cv_chisq", "cv_type", "cv_run", "cv_selected") %in% names(cv_scores)) &&
+      all(sapply(treepl_cv$grid, function(g) any(abs(log(cv_scores$smooth[cv_scores$cv_run == 1L]) - log(g)) < 1e-6))) &&
+      sum(cv_scores$cv_run == 1L) == length(treepl_cv$grid) &&
       identical(unique(as.character(cv_scores$cv_type)), treepl_cv_type) &&
-      any(is.finite(cv_scores$cv_chisq))
+      identical(as.integer(unique(cv_scores$cv_reps %||% 1L)), as.integer(cv_reps_used)) &&
+      any(as.logical(cv_scores$cv_selected))
     if (cv_reusable) {
       msg("  checkpoint: reusing treePL cross-validation scores")
+      best_smooth <- cv_scores$smooth[as.logical(cv_scores$cv_selected)][1L]
+      cv_at_edge <- any(as.logical(cv_scores$cv_at_edge %||% FALSE))
     } else {
       cv_prime_lines <- character(0)
       if (isTRUE(treepl_prime)) {
-        msg("  priming treePL optimizer", if (use_subset_tuning) " on the tuning subset" else "", "...")
-        cv_prime_lines <- tp_prime(cv_tree_path, node_bounds_tune,
-                                   if (use_subset_tuning) "prime_cv_subset" else "prime")
+        msg("  priming treePL optimizer (", treepl_prime_reps, " replicates)",
+            if (use_subset_tuning) " on the tuning subset" else "", "...")
+        cv_prime_lines <- tp_prime(cv_tree_path, node_bounds_tune, exp(mean(log(treepl_cv$grid))),
+                                   "prime_cv")$lines[[1L]]
       }
       msg("  treePL ", treepl_cv_type, " cross-validation, smoothing ",
           paste(fmt_num(treepl_cv$grid), collapse = ","), "...")
-      cv_scores <- treepl_cross_validate(
-        treepl_bin, cv_tree_path, node_bounds_tune, treepl_cv, treepl_cv_type,
-        numsites = treepl_numsites, prime_lines = cv_prime_lines,
-        cfg_path = tp_cfg("cv"), log_path = tp_log("cv"), cvoutfile = cv_outfile,
-        thorough = treepl_thorough, opt = treepl_opt,
-        plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
-        omp_threads = treepl_threads
-      )
+      search <- do.call(treepl_cv_search, c(list(
+        treepl_bin, cv_tree_path, node_bounds_tune, treepl_cv$grid, treepl_cv_type,
+        max_extend = treepl_cv_extend,
+        cfg_path = function(r, k) tp_cfg(cv_name(r, k)),
+        log_path = function(r, k) tp_log(cv_name(r, k)),
+        cvoutfile = function(r, k) tp_file(paste0(cv_name(r, k), ".out")),
+        prime_lines = cv_prime_lines, seed = tp_seed, reps = treepl_cv_reps
+      ), tp_common))
+      if (!is.null(search$replicates)) write.csv(search$replicates, cv_reps_csv, row.names = FALSE)
+      cv_scores <- search$scores
+      best_smooth <- search$selected
+      cv_at_edge <- isTRUE(search$at_edge)
       cv_scores$cv_type <- treepl_cv_type
+      if (is.null(cv_scores$cv_reps)) cv_scores$cv_reps <- 1L
+      cv_scores$cv_selected <- is.finite(best_smooth) & cv_scores$cv_run == max(cv_scores$cv_run) &
+        abs(log(cv_scores$smooth) - log(best_smooth)) < 1e-9
+      cv_scores$cv_at_edge <- cv_at_edge
       write.csv(cv_scores, cv_scores_csv, row.names = FALSE)
     }
     for (j in seq_len(nrow(cv_scores))) {
-      msg("    smooth=", fmt_num(cv_scores$smooth[j]), "  CV chisq=", fmt_num(cv_scores$cv_chisq[j]))
+      msg("    smooth=", fmt_num(cv_scores$smooth[j]), "  CV chisq=", fmt_num(cv_scores$cv_chisq[j]),
+          if (isTRUE(cv_scores$cv_folds_used[j] < cv_scores$cv_folds[j]))
+            paste0("  (", cv_scores$cv_folds_used[j], "/", cv_scores$cv_folds[j],
+                   " folds used; a later fold blew up)") else "",
+          if (isTRUE(cv_scores$cv_reps[j] > 1L))
+            paste0("  (median of ", cv_scores$cv_reps_accepted[j], "/", cv_scores$cv_reps[j],
+                   " accepted replicates)") else "",
+          if (cv_scores$cv_run[j] > 1L) paste0("  (extension run ", cv_scores$cv_run[j] - 1L, ")") else "")
     }
-    best_smooth <- treepl_select_smoothing(cv_scores)
     if (!is.finite(best_smooth)) {
       stop("treePL cross-validation produced no usable scores; see ", tp_log("cv"))
     }
+    if (any(cv_scores$cv_folds_used < 0.5 * cv_scores$cv_folds, na.rm = TRUE)) {
+      msg("  WARNING: treePL blew up early in some CV folds, so some CV scores rest on fewer than half ",
+          "of the folds", if (identical(treepl_cv_type, "random")) "; use --treepl-cv-reps > 1 or --treepl-cv=loo" else "", ".")
+    }
+    if (any(is.finite(cv_scores$cv_reps_accepted) & cv_scores$cv_reps_accepted < cv_scores$cv_reps)) {
+      msg("  note: some random-CV replicates blew up and were rejected; see ", cv_reps_csv, ".")
+    }
     msg("  CV-selected smoothing: ", fmt_num(best_smooth))
-    if (best_smooth %in% range(treepl_cv$grid)) {
-      msg("  WARNING: the CV-selected smoothing is at the edge of --treepl-smoothing; ",
-          "the CV optimum may lie outside the grid. Consider extending the grid.")
+    if (isTRUE(cv_at_edge)) {
+      msg("  WARNING: the CV-selected smoothing is still at the edge of the CV series after ",
+          treepl_cv_extend, " extension run(s); the CV optimum may lie further out. ",
+          "Raise --treepl-cv-extend or widen --treepl-smoothing.")
     }
 
-    ## Step 3: final dating run on the full tree
-    if (isTRUE(treepl_prime)) {
-      treepl_prime_lines_full <- treepl_parse_prime_lines(tp_log("prime"))
-      if (!length(treepl_prime_lines_full)) {
-        msg("  priming treePL optimizer on the full tree...")
-        treepl_prime_lines_full <- tp_prime(full_tree_path, node_bounds, "prime")
-      }
-    }
+    ## Step 3: final dating on the full tree. Prime again on the full tree at
+    ## the selected smoothing, then date under each optimizer setting and keep
+    ## the run with the lowest penalized-likelihood objective.
     final_candidate <- paste0("treePL_smooth", fmt_token(best_smooth))
     final_tree <- file.path(tp_dir, "trees", paste0(prefix, "_", final_candidate, ".tre"))
-    if (tree_has_expected_tips(final_tree, Ntip(phy)) && !is.null(.treepl_read_valid_tree(final_tree))) {
+    selected_settings_csv <- tp_file("selected_settings.csv")
+    sel <- read_csv_if_exists(selected_settings_csv)
+    if (tree_has_expected_tips(final_tree, Ntip(phy)) && !is.null(.treepl_read_valid_tree(final_tree)) &&
+        nrow(sel) && isTRUE(all.equal(sel$smooth[1L], best_smooth)) &&
+        identical(as.character(sel$opt_screen[1L]), treepl_opt_screen)) {
       msg("  checkpoint: reusing ", final_candidate)
+      final_variant <- sel$variant[1L]
+      treepl_prime_lines_full <- if (nzchar(sel$opt_lines[1L] %||% "")) strsplit(sel$opt_lines[1L], "; ", fixed = TRUE)[[1L]] else character(0)
+      treepl_final_thorough <- as.logical(sel$thorough[1L])
+      treepl_final_pliter <- if (is.na(sel$pliter[1L])) treepl_pliter else as.character(sel$pliter[1L])
       final_exit <- 0L
     } else {
-      unlink(c(final_tree, paste0(final_tree, ".r8s")), force = TRUE)
-      treepl_write_cfg(
-        tp_cfg(final_candidate), full_tree_path, final_tree, best_smooth, treepl_numsites, node_bounds,
-        thorough = treepl_thorough, prime = FALSE,
-        opt = treepl_opt, plsimaniter = treepl_plsimaniter, pliter = treepl_pliter,
-        extra_lines = treepl_prime_lines_full
-      )
-      final_exit <- treepl_run_one(treepl_bin, tp_cfg(final_candidate), tp_log(final_candidate),
-                                   omp_threads = treepl_threads)
+      variants <- list()
+      if (isTRUE(treepl_prime)) {
+        msg("  priming treePL on the full tree at smoothing ", fmt_num(best_smooth),
+            " (", treepl_prime_reps, " replicates)...")
+        pc_full <- tp_prime(full_tree_path, node_bounds, best_smooth, "prime_final")
+        n_keep <- if (isTRUE(treepl_opt_check)) min(3L, length(pc_full$lines)) else 1L
+        for (v in seq_len(n_keep)) {
+          variants[[if (v == 1L) "prime_modal" else paste0("prime_alt", v - 1L)]] <- pc_full$lines[[v]]
+        }
+      } else {
+        variants[["treePL_default"]] <- character(0)
+      }
+      seeds <- rep(tp_seed, length(variants))
+      if (isTRUE(treepl_opt_check)) {
+        if (isTRUE(treepl_prime)) {
+          variants[["treePL_default"]] <- character(0)
+          seeds <- c(seeds, tp_seed)
+        }
+        for (k in 1:2) {
+          variants[[paste0(names(variants)[1L], "_seed", tp_seed + k)]] <- variants[[1L]]
+          seeds <- c(seeds, tp_seed + k)
+        }
+        msg("  treePL optimizer check: dating the full tree under ", length(variants), " settings...")
+      }
+      vt_dir <- file.path(tp_dir, "optimizer_check")
+      dir.create(vt_dir, recursive = TRUE, showWarnings = FALSE)
+      tp_variants <- function(variants, seeds, stage, settings = list()) {
+        res <- do.call(treepl_date_variants, c(list(
+          treepl_bin, full_tree_path, phy, node_bounds, best_smooth,
+          variants = variants, seeds = seeds,
+          out_tree = function(v) file.path(vt_dir, paste0(prefix, "_", final_candidate, "_", v, ".tre")),
+          cfg_path = function(v) tp_cfg(paste0(final_candidate, "_", v)),
+          log_path = function(v) tp_log(paste0(final_candidate, "_", v))
+        ), utils::modifyList(tp_common, settings)))
+        res$table$stage <- stage
+        res$table$thorough <- settings$thorough %||% treepl_thorough
+        res$table$pliter <- as.integer(settings$pliter %||% treepl_pliter %||% NA)
+        res
+      }
+      runs <- list(tp_variants(variants, seeds, "prime_check"))
+      if (identical(treepl_opt_screen, "full")) {
+        ## A. Pyron's VGP optimizer screen, then a deep seed search on the
+        ## best-ranked setting and the setting with the lowest single objective.
+        grid <- treepl_optimizer_grid()
+        scr_seeds <- tp_seed + 100L + seq_len(treepl_opt_seeds)
+        scr_vars <- rep(grid, each = length(scr_seeds))
+        names(scr_vars) <- paste0(rep(names(grid), each = length(scr_seeds)), "_s", scr_seeds)
+        msg("  treePL optimizer screen: ", length(grid), " settings x ", length(scr_seeds),
+            " seeds (pliter=", treepl_screen_pliter, ", thorough off, ", treepl_jobs, " jobs)...")
+        scr <- tp_variants(scr_vars, rep(scr_seeds, times = length(grid)), "screen",
+                           list(thorough = FALSE, pliter = treepl_screen_pliter, jobs = treepl_jobs))
+        scr$table$setting <- rep(names(grid), each = length(scr_seeds))
+        ranking <- treepl_rank_settings(scr$table, length(scr_seeds))
+        write.csv(ranking, tp_file("optimizer_screen_ranking.csv"), row.names = FALSE)
+        runs[[length(runs) + 1L]] <- scr
+        ok_rank <- ranking[ranking$usable, , drop = FALSE]
+        if (nrow(ok_rank)) {
+          deep_set <- unique(c(ok_rank$setting[1L], ok_rank$setting[which.min(ok_rank$best)]))
+          deep_seeds <- tp_seed + 1000L + seq_len(treepl_deep_seeds)
+          deep_vars <- rep(grid[deep_set], each = length(deep_seeds))
+          names(deep_vars) <- paste0(rep(deep_set, each = length(deep_seeds)), "_deep", deep_seeds)
+          msg("  treePL deep seed search: ", paste(deep_set, collapse = ", "), " x ", length(deep_seeds),
+              " seeds (pliter=", treepl_deep_pliter, ", thorough off)...")
+          runs[[length(runs) + 1L]] <- tp_variants(deep_vars, rep(deep_seeds, times = length(deep_set)), "deep",
+                                                   list(thorough = FALSE, pliter = treepl_deep_pliter, jobs = treepl_jobs))
+        } else {
+          msg("  WARNING: no optimizer setting gave valid trees for all screen seeds; deep search skipped.")
+        }
+      }
+      ## Pool all fits; the lowest objective within the bounds wins.
+      tab <- bind_rows_fill(lapply(runs, `[[`, "table"))
+      ages <- do.call(c, lapply(runs, `[[`, "ages"))
+      best <- which.min(ifelse(is.finite(tab$objective), tab$objective, Inf))
+      tab$selected <- seq_len(nrow(tab)) == best
+      for (v in which(is.finite(tab$objective))) {
+        d <- abs(ages[[v]] - ages[[best]])
+        tab$max_abs_age_diff[v] <- max(d)
+        tab$median_rel_age_diff[v] <- stats::median(d / pmax(ages[[best]], 1e-12))
+      }
+      tab$smooth <- best_smooth
+      write.csv(tab, opt_check_csv, row.names = FALSE)
+      show <- if (nrow(tab) > 12L) which(tab$stage != "screen" | tab$selected) else seq_len(nrow(tab))
+      for (j in show) {
+        msg("    ", tab$variant[j], ": objective=", fmt_num(tab$objective[j]),
+            "  root=", fmt_num(tab$root_age[j]),
+            "  max |age diff|=", fmt_num(tab$max_abs_age_diff[j]),
+            if (!isTRUE(tab$within_bounds[j])) "  (outside bounds; not usable)" else "",
+            if (isTRUE(tab$selected[j])) "  <- selected" else "")
+      }
+      if (any(tab$stage == "screen")) {
+        z <- tab[tab$stage == "screen" & is.finite(tab$objective), , drop = FALSE]
+        msg("    screen: ", nrow(z), "/", sum(tab$stage == "screen"), " fits valid; objective range ",
+            fmt_num(min(z$objective)), " to ", fmt_num(max(z$objective)), "; root age range ",
+            fmt_num(min(z$root_age)), " to ", fmt_num(max(z$root_age)))
+      }
+      ## A setting that reaches a clearly worse objective just optimized
+      ## badly; one that ties the best objective with different ages means
+      ## the dates are not well identified at this smoothing.
+      best_obj <- tab$objective[best]
+      near <- which(!tab$selected & is.finite(tab$median_rel_age_diff) & tab$median_rel_age_diff > 0.05 &
+                      tab$objective - best_obj < 0.5)
+      far <- which(!tab$selected & is.finite(tab$median_rel_age_diff) & tab$median_rel_age_diff > 0.05 &
+                     tab$objective - best_obj >= 0.5)
+      for (j in near) {
+        msg("  WARNING: ", tab$variant[j], " reaches the same objective (+", fmt_num(tab$objective[j] - best_obj),
+            ") with node ages a median ", round(100 * tab$median_rel_age_diff[j], 1),
+            "% different. The dates are weakly identified at this smoothing; see ", opt_check_csv, ".")
+      }
+      if (length(far)) {
+        j <- far[which.max(tab$median_rel_age_diff[far])]
+        msg("  note: ", length(far), " setting(s) give node ages more than 5% different but a worse objective ",
+            "(largest: ", tab$variant[j], ", median ", round(100 * tab$median_rel_age_diff[j], 1),
+            "%, objective +", fmt_num(tab$objective[j] - best_obj), "); not used.")
+      }
+      dir.create(dirname(final_tree), recursive = TRUE, showWarnings = FALSE)
+      file.copy(tab$tree_file[best], final_tree, overwrite = TRUE)
+      final_variant <- tab$variant[best]
+      treepl_prime_lines_full <- if (nzchar(tab$opt_lines[best])) strsplit(tab$opt_lines[best], "; ", fixed = TRUE)[[1L]] else character(0)
+      treepl_final_thorough <- as.logical(tab$thorough[best])
+      treepl_final_pliter <- if (is.na(tab$pliter[best])) treepl_pliter else as.character(tab$pliter[best])
+      write.csv(data.frame(variant = final_variant, smooth = best_smooth, stage = tab$stage[best],
+                           seed = tab$seed[best], opt_lines = tab$opt_lines[best],
+                           thorough = treepl_final_thorough, pliter = tab$pliter[best],
+                           objective = tab$objective[best], opt_screen = treepl_opt_screen,
+                           stringsAsFactors = FALSE),
+                selected_settings_csv, row.names = FALSE)
+      final_exit <- tab$exit_code[best]
     }
     ## treePL can exit non-zero (e.g. convergence warnings) yet still write
     ## a valid output tree, so the tree file decides success.
     if (is.null(.treepl_read_valid_tree(final_tree))) {
-      stop("treePL final run wrote no valid tree; ", tail_text(tp_log(final_candidate)))
+      stop("treePL final run wrote no valid tree; see ", tp_log(paste0(final_candidate, "_", final_variant)))
     }
-    final_status <- if (identical(final_exit, 0L)) "OK" else "OK_NONZERO_EXIT"
+    final_status <- if (identical(as.integer(final_exit), 0L)) "OK" else "OK_NONZERO_EXIT"
     cv_scores
   }, silent = TRUE)
 
@@ -1912,6 +2253,13 @@ if ("treepl" %in% methods) {
   } else {
     cv_scores <- treepl_res
   }
+  ## One row per smoothing value; an extension run's score replaces the
+  ## earlier score of the same value.
+  if ("cv_run" %in% names(cv_scores)) {
+    cv_scores <- cv_scores[order(cv_scores$cv_run), , drop = FALSE]
+    cv_scores <- cv_scores[!duplicated(signif(cv_scores$smooth, 9), fromLast = TRUE), , drop = FALSE]
+  }
+  cv_scores <- cv_scores[order(-cv_scores$smooth), , drop = FALSE]
 
   treepl_rows <- lapply(seq_len(nrow(cv_scores)), function(j) {
     s <- cv_scores$smooth[j]
@@ -1932,8 +2280,8 @@ if ("treepl" %in% methods) {
       tree_file = if (is_sel && grepl("^OK", final_status)) final_tree else "",
       ci_file = "",
       n_sites = NA_integer_,
-      cfg_file = if (is_sel) tp_cfg(cand_j) else tp_cfg("cv"),
-      log_file = if (is_sel) tp_log(cand_j) else tp_log("cv"),
+      cfg_file = if (is_sel) tp_cfg(paste0(cand_j, "_", final_variant)) else tp_cfg("cv"),
+      log_file = if (is_sel) tp_log(paste0(cand_j, "_", final_variant)) else tp_log("cv"),
       error = if (is_sel || !is.na(final_error)) final_error else NA_character_,
       stringsAsFactors = FALSE
     )
@@ -2245,10 +2593,10 @@ for (ci_i in seq_len(nrow(candidates_df))) {
         B = treepl_bootstrap_reps,
         n_sites = ci_sites,
         numsites = treepl_numsites,
-        thorough = treepl_thorough,
+        thorough = treepl_final_thorough %||% treepl_thorough,
         opt = treepl_opt,
         plsimaniter = treepl_plsimaniter,
-        pliter = treepl_pliter,
+        pliter = treepl_final_pliter %||% treepl_pliter,
         quiet = TRUE,
         omp_threads = treepl_threads,
         jobs = treepl_bootstrap_jobs,
@@ -2304,7 +2652,10 @@ meta_lines <- c(
   paste0("Target tree id: ", phy_loaded$tree_id),
   paste0("Output prefix: ", prefix),
   paste0("Methods requested: ", paste(methods, collapse = ",")),
-  paste0("Calibration source: ", if (has_csv) "csv" else "congruify"),
+  paste0("Calibration source: ", if (has_csv) "csv" else "congruify",
+         if ("additional-calibrations-csv" %in% names(kv)) " + additional CSV" else ""),
+  if ("additional-calibrations-csv" %in% names(kv)) paste0("Additional calibration CSV: ",
+    normalizePath(kv[["additional-calibrations-csv"]], winslash = "/", mustWork = TRUE)) else NULL,
   if (has_csv) paste0("Calibration CSV: ", normalizePath(kv[["calibrations-csv"]], winslash = "/", mustWork = TRUE)) else paste0("Reference time tree: ", normalizePath(kv[["reference-time-tree"]], winslash = "/", mustWork = TRUE)),
   if (is.finite(root_age)) paste0("Root age appended: ", fmt_num(root_age)) else "Root age appended: none",
   paste0("Subset tuning: ", if (use_subset_tuning) paste0("yes (", Ntip(phy_tune), " of ", Ntip(phy), " tips)") else "no"),
@@ -2313,7 +2664,13 @@ meta_lines <- c(
   paste0("chronos bootstrap CI models: ", paste(chronos_ci_models, collapse = ",")),
   paste0("chronos bootstrap pml source: ", if (!is.null(chronos_pml_output)) "external_pml_rds" else "parametric_proxy_from_phylogram"),
   if ("treepl" %in% methods) paste0("treePL smoothing selection: ", treepl_cv_type, " cross-validation over ",
-                                    paste(fmt_num(treepl_cv$grid), collapse = ","), " (lowest CV chi-square wins)") else NULL,
+                                    paste(fmt_num(treepl_cv$grid), collapse = ","), " (lowest CV chi-square wins; up to ",
+                                    treepl_cv_extend, " edge extension runs)") else NULL,
+  if ("treepl" %in% methods) paste0("treePL prime replicates: ", treepl_prime_reps,
+                                    "; optimizer check: ", if (treepl_opt_check) "yes" else "no",
+                                    "; optimizer screen: ", treepl_opt_screen,
+                                    if (identical(treepl_cv_type, "random")) paste0("; random-CV replicates: ", treepl_cv_reps) else "",
+                                    "; treePL seed: ", as.integer(kv[["seed"]] %||% "1")) else NULL,
   paste0("treePL numsites: ", treepl_numsites),
   paste0("treePL bootstrap replicates: ", treepl_bootstrap_reps),
   paste0("treePL bootstrap jobs: ", treepl_bootstrap_jobs),

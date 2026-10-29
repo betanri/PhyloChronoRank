@@ -5,16 +5,35 @@
 ## engine runs treePL in the standard order:
 ##
 ##   1. prime  — treePL tests optimizers and prints the best
-##               opt/optad/optcvad/moredetail lines, then exits
+##               opt/optad/optcvad/moredetail lines, then exits.
+##               Prime is stochastic, so it is repeated with
+##               different seeds and the most frequent result is
+##               used (the repeated-prime idea is from
+##               github.com/tongjial/treepl_wrapper).
 ##   2. cv     — cross-validation over a geometric smoothing series
 ##               (cvstart -> cvstop by cvmultstep); the smoothing
-##               with the lowest CV chi-square is selected
-##   3. final  — one thorough run with the selected smoothing and
-##               the primed optimizer lines
+##               with the lowest CV chi-square is selected. If the
+##               best value is at the edge of the series, the
+##               series is extended outward.
+##   3. final  — thorough runs with the selected smoothing under
+##               several optimizer settings (each distinct prime
+##               result, treePL defaults, extra seeds). The run with
+##               the lowest penalized-likelihood objective is kept,
+##               and the node-age spread across settings is reported.
 ##
 ## treePL's penalized-likelihood objective is not comparable across
 ## smoothing values (the penalty grows with smoothing), so it is
-## never used to pick smoothing.
+## never used to pick smoothing. At one fixed smoothing it is
+## comparable, so it is used to pick among optimizer settings.
+##
+## treePL seeds its random number generator from the clock unless the
+## config has a `seed` line, so every config written here has one.
+##
+## Replicated random CV (median of accepted replicates, with outlier
+## rejection), the full 144-setting optimizer screen with a deep seed search,
+## and the bounds check of every dated tree follow A. Pyron's treePL benchmark
+## for the VGP time tree (github.com/VGP/vgp-dating,
+## dating/treePL/treepl_benchmark.py).
 ##
 ## Bootstrap CIs: branch lengths are perturbed with the same Poisson
 ## resampling scheme used for chronos and RelTime, treePL is rerun
@@ -50,13 +69,14 @@ treepl_resolve_bin <- function(user_bin, repo_dir) {
 treepl_write_cfg <- function(cfg_path, tree_path, out_tree_path, smooth, numsites,
                              node_bounds, thorough = TRUE, prime = FALSE,
                              opt = NULL, plsimaniter = NULL, pliter = NULL,
-                             extra_lines = NULL) {
+                             extra_lines = NULL, seed = NULL) {
   lines <- c(
     paste0("treefile = ", tree_path),
     paste0("outfile = ", out_tree_path),
     paste0("numsites = ", as.integer(numsites)),
     paste0("smooth = ", .treepl_fmt_num(smooth))
   )
+  if (!is.null(seed) && is.finite(seed)) lines <- c(lines, paste0("seed = ", as.integer(seed)))
   if (isTRUE(thorough)) lines <- c(lines, "thorough")
   if (isTRUE(prime)) lines <- c(lines, "prime")
   if (!is.null(opt) && nzchar(opt)) {
@@ -114,15 +134,15 @@ treepl_parse_prime_lines <- function(log_path) {
 ## Step 1. Prime on the tree that will be dated. treePL exits after priming
 ## and writes an empty outfile, so the outfile is a throwaway temp path.
 treepl_run_prime <- function(treepl_bin, tree_path, node_bounds, smooth, numsites,
-                         cfg_path, log_path, thorough = TRUE,
-                         opt = NULL, plsimaniter = NULL, pliter = NULL,
-                         omp_threads = 1L) {
+                             cfg_path, log_path, thorough = TRUE,
+                             opt = NULL, plsimaniter = NULL, pliter = NULL,
+                             omp_threads = 1L, seed = NULL) {
   junk_out <- tempfile(pattern = "treepl_prime_", fileext = ".tre")
   on.exit(unlink(c(junk_out, paste0(junk_out, ".r8s")), force = TRUE), add = TRUE)
   treepl_write_cfg(
     cfg_path, tree_path, junk_out, smooth, numsites, node_bounds,
     thorough = thorough, prime = TRUE,
-    opt = opt, plsimaniter = plsimaniter, pliter = pliter
+    opt = opt, plsimaniter = plsimaniter, pliter = pliter, seed = seed
   )
   treepl_run_one(treepl_bin, cfg_path, log_path, omp_threads = omp_threads)
   lines <- treepl_parse_prime_lines(log_path)
@@ -130,6 +150,37 @@ treepl_run_prime <- function(treepl_bin, tree_path, node_bounds, smooth, numsite
     stop("treePL prime step did not report optimizer settings; see ", log_path)
   }
   lines
+}
+
+## Repeated prime. Replicate i uses seed + i; cfg_path/log_path are functions
+## of i. Returns the distinct outcomes ordered by frequency (ties keep the
+## order of first appearance); outcomes$lines[[1]] is the modal result.
+treepl_prime_consensus <- function(treepl_bin, tree_path, node_bounds, smooth, numsites,
+                                   reps, seed, cfg_path, log_path, ...) {
+  reps <- max(1L, as.integer(reps))
+  runs <- vector("list", reps)
+  for (i in seq_len(reps)) {
+    res <- try(treepl_run_prime(treepl_bin, tree_path, node_bounds, smooth, numsites,
+                                cfg_path(i), log_path(i), seed = seed + i, ...),
+               silent = TRUE)
+    runs[[i]] <- if (inherits(res, "try-error")) character(0) else res
+  }
+  ok <- lengths(runs) > 0L
+  if (!any(ok)) stop("all ", reps, " treePL prime replicates failed; see ", log_path(1L))
+  keys <- vapply(runs, paste, character(1), collapse = "; ")
+  uniq <- unique(keys[ok])
+  counts <- vapply(uniq, function(k) sum(keys == k), integer(1))
+  ord <- order(-counts, match(uniq, keys))
+  list(
+    outcomes = data.frame(
+      lines_key = uniq[ord], n = unname(counts[ord]),
+      stringsAsFactors = FALSE
+    ),
+    lines = runs[match(uniq[ord], keys)],
+    reps = data.frame(rep = seq_len(reps), seed = seed + seq_len(reps),
+                      ok = ok, lines_key = ifelse(ok, keys, NA_character_),
+                      stringsAsFactors = FALSE)
+  )
 }
 
 ## treePL CV walks a geometric series, so the smoothing grid must be one.
@@ -185,12 +236,54 @@ treepl_parse_cv_scores <- function(cvoutfile, grid) {
   data.frame(smooth = snapped, cv_chisq = chisq, stringsAsFactors = FALSE)
 }
 
+## Per-fold chi-square terms from a CV log. treePL prints a running total per
+## fold: "(chisq): <total>" for random CV, "<tip> rate .. chisq <total>" for
+## LOOCV. Returns one numeric vector of fold terms per smoothing value, in run
+## order. Needs treePL's nthreads = 1 (the default), so the totals are serial.
+treepl_parse_cv_folds <- function(log_path, cv_type = c("loo", "random")) {
+  cv_type <- match.arg(cv_type)
+  if (!file.exists(log_path)) return(list())
+  txt <- readLines(log_path, warn = FALSE)
+  sec <- grep("^smoothing:", txt)
+  if (!length(sec)) return(list())
+  pat <- if (identical(cv_type, "random")) "^\\(chisq\\):\\s*(\\S+)\\s*$" else
+    "^\\S+ rate \\S+ expe \\S+ dur \\S+ len \\S+ sq \\S+ chisq (\\S+)\\s*$"
+  bounds <- c(sec, length(txt) + 1L)
+  out <- lapply(seq_along(sec), function(i) {
+    z <- txt[seq.int(bounds[i], bounds[i + 1L] - 1L)]
+    hit <- regmatches(z, regexec(pat, z))
+    tot <- suppressWarnings(as.numeric(vapply(Filter(function(h) length(h) == 2L, hit), `[`, "", 2L)))
+    diff(c(0, tot))
+  })
+  ## the run ends with a plain dating pass that has no folds
+  Filter(length, out)
+}
+
+## A single fold can blow up when treePL drives a rate to ~0 and the expected
+## length of a removed tip becomes tiny (chi-square terms of 1e+39 and more).
+## treePL prints only a running total, so every fold after a blow-up is lost
+## in rounding. The robust score therefore uses the folds before the first
+## blow-up seen at any smoothing value of the run: the same folds for every
+## value, so the scores stay comparable. A term blows up if it is not finite,
+## is above 1e12, or is more than `fold_cap` times the median normal term.
+treepl_robust_cv_scores <- function(fold_terms, fold_cap = 1e4) {
+  n <- unique(lengths(fold_terms))
+  if (length(n) != 1L || n < 1L) return(NULL)
+  m <- do.call(rbind, fold_terms)
+  normal <- m[is.finite(m) & m > 0 & m < 1e12]
+  limit <- if (length(normal)) min(1e12, fold_cap * stats::median(normal)) else 1e12
+  bad <- apply(m, 2L, function(col) any(!is.finite(col) | col > limit))
+  n_used <- if (any(bad)) which(bad)[1L] - 1L else n
+  list(scores = if (n_used < 1L) rep(NA_real_, nrow(m)) else rowSums(m[, seq_len(n_used), drop = FALSE]),
+       n_folds = n, n_used = n_used)
+}
+
 ## Step 2. Cross-validate the smoothing grid. Returns one row per grid value.
 treepl_cross_validate <- function(treepl_bin, tree_path, node_bounds, cv_settings,
                                   cv_type, numsites, prime_lines,
                                   cfg_path, log_path, cvoutfile, thorough = TRUE,
                                   opt = NULL, plsimaniter = NULL, pliter = NULL,
-                                  omp_threads = 1L) {
+                                  omp_threads = 1L, seed = NULL) {
   junk_out <- tempfile(pattern = "treepl_cv_", fileext = ".tre")
   on.exit(unlink(c(junk_out, paste0(junk_out, ".r8s")), force = TRUE), add = TRUE)
   if (file.exists(cvoutfile)) unlink(cvoutfile)
@@ -198,20 +291,251 @@ treepl_cross_validate <- function(treepl_bin, tree_path, node_bounds, cv_setting
     cfg_path, tree_path, junk_out, cv_settings$cvstart, numsites, node_bounds,
     thorough = thorough, prime = FALSE,
     opt = opt, plsimaniter = plsimaniter, pliter = pliter,
-    extra_lines = c(prime_lines, treepl_cv_lines(cv_settings, cv_type, cvoutfile))
+    extra_lines = c(prime_lines, treepl_cv_lines(cv_settings, cv_type, cvoutfile)),
+    seed = seed
   )
   treepl_run_one(treepl_bin, cfg_path, log_path, omp_threads = omp_threads)
   scores <- treepl_parse_cv_scores(cvoutfile, cv_settings$grid)
   out <- data.frame(smooth = cv_settings$grid, stringsAsFactors = FALSE)
-  out$cv_chisq <- scores$cv_chisq[match(out$smooth, scores$smooth)]
+  out$cv_chisq_treepl <- scores$cv_chisq[match(out$smooth, scores$smooth)]
+  out$cv_chisq <- out$cv_chisq_treepl
+  out$cv_folds <- NA_integer_
+  out$cv_folds_used <- NA_integer_
+  robust <- treepl_robust_cv_scores(treepl_parse_cv_folds(log_path, cv_type))
+  if (!is.null(robust) && length(robust$scores) == nrow(out)) {
+    out$cv_chisq <- robust$scores
+    out$cv_folds <- robust$n_folds
+    out$cv_folds_used <- robust$n_used
+  }
   out
 }
 
-treepl_select_smoothing <- function(cv_scores) {
-  ok <- is.finite(cv_scores$cv_chisq)
+## Random CV with replicates (after A. Pyron's VGP treePL benchmark). One
+## random-CV run draws 10 groups of 10% of the tips, so a single run is noisy
+## and a single blown-up fold ruins it. The series is run `reps` times with
+## seeds seed + 1..reps. For each smoothing value, a replicate is rejected if
+## its score is not finite or is above the ceiling: 1e12 until three scores
+## are accepted, then `outlier_factor` x the median accepted score (applied
+## again until no more scores are rejected). Each value is scored by the
+## median of its accepted replicates and needs at least half of them.
+## cfg_path, log_path and cvoutfile are functions of the replicate index.
+treepl_cv_replicated <- function(treepl_bin, tree_path, node_bounds, cv_settings, reps, seed,
+                                 cfg_path, log_path, cvoutfile, ...,
+                                 outlier_factor = 100, fallback_ceiling = 1e12) {
+  long <- vector("list", reps)
+  for (r in seq_len(reps)) {
+    started <- Sys.time()
+    sc <- treepl_cross_validate(treepl_bin, tree_path, node_bounds, cv_settings, "random",
+                                cfg_path = cfg_path(r), log_path = log_path(r),
+                                cvoutfile = cvoutfile(r), seed = seed + r, ...)
+    long[[r]] <- data.frame(smooth = sc$smooth, rep = r, seed = seed + r,
+                            score = sc$cv_chisq_treepl, stringsAsFactors = FALSE)
+    ## Builds without the `seed` option seed random CV from the clock (in
+    ## seconds), so keep replicate starts at least one second apart.
+    if (!any(grepl("random number seed", readLines(log_path(r), warn = FALSE), fixed = TRUE))) {
+      wait <- 1.1 - as.numeric(difftime(Sys.time(), started, units = "secs"))
+      if (wait > 0) Sys.sleep(wait)
+    }
+  }
+  long <- do.call(rbind, long)
+  long$accepted <- FALSE
+  for (sm in unique(long$smooth)) {
+    i <- which(long$smooth == sm)
+    ok <- is.finite(long$score[i]) & long$score[i] >= 0 & long$score[i] <= fallback_ceiling
+    repeat {
+      if (sum(ok) < 3L) break
+      keep <- ok & long$score[i] <= outlier_factor * stats::median(long$score[i][ok])
+      if (identical(keep, ok)) break
+      ok <- keep
+    }
+    long$accepted[i] <- ok
+  }
+  need <- ceiling(reps / 2)
+  out <- data.frame(smooth = cv_settings$grid, stringsAsFactors = FALSE)
+  out$cv_reps <- reps
+  out$cv_reps_accepted <- vapply(out$smooth, function(sm) sum(long$accepted & long$smooth == sm), integer(1))
+  out$cv_chisq <- vapply(out$smooth, function(sm) {
+    z <- long$score[long$accepted & long$smooth == sm]
+    if (length(z) >= need) stats::median(z) else NA_real_
+  }, numeric(1))
+  out$cv_chisq_treepl <- NA_real_
+  out$cv_folds <- NA_integer_
+  out$cv_folds_used <- NA_integer_
+  list(scores = out, replicates = long)
+}
+
+## Lowest score wins; exact ties favour the larger smoothing.
+.treepl_best_smooth <- function(sc) {
+  ok <- is.finite(sc$cv_chisq)
   if (!any(ok)) return(NA_real_)
-  z <- cv_scores[ok, , drop = FALSE]
-  z$smooth[which.min(z$cv_chisq)]
+  z <- sc[ok, , drop = FALSE]
+  z <- z[order(z$cv_chisq, -z$smooth), , drop = FALSE]
+  z$smooth[1L]
+}
+
+## Step 2 with edge extension. Run CV on `smoothing`. If the best value is the
+## largest (or smallest) value, run CV again on that value plus two more values
+## further out in the same direction (same ratio); repeat while the outermost
+## value keeps winning, up to `max_extend` extra runs. The anchor value is
+## rescored in each extension run, so every choice is made inside one CV run,
+## and the search never turns back. With cv_type "random" and reps > 1 each
+## run is replicated (treepl_cv_replicated). cfg_path, log_path and cvoutfile
+## are functions of (run, rep); rep is NULL for an unreplicated run.
+## Returns all score rows (with cv_run), the replicate rows, and the selection.
+treepl_cv_search <- function(treepl_bin, tree_path, node_bounds, smoothing, cv_type,
+                             max_extend, cfg_path, log_path, cvoutfile, ...,
+                             reps = 1L, seed = 1L, limits = c(1e-8, 1e8)) {
+  settings <- treepl_cv_settings(smoothing)
+  step <- 1 / settings$cvmultstep
+  out <- list()
+  replicates <- list()
+  run <- 1L
+  direction <- 0
+  at_edge <- FALSE
+  replicated <- identical(cv_type, "random") && reps > 1L
+  repeat {
+    if (replicated) {
+      res <- treepl_cv_replicated(treepl_bin, tree_path, node_bounds, settings, reps, seed,
+                                  cfg_path = function(r) cfg_path(run, r),
+                                  log_path = function(r) log_path(run, r),
+                                  cvoutfile = function(r) cvoutfile(run, r), ...)
+      sc <- res$scores
+      res$replicates$cv_run <- run
+      replicates[[run]] <- res$replicates
+    } else {
+      sc <- treepl_cross_validate(treepl_bin, tree_path, node_bounds, settings, cv_type,
+                                  cfg_path = cfg_path(run, NULL), log_path = log_path(run, NULL),
+                                  cvoutfile = cvoutfile(run, NULL), seed = seed, ...)
+    }
+    sc$cv_run <- run
+    out[[run]] <- sc
+    best <- .treepl_best_smooth(sc)
+    if (!is.finite(best)) break
+    hi <- isTRUE(all.equal(best, max(sc$smooth)))
+    lo <- isTRUE(all.equal(best, min(sc$smooth)))
+    if (direction == 0) direction <- if (hi) 1 else if (lo) -1 else 0
+    at_edge <- (direction > 0 && hi) || (direction < 0 && lo)
+    if (!at_edge || run > max_extend) break
+    nxt <- if (direction > 0) best * step^(0:2) else best / step^(0:2)
+    if (any(nxt < limits[1L] | nxt > limits[2L])) break
+    settings <- treepl_cv_settings(nxt)
+    run <- run + 1L
+  }
+  list(scores = do.call(rbind, lapply(out, function(x) x[, union(names(out[[1L]]), names(x)), drop = FALSE])),
+       replicates = if (length(replicates)) do.call(rbind, replicates) else NULL,
+       selected = .treepl_best_smooth(out[[length(out)]]), at_edge = isTRUE(at_edge))
+}
+
+## Final penalized-likelihood objective of a dating run (last
+## "after opt calc:" line of the treePL log). Lower is better.
+treepl_parse_final_objective <- function(log_path) {
+  if (!file.exists(log_path)) return(NA_real_)
+  txt <- readLines(log_path, warn = FALSE)
+  hit <- grep("^after opt calc:", txt, value = TRUE)
+  if (!length(hit)) return(NA_real_)
+  suppressWarnings(as.numeric(sub("^after opt calc:\\s*", "", hit[length(hit)])))
+}
+
+## Step 3. Date the full tree once per optimizer setting at one smoothing.
+## `variants` is a named list of extra config lines (optimizer lines); `seeds`
+## is a vector of the same length. Every dated tree is checked against the
+## calibration bounds (tolerance 0.001); a tree outside them is not usable.
+## The usable run with the lowest objective is selected, and the ages of every
+## usable run are compared with it node by node. `jobs` > 1 runs the fits in
+## parallel (forked workers, Unix only).
+treepl_date_variants <- function(treepl_bin, tree_path, phy, node_bounds, smooth, numsites,
+                                 variants, seeds, out_tree, cfg_path, log_path,
+                                 thorough = TRUE, opt = NULL, plsimaniter = NULL,
+                                 pliter = NULL, omp_threads = 1L, jobs = 1L) {
+  ref_sig <- .treepl_signature_index(phy)
+  cal_idx <- match(as.character(node_bounds$node), names(ref_sig))
+  fit_one <- function(v) {
+    name <- names(variants)[v]
+    unlink(c(out_tree(name), paste0(out_tree(name), ".r8s")), force = TRUE)
+    treepl_write_cfg(cfg_path(name), tree_path, out_tree(name), smooth, numsites, node_bounds,
+                     thorough = thorough, prime = FALSE, opt = opt,
+                     plsimaniter = plsimaniter, pliter = pliter,
+                     extra_lines = variants[[v]], seed = seeds[v])
+    started <- Sys.time()
+    exit <- treepl_run_one(treepl_bin, cfg_path(name), log_path(name), omp_threads = omp_threads)
+    seconds <- as.numeric(difftime(Sys.time(), started, units = "secs"))
+    tr <- .treepl_read_valid_tree(out_tree(name))
+    ok <- !is.null(tr) && ape::Ntip(tr) == ape::Ntip(phy)
+    a <- if (ok) .treepl_ages_by_signature(tr, ref_sig) else NULL
+    ok <- ok && all(is.finite(a))
+    in_bounds <- ok && all(a[cal_idx] >= node_bounds$age_min - 1e-3 &
+                             a[cal_idx] <= node_bounds$age_max + 1e-3)
+    list(ages = if (in_bounds) a else NULL, row = data.frame(
+      variant = name, seed = seeds[v],
+      opt_lines = paste(variants[[v]], collapse = "; "),
+      exit_code = as.integer(exit),
+      within_bounds = in_bounds,
+      objective = if (in_bounds) treepl_parse_final_objective(log_path(name)) else NA_real_,
+      root_age = if (ok) max(a) else NA_real_,
+      seconds = round(seconds, 2),
+      tree_file = if (in_bounds) out_tree(name) else "",
+      stringsAsFactors = FALSE
+    ))
+  }
+  idx <- seq_along(variants)
+  res <- if (jobs > 1L && .Platform$OS.type == "unix") {
+    parallel::mclapply(idx, fit_one, mc.cores = jobs, mc.preschedule = FALSE)
+  } else {
+    lapply(idx, fit_one)
+  }
+  failed <- vapply(res, function(r) !is.list(r) || is.null(r$row), logical(1))
+  if (any(failed)) stop("treePL optimizer fits crashed for ", sum(failed), " setting(s).")
+  tab <- do.call(rbind, lapply(res, `[[`, "row"))
+  ages <- lapply(res, `[[`, "ages")
+  usable <- which(is.finite(tab$objective))
+  if (!length(usable)) stop("treePL wrote no valid dated tree within the bounds under any optimizer setting; see ",
+                            log_path(names(variants)[1L]))
+  best <- usable[which.min(tab$objective[usable])]
+  tab$selected <- seq_len(nrow(tab)) == best
+  tab$max_abs_age_diff <- NA_real_
+  tab$median_rel_age_diff <- NA_real_
+  for (v in usable) {
+    d <- abs(ages[[v]] - ages[[best]])
+    tab$max_abs_age_diff[v] <- max(d)
+    tab$median_rel_age_diff[v] <- stats::median(d / pmax(ages[[best]], 1e-12))
+  }
+  names(ages) <- tab$variant
+  list(table = tab, selected = tab$variant[best], lines = variants[[best]],
+       seed = seeds[best], tree_file = tab$tree_file[best], ages = ages)
+}
+
+## The full optimizer grid of A. Pyron's VGP benchmark: opt 0-5 x optad 0-5 x
+## moredetail x moredetailad (144 settings), as config lines named o-a-m-d.
+treepl_optimizer_grid <- function() {
+  g <- expand.grid(opt = 0:5, optad = 0:5, md = 0:1, mdad = 0:1)
+  out <- lapply(seq_len(nrow(g)), function(i) c(
+    paste0("opt = ", g$opt[i]), paste0("optad = ", g$optad[i]),
+    if (g$md[i] == 1L) "moredetail" else NULL,
+    if (g$mdad[i] == 1L) "moredetailad" else NULL
+  ))
+  names(out) <- sprintf("o%d-a%d-m%d-d%d", g$opt, g$optad, g$md, g$mdad)
+  out
+}
+
+## Rank optimizer settings from a screen table (one row per setting x seed;
+## `setting` names the setting). A setting is usable only if every seed gave
+## a tree within the bounds. Usable settings are ranked by median, then worst,
+## then best objective, then total run time.
+treepl_rank_settings <- function(tab, n_seeds) {
+  sp <- split(tab, tab$setting)
+  rk <- do.call(rbind, lapply(names(sp), function(k) {
+    z <- sp[[k]]
+    v <- z$objective[is.finite(z$objective)]
+    data.frame(setting = k, n_fits = nrow(z), n_valid = length(v),
+               usable = length(v) == n_seeds,
+               median = if (length(v)) stats::median(v) else NA_real_,
+               worst = if (length(v)) max(v) else NA_real_,
+               best = if (length(v)) min(v) else NA_real_,
+               seconds = sum(z$seconds), stringsAsFactors = FALSE)
+  }))
+  rk <- rk[order(!rk$usable, rk$median, rk$worst, rk$best, rk$seconds), , drop = FALSE]
+  rk$rank <- ifelse(rk$usable, cumsum(rk$usable), NA_integer_)
+  rk
 }
 
 .treepl_read_valid_tree <- function(path) {
@@ -279,7 +603,8 @@ treepl_select_smoothing <- function(cv_scores) {
   treepl_write_cfg(
     cfg_path, in_tree, out_tree, smooth, numsites, node_bounds,
     thorough = thorough, prime = FALSE, opt = opt,
-    plsimaniter = plsimaniter, pliter = pliter, extra_lines = prime_lines
+    plsimaniter = plsimaniter, pliter = pliter, extra_lines = prime_lines,
+    seed = if (is.finite(seed)) seed %% 2147483647L else NULL
   )
   treepl_run_one(treepl_bin, cfg_path, log_path, omp_threads = omp_threads)
   tr_i <- .treepl_read_valid_tree(out_tree)
