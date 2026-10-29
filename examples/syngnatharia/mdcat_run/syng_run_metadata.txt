@@ -1,0 +1,32 @@
+Target phylogram: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre
+Target tree id: backbone_Raxml_besttree_matrix75
+Output prefix: syng
+Methods requested: mdcat
+MD-Cat: 10 random starts, k=50; bounds by active set (points fixed, crossed bounds fixed, up to 5 rounds)
+Calibration source: csv
+Calibration CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/calibrations_by_candidate.csv
+Root age appended: none
+Subset tuning: no
+chronos bootstrap type: parametric
+chronos bootstrap replicates: 100
+chronos bootstrap CI models: clock,correlated,discrete,relaxed
+chronos bootstrap pml source: parametric_proxy_from_phylogram
+treePL numsites: 1000
+treePL bootstrap replicates: 0
+treePL bootstrap jobs: 1
+RelTime (MEGA) bootstrap replicates: 100 (megacc rerun per replicate)
+RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present
+Calibration pairs input: 13
+Calibration pairs mapped: 13
+Calibration bounds retained: 13
+Calibration bounds dropped as inconsistent: 0
+Successful full-grid candidates written: 1
+Representative candidates written: 1
+Combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/syng_all_runs_summary.csv
+Full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/candidates.csv
+Full-grid uncertainty summary CSV: none
+Candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/candidates.csv
+MAIN_OUTPUT_TREES folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES
+CI CSVs folder: none
+Model fits folder: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits
+Representative uncertainty summary CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/uncertainty_summary_long.csv

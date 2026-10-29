@@ -1,0 +1,39 @@
+;   MEGA-CC (Molecular Evolutionary Genetics Analysis Compute Core)
+;
+;   Suggested Citation for MEGA-CC 10:
+;
+;   Kumar S, Stecher G, Li M, Knyaz C, Tamura K
+;   MEGA X: Molecular Evolutionary Genetics Analysis across computing platforms
+;   Molecular Biology and Evolution (2018) 35:1547-1549
+;
+;   Kumar S, Stecher G, Peterson D, and Tamura K
+;   MEGA-CC: Computing Core of Molecular Evolutionary Genetics
+;   Analysis Program for Automated and Iterative Data Analysis.
+;   Bioinformatics (2012) 28:2685-2686 (Epub 2012 Aug 24)
+
+[Application Info]
+
+	Version                                 = 10.2.6
+	Build                                   = 10210527-x86_64
+	User Interface                          = CommandLine
+	Operating System                        = mac
+
+[General Info]
+
+	Data Type                               = Newick tree
+	No. of Taxa                             =      106
+	Data File                               = '/var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/terap6_phylogram_for_mega.nwk'
+	Settings File                           = '/var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/reltime_blens.mao'
+	Command Line                            = /usr/local/bin/megacc -a /var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/reltime_blens.mao -t /var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/terap6_phylogram_for_mega.nwk -c /var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/mega_calibrations.txt -g /var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/outgroup.txt -o /var/folders/99/_l2z21td4_72fzlwftnmg8x40000gq/T//RtmpFRW62I/megacc_terap6_35fe32d3f0f6/terap6_mega_reltime
+
+[Analysis Settings]
+
+	datatype                                = Newick Tree
+
+[Analysis Statistics]
+
+	Start Time                              = 28-10-26 19:30:53
+	End Time                                = 28-10-26 19:30:53
+	Execution Time                          =    0.057 (seconds)
+	Max Heap Memory Used                    = 7.476 (MB)
+	Sum of branch lengths                   =    1.111

@@ -13,17 +13,18 @@ python3 scripts/run_dating_grid_staged.py \
   --treepl-numsites=ALIGNMENT_LENGTH
 ```
 
-Use `--reference-time-tree=...` instead of `--calibrations-csv=...` for congruification. Use `--start-stage=N` to resume at stage `N`.
+Use `--reference-time-tree=...` instead of `--calibrations-csv=...` for congruification. Add `--additional-calibrations-csv=fossils.csv` to put fossil calibrations on top of either one; fossils win where they disagree with congruified ages. Use `--start-stage=N` to resume at stage `N`.
 
 The runner calls `scripts/run_dating_grid.R` once per stage. All stages write to the same `--outdir`.
 
 ## Stage order
 
 1. `RelTime_MEGA` (MEGA-CC): point estimate, Tao analytical CI, and bootstrap CI (`megacc` rerun per replicate).
-2. `treePL`: prime, cross-validation over `--treepl-smoothing`, then one `thorough` dating run with the CV-selected smoothing.
+2. `treePL`: repeated prime, cross-validation over `--treepl-smoothing` (extended past the grid edge when needed), then `thorough` dating at the CV-selected smoothing under several optimizer settings; the run with the lowest objective is kept.
 3. `chronos`: grid winners for all four models (`clock`, `correlated`, `discrete`, `relaxed`). Starting ages are seeded from the stage-2 treePL tree (the RelTime tree if treePL failed).
 4. `treePL` bootstrap CI for the stage-2 tree.
 5. `chronos` bootstrap CI for `clock`, `correlated`, `discrete` (`--chronos-ci-models`). `relaxed` stays plain.
+6. `MD-Cat`: runs only when `--mdcat-bin` is given or `MDCAT_BIN` is set. It uses the same calibration set as fixed ages (see [MD-Cat](1_PCR_CUSTOM_DATING_PIPELINE_FROM_PHYLOGRAMS/README.md#md-cat)) and has no CI.
 
 Stages 4 and 5 reuse the stage-2 and stage-3 trees from their checkpoints. They add CIs to those exact trees and do not refit them.
 
@@ -37,6 +38,7 @@ Stages 4 and 5 reuse the stage-2 and stage-3 trees from their checkpoints. They 
   - plain `chronos_<model>_lambda<value>[_k<k>].tre` winners
 - Stage 4 replaces the plain treePL tree with `treePL_smooth<value>_with_CI.tre`.
 - Stage 5 replaces the plain `chronos_clock`, `chronos_correlated`, and `chronos_discrete` trees with their `_with_CI.tre` versions; `chronos_relaxed` stays plain.
-- For large trees, subset-tuning trees never go into `MAIN_OUTPUT_TREES`; only full-tree chronos reruns and full-tree treePL/RelTime trees do.
+- For large trees (more than `--subset-tips`, default 1000), tuning runs on a 500–2000-tip subset that keeps the calibration taxa and the rate-outlier tips. Subset trees never go into `MAIN_OUTPUT_TREES`; only full-tree chronos reruns and full-tree treePL/RelTime trees do.
+- Stage 6 adds plain `MDCat.tre`. MD-Cat always runs on the full tree.
 - `MAIN_OUTPUT_TREES/ci/` holds the matching CI tables.
 - `candidates.csv` in `--outdir` points to the `MAIN_OUTPUT_TREES` files and is ready for `scripts/run_pcr.R`.

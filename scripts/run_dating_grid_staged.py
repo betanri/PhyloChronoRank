@@ -8,6 +8,7 @@ Runs scripts/run_dating_grid.R five times in ONE output folder:
   3. chronos grid for all four clock models (no CI yet), seeded by treePL
   4. treePL bootstrap CI for the stage-2 tree
   5. chronos bootstrap CI for the stage-3 winners
+  6. MD-Cat (only with --mdcat-bin or MDCAT_BIN)
 
 Each stage reuses the checkpointed trees of earlier stages, so the CI stages
 add intervals to the same trees instead of refitting them. The R engine
@@ -16,6 +17,7 @@ candidate (CI tree when available, plain tree otherwise).
 """
 import argparse
 import csv
+import os
 import subprocess
 from pathlib import Path
 
@@ -103,8 +105,24 @@ def build_args(args, methods: str, chronos_ci_reps: int, treepl_bootstrap_reps: 
         cmd.append(f"--calibrations-csv={args.calibrations_csv}")
     else:
         cmd.append(f"--reference-time-tree={args.reference_time_tree}")
-    for flag, value in (("treepl-bin", args.treepl_bin), ("megacc-bin", args.megacc_bin),
-                        ("treepl-opt", args.treepl_opt), ("root-age", args.root_age)):
+    for flag, value in (("additional-calibrations-csv", args.additional_calibrations_csv),
+                        ("treepl-bin", args.treepl_bin), ("megacc-bin", args.megacc_bin),
+                        ("treepl-opt", args.treepl_opt), ("root-age", args.root_age),
+                        ("treepl-prime-reps", args.treepl_prime_reps),
+                        ("treepl-cv-extend", args.treepl_cv_extend),
+                        ("treepl-opt-check", args.treepl_opt_check),
+                        ("treepl-cv-reps", args.treepl_cv_reps),
+                        ("treepl-opt-screen", args.treepl_opt_screen),
+                        ("treepl-opt-seeds", args.treepl_opt_seeds),
+                        ("treepl-deep-seeds", args.treepl_deep_seeds),
+                        ("treepl-screen-pliter", args.treepl_screen_pliter),
+                        ("treepl-deep-pliter", args.treepl_deep_pliter),
+                        ("treepl-jobs", args.treepl_jobs),
+                        ("subset-tips", args.subset_tips), ("subset-min", args.subset_min),
+                        ("subset-max", args.subset_max),
+                        ("mdcat-bin", args.mdcat_bin), ("mdcat-reps", args.mdcat_reps),
+                        ("mdcat-ncat", args.mdcat_ncat), ("mdcat-threads", args.mdcat_threads),
+                        ("mdcat-jobs", args.mdcat_jobs), ("mdcat-rounds", args.mdcat_rounds)):
         if value:
             cmd.append(f"--{flag}={value}")
     if chronos_age_start_tree is not None:
@@ -118,6 +136,9 @@ def parse_args():
     cal = p.add_mutually_exclusive_group(required=True)
     cal.add_argument("--calibrations-csv")
     cal.add_argument("--reference-time-tree")
+    p.add_argument("--additional-calibrations-csv", default="",
+                   help="extra calibrations (e.g. fossils) merged with the primary set; "
+                        "they win over congruified ages when the two disagree")
     p.add_argument("--outdir", required=True)
     p.add_argument("--out-prefix", required=True)
     p.add_argument("--root-age", default="")
@@ -130,6 +151,20 @@ def parse_args():
     p.add_argument("--treepl-cv", choices=["loo", "random"], default="loo")
     p.add_argument("--treepl-numsites", type=int, default=1000,
                    help="alignment length passed to treePL (numsites)")
+    p.add_argument("--treepl-prime-reps", default="")
+    p.add_argument("--treepl-cv-extend", default="")
+    p.add_argument("--treepl-opt-check", default="")
+    p.add_argument("--treepl-cv-reps", default="")
+    p.add_argument("--treepl-opt-screen", choices=["", "prime", "full"], default="",
+                   help="full adds A. Pyron's 144-setting optimizer screen and deep seed search")
+    p.add_argument("--treepl-opt-seeds", default="")
+    p.add_argument("--treepl-deep-seeds", default="")
+    p.add_argument("--treepl-screen-pliter", default="")
+    p.add_argument("--treepl-deep-pliter", default="")
+    p.add_argument("--treepl-jobs", default="")
+    p.add_argument("--subset-tips", default="")
+    p.add_argument("--subset-min", default="")
+    p.add_argument("--subset-max", default="")
     p.add_argument("--treepl-opt", default="")
     p.add_argument("--treepl-bin", default="")
     p.add_argument("--megacc-bin", default="")
@@ -137,7 +172,14 @@ def parse_args():
     p.add_argument("--ci-sites", type=int, default=1000)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--tip-label-map-csv", default="")
-    p.add_argument("--start-stage", type=int, default=1, choices=range(1, 6))
+    p.add_argument("--mdcat-bin", default=os.environ.get("MDCAT_BIN", ""),
+                   help="md_cat.py of an MD-Cat install; stage 6 runs only when this is set")
+    p.add_argument("--mdcat-reps", default="")
+    p.add_argument("--mdcat-ncat", default="")
+    p.add_argument("--mdcat-threads", default="")
+    p.add_argument("--mdcat-jobs", default="")
+    p.add_argument("--mdcat-rounds", default="")
+    p.add_argument("--start-stage", type=int, default=1, choices=range(1, 7))
     return p.parse_args()
 
 
@@ -148,6 +190,8 @@ def main():
         args.calibrations_csv = Path(args.calibrations_csv).resolve()
     else:
         args.reference_time_tree = Path(args.reference_time_tree).resolve()
+    if args.additional_calibrations_csv:
+        args.additional_calibrations_csv = Path(args.additional_calibrations_csv).resolve()
     args.outdir = Path(args.outdir).resolve()
     args.outdir.mkdir(parents=True, exist_ok=True)
     tip_map = load_tip_label_map(Path(args.tip_label_map_csv).resolve() if args.tip_label_map_csv else None)
@@ -177,6 +221,10 @@ def main():
     if args.start_stage <= 5:
         run_cmd(build_args(args, "chronos", args.chronos_ci_reps, 0, 0, chronos_age_start_tree=seed),
                 out / "stage5_chronos_ci.log")
+        relabel_main_trees(out, tip_map)
+
+    if args.start_stage <= 6 and args.mdcat_bin:
+        run_cmd(build_args(args, "mdcat", 0, 0, 0), out / "stage6_mdcat.log")
         relabel_main_trees(out, tip_map)
 
 

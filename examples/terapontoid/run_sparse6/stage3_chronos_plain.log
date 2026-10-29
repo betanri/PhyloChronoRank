@@ -1,0 +1,113 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram 
+Output prefix: terap6 
+Calibration rows input: 6 
+Calibration rows mapped: 6 
+Merged node bounds retained: 6 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=6 
+Running chronos grid... 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda0p1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p01_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda0p1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_clock_lambda1.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_correlated_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_relaxed_lambda0p01.tre 
+  promoted current chronos winner to MAIN_OUTPUT_TREES: chronos_discrete_lambda1_k2.tre 
+chronos finished: 30/30 successful. 
+Warning messages:
+1: singular convergence (7) 
+2: singular convergence (7) 
+3: false convergence (8) 
+4: false convergence (8) 
+Computing CIs for selected candidates... 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits 
+Done. 

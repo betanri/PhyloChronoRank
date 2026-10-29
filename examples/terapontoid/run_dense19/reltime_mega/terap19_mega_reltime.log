@@ -1,0 +1,10 @@
+MEGA-CC 10.2.6 Molecular Evolutionary Genetics Analysis
+Build#: 10210527-x86_64
+    0%   28-10-26 19:30:53    0%   Estimate Relative Divergence Times (RelTime)    0%   Compute divergence times from user-supplied branch lengths    0%   None                                                      Using the following analysis options:
+Start time: 28-10-26 19:30:53
+Executing analysis:
+
+    1%  Parsing newick file                                            0%  Launching RelTime calculation thread                0%  Computing RelTime divergence times                             0%  Preparing results                                                        48%  Computing RelTime divergence times                           100%  Preparing results                                                 100% Analysis Complete                                                               
+
+MEGA has completed the requested action
+Terminating the megacc process with successful exit status

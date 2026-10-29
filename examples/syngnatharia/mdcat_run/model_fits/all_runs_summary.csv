@@ -1,0 +1,2 @@
+"candidate","method","model","lambda","nb_rate_cat","smooth","status","tree_file","ci_file","mdcat_reps","mdcat_ncat","log_likelihood","seconds","mdcat_rounds_max","rounds_used","n_cal_point","n_cal_fixed_at_bound","n_cal_free","n_cal_outside_bounds","solver","max_time_drift","error"
+"MDCat","MDCat","MDCat",NA,NA,NA,"OK","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/mdcat/syng_MDCat.tre","",10,50,1488.09330255497,1198.3,5,3,0,9,4,0,"OSQP",0,NA

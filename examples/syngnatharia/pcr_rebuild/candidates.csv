@@ -1,0 +1,4 @@
+"candidate","tree_file"
+"RelTime","../CalibratedTree_backbone_RelTime_matrix75_RAXML.tre"
+"MCMCTree","../CalibratedTree_backbone_MCMCTree_matrix75_RAXML.tre"
+"MDCat","../mdcat_run/MAIN_OUTPUT_TREES/MDCat.tre"

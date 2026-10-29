@@ -1,0 +1,14 @@
+"node","taxonA","taxonB","age_min","age_max","fixed","fixed_age","mdcat_age","within_bounds"
+166,"Syngnathidae_Syngnathus_louisianae_CEO104","Pegasidae_Eurypegasus_draconis_CEO49",83.6,Inf,"min_round1",83.6,83.6001,TRUE
+168,"Aulostomidae_Aulostomus_maculatus_CEO156","Centriscidae_Aeoliscus_strigatus_CEO32",61.5,83.6,"min_round1",61.5,61.5001,TRUE
+169,"Fistulariidae_Fistularia_corneta_CEO62","Aulostomidae_Aulostomus_maculatus_CEO156",48.5,61.5,"",NA,56.2008,TRUE
+172,"Centriscidae_Aeoliscus_strigatus_CEO32","Centriscidae_Macroramphosus_gracilis_CEO68",48.5,61.5,"min_round1",48.5,48.5001,TRUE
+179,"Solenostomidae_Solenostomus_cyanopterus_CEO37","Syngnathidae_Syngnathus_louisianae_CEO104",48.5,83.6,"",NA,70.8993,TRUE
+183,"Syngnathidae_Nerophis_ophidion_CEO112","Syngnathidae_Entelurus_aequoreus_CEO113",13.5,48.5,"min_round1",13.5,13.5001,TRUE
+220,"Syngnathidae_Hippocampus_abdominalis_CEO144","Syngnathidae_Hippocampus_kuda_CEO52",11.6,48.5,"min_round1",11.6,11.6001,TRUE
+228,"Syngnathidae_Hippocampus_ingens_CEO39","Syngnathidae_Hippocampus_reidi_CEO53",2.8,Inf,"min_round1",2.8,2.80000000000003,TRUE
+251,"Pegasidae_Pegasus_volitans_CEO58","Dactylopteridae_Dactylopterus_volitans_CEO70",54,83.6,"",NA,78.1729,TRUE
+272,"Mullidae_Mulloidichthys_martinicus_CEO27","Mullidae_Mulloidichthys_dentatus_CEO43",2.8,Inf,"min_round1",2.802,2.80220000000001,TRUE
+273,"Mullidae_Mulloidichthys_martinicus_CEO27","Mullidae_Mulloidichthys_vanicolensis_CEO44",2.8,Inf,"min_round1",2.8,2.80020000000002,TRUE
+275,"Mullidae_Upeneichthys_stotti_CSIROGT5950","Mullidae_Mullus_auratus_CEO95",13,83.6,"min_round1",13,13.0002,TRUE
+294,"Draconettidae_Draconetta_xenica_CSIROGT11264","Callionymidae_Callionymus_scaber_CEO64",48.5,83.6,"",NA,59.7666,TRUE

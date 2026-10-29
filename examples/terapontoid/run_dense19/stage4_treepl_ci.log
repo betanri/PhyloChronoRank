@@ -1,0 +1,31 @@
+Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram 
+Output prefix: terap19 
+Calibration rows input: 19 
+Calibration rows mapped: 19 
+Merged node bounds retained: 19 
+Dropped calibrations (missing taxa): 0 
+Dropped calibrations (bad MRCA): 0 
+Calibration sources: csv=19 
+Running treePL with binary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/treePL 
+  checkpoint: reusing treePL cross-validation scores 
+    smooth=100  CV chisq=404.27016 
+    smooth=10  CV chisq=453.93337 
+    smooth=1  CV chisq=542.52818 
+    smooth=0.1  CV chisq=586.74203 
+    smooth=0.01  CV chisq=594.18189 
+    smooth=10000  CV chisq=398.80768  (extension run 1) 
+    smooth=1000  CV chisq=391.76026  (extension run 1) 
+    smooth=100  CV chisq=404.27016  (extension run 1) 
+  CV-selected smoothing: 1000 
+  checkpoint: reusing treePL_smooth1000 
+treePL finished: treePL_smooth1000 dated 
+Computing CIs for selected candidates... 
+  treePL CI for treePL_smooth1000 (smooth=1000, 100 reps)... 
+  -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/selected_ci/terap19_treePL_smooth1000_ci.csv 
+Post-selection CI computation done. 
+Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/terap19_all_runs_summary.csv 
+Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/full_grid/candidates.csv 
+Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/candidates.csv 
+Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES 
+Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/model_fits 
+Done. 

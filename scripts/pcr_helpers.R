@@ -1,9 +1,36 @@
-pcr_rank_low <- function(x) {
+## Rank low-is-better values. Values are compared at `digits` significant
+## digits, so differences at the level of numerical noise (e.g. 1e-9 between
+## two near-identical chronos fits) are ties and get the average rank.
+pcr_rank_low <- function(x, digits = 3L) {
   if (all(!is.finite(x))) return(rep(NA_real_, length(x)))
   out <- rep(NA_real_, length(x))
   ok <- is.finite(x)
-  out[ok] <- rank(x[ok], ties.method = 'average')
+  out[ok] <- rank(signif(x[ok], digits), ties.method = 'average')
   out
+}
+
+## Candidates that are the same tree (same topology and node ages, e.g. one
+## RelTime tree saved with Tao and with bootstrap CIs) must be scored once,
+## or the copies shift every other candidate's rank. Returns, for each
+## path, the index of the earlier identical tree, or NA.
+pcr_duplicate_trees <- function(paths, tol = 1e-6) {
+  read_one <- function(p) {
+    tr <- try(suppressWarnings(ape::read.nexus(p)), silent = TRUE)
+    if (inherits(tr, 'try-error') || !inherits(tr, c('phylo', 'multiPhylo'))) tr <- try(ape::read.tree(p), silent = TRUE)
+    if (inherits(tr, 'multiPhylo')) tr <- tr[[1L]]
+    if (!inherits(tr, 'phylo')) return(NULL)
+    tr
+  }
+  trees <- lapply(paths, read_one)
+  dup <- rep(NA_integer_, length(paths))
+  for (i in seq_along(paths)[-1L]) {
+    if (is.null(trees[[i]])) next
+    for (j in seq_len(i - 1L)) {
+      if (!is.na(dup[j]) || is.null(trees[[j]])) next
+      if (isTRUE(ape::all.equal.phylo(trees[[i]], trees[[j]], tolerance = tol, scale = 1))) { dup[i] <- j; break }
+    }
+  }
+  dup
 }
 
 pcr_safe_get_mrca <- function(tr, tips) {
@@ -659,6 +686,14 @@ pcr_extract_uncertainty_from_newick <- function(tree_path) {
   }
 
   if (!length(keep_widths)) return(NULL)
+
+  ## Trees written by this repo carry both 95% and 50% intervals; widths of
+  ## different levels must not be averaged, so keep the 95% ones when present.
+  is95 <- grepl("95", keep_keys, fixed = TRUE)
+  if (any(is95)) {
+    keep_widths <- keep_widths[is95]
+    keep_keys <- keep_keys[is95]
+  }
 
   data.frame(
     uncertainty_source = "tree_embedded_intervals",
