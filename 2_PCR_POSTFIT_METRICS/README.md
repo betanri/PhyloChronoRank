@@ -509,11 +509,11 @@ Candidates: four `chronos` models and `RelTime` from the earlier pipeline run, `
 | `treePL_smooth0p01` | 0.277 | 0.805 | 0.002 | 0.071 | 2.250 | 1.379 | NA | 4.00 | 1.50 | 1.50 | 2.33 |
 | `chronos_discrete_lambda1_k2` | 0.162 | 0.779 | 0.094 | 0.061 | 3.177 | 1.545 | NA | 4.00 | 3.50 | 3.50 | 3.67 |
 | `chronos_clock_lambda1` | 0.159 | 0.771 | 0.110 | 0.060 | 3.256 | 1.641 | 0.31 | 4.00 | 4.50 | 4.50 | 4.33 |
-| `MDCat` | 0.285 | 0.786 | 0.005 | 0.051 | 2.311 | 1.752 | NA | 5.00 | 4.50 | 4.50 | 4.67 |
+| `MDCat` | 0.285 | 0.786 | 0.005 | 0.051 | 2.311 | 1.752 | 10.09 | 5.00 | 4.50 | 4.50 | 4.67 |
 | `chronos_correlated_lambda1` | 0.140 | 0.745 | 0.161 | 0.059 | 3.596 | 1.691 | NA | 3.50 | 6.25 | 5.50 | 5.08 |
 | `chronos_relaxed_lambda0p1` | 0.146 | 0.718 | 0.112 | 0.059 | 4.271 | 2.288 | NA | 4.50 | 5.75 | 7.00 | 5.75 |
 
-Only `RelTime` (bootstrap) and `chronos_clock` carry intervals here.
+`RelTime` (bootstrap), `chronos_clock` (parametric bootstrap) and `MDCat` (Poisson bootstrap) carry intervals here. `MDCat`'s are a little wider than `RelTime`'s (10.09 vs 8.90 Ma). `chronos_clock`'s are much narrower (0.31 Ma), because one rate for the whole tree leaves the node ages little room to move.
 
 ### Figure: Post-fit comparison across metric families
 
@@ -568,6 +568,7 @@ Six datasets, nine comparisons (Syngnatharia, Gobiaria and Ostariophysi have one
 - **`treePL`** ties `RelTime` for first in Vertebrate dense and is second in Vertebrate sparse, Gobiaria and Ostariophysi. In Vertebrate (both schemes), Tetraodontiformes sparse and Ostariophysi, other optimizer settings give node ages that differ from the chosen tree by a median of 8–28%, so these treePL dates are less stable than the rank suggests
 - **Calibration density** does not change the winner. `RelTime` is first under both schemes in Terapontoidei, Vertebrate and Tetraodontiformes, although in Vertebrate dense it only ties `treePL`. Density mostly moves the lower places: `MDCat` gains one place in Terapontoidei and Tetraodontiformes and loses two in Vertebrate
 - **Compression in `chronos`** is large only in Ostariophysi (0.094–0.161), the largest tree. There `chronos` also makes the deep nodes older. In the other datasets every candidate has compression of about 0.04 or less
+- **Interval widths** (not part of the core rank): `MDCat` has Poisson-bootstrap intervals in every example. They are narrower than `RelTime`'s in Syngnatharia, Terapontoidei, Tetraodontiformes and Vertebrate sparse (where `RelTime` has Tao intervals), about the same in Gobiaria (4.11 vs 4.16 Ma), and a little wider in Vertebrate dense (21.70 vs 20.12 Ma) and Ostariophysi (10.09 vs 8.90 Ma). In Terapontoidei, the only example with `treePL` intervals, they are wider than `treePL`'s
 
 <details>
 <summary><strong>Scope notes</strong></summary>
@@ -579,6 +580,6 @@ Six datasets, nine comparisons (Syngnatharia, Gobiaria and Ostariophysi have one
 - Trees that are the same after rounding (for example `chronos_relaxed` and `chronos_correlated` in several datasets) are scored once.
 - PCR reports raw scores and ranks. It does not yet attach bootstrap or permutation p-values to score differences.
 - The framework evaluates point chronograms. It does not yet propagate posterior tree uncertainty through the post-fit scores.
-- The optional `uncertainty width` layer uses the 95% intervals stored with each tree (`RelTime`: bootstrap or Tao; `chronos`: parametric bootstrap; `treePL` and `MDCat`: Poisson branch-length bootstrap; `MCMCTree`: HPD). It speaks to precision, not accuracy, and **does not contribute to the core rank**. Not every candidate has intervals: `treePL` has them only in Terapontoidei, and some `chronos` trees have none.
+- The optional `uncertainty width` layer uses the 95% intervals stored with each tree (`RelTime`: bootstrap or Tao; `chronos`: parametric bootstrap; `treePL` and `MDCat`: Poisson branch-length bootstrap; `MCMCTree`: HPD). It speaks to precision, not accuracy, and **does not contribute to the core rank**. Not every candidate has intervals: `MDCat` has them in every example, `treePL` only in Terapontoidei, and some `chronos` trees have none.
 
 </details>
