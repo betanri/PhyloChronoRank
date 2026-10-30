@@ -2140,7 +2140,9 @@ if ("treepl" %in% methods) {
         identical(as.character(sel$opt_screen[1L]), treepl_opt_screen)) {
       msg("  checkpoint: reusing ", final_candidate)
       final_variant <- sel$variant[1L]
-      treepl_prime_lines_full <- if (nzchar(sel$opt_lines[1L] %||% "")) strsplit(sel$opt_lines[1L], "; ", fixed = TRUE)[[1L]] else character(0)
+      ## treePL_default has no optimizer lines; read.csv turns that empty cell into NA
+      ol <- as.character(sel$opt_lines[1L])
+      treepl_prime_lines_full <- if (!is.na(ol) && nzchar(ol)) strsplit(ol, "; ", fixed = TRUE)[[1L]] else character(0)
       treepl_final_thorough <- as.logical(sel$thorough[1L])
       treepl_final_pliter <- if (is.na(sel$pliter[1L])) treepl_pliter else as.character(sel$pliter[1L])
       final_exit <- 0L
