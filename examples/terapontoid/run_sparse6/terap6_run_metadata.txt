@@ -14,6 +14,7 @@ chronos bootstrap pml source: parametric_proxy_from_phylogram
 treePL numsites: 1000
 treePL bootstrap replicates: 0
 treePL bootstrap jobs: 4
+MD-Cat bootstrap replicates: 100 (one random start each; jobs 6)
 RelTime (MEGA) bootstrap replicates: 0 (megacc rerun per replicate)
 RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present
 Calibration pairs input: 6

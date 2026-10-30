@@ -23,7 +23,7 @@ panels <- list(
   c("^treePL", "treePL"),
   c("^RelTime_MEGA_with_tao_CI", "RelTime MEGA (CIs: Tao et al.)"),
   c("^RelTime_MEGA_with_bootstrap_CI", "RelTime MEGA (CIs: Poisson bootstrap)"),
-  c("^MDCat", "MD-Cat (no CIs)")
+  c("^MDCat", "MD-Cat (CIs: Poisson bootstrap)")
 )
 files <- list.files(main_dir, pattern = "\\.tre$", full.names = TRUE)
 

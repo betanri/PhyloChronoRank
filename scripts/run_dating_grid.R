@@ -35,6 +35,7 @@ usage <- function() {
       "[--treepl-bootstrap-reps=0]",
       "[--treepl-bootstrap-jobs=1]",
       "[--reltime-bootstrap-reps=100]",
+      "[--mdcat-bootstrap-reps=0]",
       "[--chronos-pml-rds=FIT.rds]",
       "[--calibration-tag=NAME]",
       "[--seed=1]",
@@ -60,7 +61,10 @@ usage <- function() {
     "                          MD-Cat takes fixed ages only: point bounds are fixed; a node that ends outside\n",
     "                          its bounds is fixed at the crossed bound and MD-Cat reruns. Sequence length (-l)\n",
     "                          is --treepl-numsites.\n",
-    "  --phylogram-tree-name   Select named tree from a named-Newick or multi-tree file.\n",
+    "  --mdcat-bootstrap-reps  MD-Cat bootstrap replicates (Poisson branch-length bootstrap, one random start\n",
+    "                          each) for the shared uncertainty layer. Default: 0 (skip MD-Cat CI).\n",
+    "  --mdcat-bootstrap-jobs  Parallel workers for MD-Cat bootstrap replicates. Default: --mdcat-jobs.\n",
+    "  --phylogram-tree-name  Select named tree from a named-Newick or multi-tree file.\n",
     "  --phylogram-tree-index  1-based fallback tree index. Default: 1.\n",
     "  --reference-tree-name   Optional named tree selector for the reference time tree.\n",
     "  --reference-tree-index  1-based fallback index for the reference tree. Default: 1.\n",
@@ -1436,6 +1440,7 @@ copy_representative_ci_files <- function(outdir, candidates_df, all_df) {
 
   ci_expected <- function(method, model) {
     if (identical(method, "treePL")) return(treepl_bootstrap_reps > 0L)
+    if (identical(method, "MDCat")) return(mdcat_bootstrap_reps > 0L)
     if (identical(method, "chronos")) {
       return(chronos_ci_reps > 0L && tolower(model) %in% chronos_ci_models)
     }
@@ -1578,6 +1583,14 @@ if (!is.finite(treepl_bootstrap_reps) || treepl_bootstrap_reps < 0L) {
 treepl_bootstrap_jobs <- as.integer(kv[["treepl-bootstrap-jobs"]] %||% "1")
 if (!is.finite(treepl_bootstrap_jobs) || treepl_bootstrap_jobs < 1L) {
   stop("--treepl-bootstrap-jobs must be >= 1.")
+}
+mdcat_bootstrap_reps <- as.integer(kv[["mdcat-bootstrap-reps"]] %||% "0")
+if (!is.finite(mdcat_bootstrap_reps) || mdcat_bootstrap_reps < 0L) {
+  stop("--mdcat-bootstrap-reps must be >= 0.")
+}
+mdcat_bootstrap_jobs <- as.integer(kv[["mdcat-bootstrap-jobs"]] %||% kv[["mdcat-jobs"]] %||% "1")
+if (!is.finite(mdcat_bootstrap_jobs) || mdcat_bootstrap_jobs < 1L) {
+  stop("--mdcat-bootstrap-jobs must be >= 1.")
 }
 chronos_pml_output <- load_chronos_pml_output(kv[["chronos-pml-rds"]] %||% "")
 if (!nzchar(chronos_ci_type)) stop("--chronos-ci-type must be non-empty.")
@@ -2127,7 +2140,9 @@ if ("treepl" %in% methods) {
         identical(as.character(sel$opt_screen[1L]), treepl_opt_screen)) {
       msg("  checkpoint: reusing ", final_candidate)
       final_variant <- sel$variant[1L]
-      treepl_prime_lines_full <- if (nzchar(sel$opt_lines[1L] %||% "")) strsplit(sel$opt_lines[1L], "; ", fixed = TRUE)[[1L]] else character(0)
+      ## treePL_default has no optimizer lines; read.csv turns that empty cell into NA
+      ol <- as.character(sel$opt_lines[1L])
+      treepl_prime_lines_full <- if (!is.na(ol) && nzchar(ol)) strsplit(ol, "; ", fixed = TRUE)[[1L]] else character(0)
       treepl_final_thorough <- as.logical(sel$thorough[1L])
       treepl_final_pliter <- if (is.na(sel$pliter[1L])) treepl_pliter else as.character(sel$pliter[1L])
       final_exit <- 0L
@@ -2590,7 +2605,7 @@ if (use_subset_tuning) {
   }
 }
 
-## ---- Post-selection bootstrap CIs for the selected chronos and treePL trees ----
+## ---- Post-selection bootstrap CIs for the selected chronos, treePL and MD-Cat trees ----
 ## RelTime_MEGA CIs are computed in the MEGA block above.
 msg("Computing CIs for selected candidates...")
 ci_output_dir <- file.path(outdir, "selected_ci")
@@ -2601,7 +2616,7 @@ for (ci_i in seq_len(nrow(candidates_df))) {
   ci_method <- candidates_df$method[ci_i]
   ci_tree_f <- candidates_df$tree_file[ci_i]
   if (!nzchar(ci_tree_f) || !file.exists(ci_tree_f)) next
-  if (!(ci_method %in% c("chronos", "treePL"))) next
+  if (!(ci_method %in% c("chronos", "treePL", "MDCat"))) next
 
   ci_csv_out  <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_ci.csv"))
   ci_tree_out <- file.path(ci_output_dir, paste0(prefix, "_", ci_cand, "_with_CI.tre"))
@@ -2616,7 +2631,8 @@ for (ci_i in seq_len(nrow(candidates_df))) {
 
   run_chronos_ci <- identical(ci_method, "chronos") && "chronos" %in% methods && chronos_ci_reps > 0L
   run_treepl_ci <- identical(ci_method, "treePL") && "treepl" %in% methods && treepl_bootstrap_reps > 0L
-  if (!run_chronos_ci && !run_treepl_ci) next
+  run_mdcat_ci <- identical(ci_method, "MDCat") && "mdcat" %in% methods && mdcat_bootstrap_reps > 0L
+  if (!run_chronos_ci && !run_treepl_ci && !run_mdcat_ci) next
 
   ci_tree     <- try(ape::read.tree(ci_tree_f), silent = TRUE)
   if (inherits(ci_tree, "try-error")) next
@@ -2722,6 +2738,32 @@ for (ci_i in seq_len(nrow(candidates_df))) {
     } else {
       msg("  treePL CI failed for ", ci_cand, ": ", conditionMessage(attr(ci_res, "condition")))
     }
+
+  } else if (run_mdcat_ci) {
+    msg("  MD-Cat CI for ", ci_cand, " (", mdcat_bootstrap_reps, " reps, one random start each)...")
+    md_cal_csv <- file.path(outdir, "mdcat", paste0(prefix, "_MDCat_calibrations_used.csv"))
+    ci_res <- try(
+      mdcat_bootstrap_ci(
+        mdcat_bin, phy, read.csv(md_cal_csv, stringsAsFactors = FALSE), ci_tree,
+        work_dir = file.path(outdir, "mdcat", "bootstrap"), prefix = prefix,
+        B = mdcat_bootstrap_reps, n_sites = ci_sites, ncat = mdcat_ncat,
+        seq_len = treepl_numsites, seed = as.integer(kv[["seed"]] %||% "1"),
+        threads = mdcat_threads, jobs = mdcat_bootstrap_jobs, rounds = mdcat_rounds
+      ),
+      silent = TRUE
+    )
+    if (!inherits(ci_res, "try-error")) {
+      write.csv(ci_res$ci, ci_csv_out, row.names = FALSE)
+      annotate_tree_with_ci_from_objects(ci_tree, ci_res$ci, ci_tree_out)
+      uncertainty_rows[[length(uncertainty_rows) + 1L]] <- ci_width_summary(
+        ci_cand, ci_res$ci, source = "MDCat-bootstrap"
+      )
+      src_idx <- which(all_df$candidate == ci_cand & grepl("^OK", all_df$status))
+      if (length(src_idx)) all_df$ci_file[src_idx[1L]] <- ci_csv_out
+      msg("  -> ", ci_csv_out, " (", ci_res$n_bootstrap_attempts, " replicates tried)")
+    } else {
+      msg("  MD-Cat CI failed for ", ci_cand, ": ", conditionMessage(attr(ci_res, "condition")))
+    }
   }
 }
 
@@ -2783,6 +2825,8 @@ meta_lines <- c(
   paste0("treePL numsites: ", treepl_numsites),
   paste0("treePL bootstrap replicates: ", treepl_bootstrap_reps),
   paste0("treePL bootstrap jobs: ", treepl_bootstrap_jobs),
+  if ("mdcat" %in% methods) paste0("MD-Cat bootstrap replicates: ", mdcat_bootstrap_reps,
+                                   " (one random start each; jobs ", mdcat_bootstrap_jobs, ")") else NULL,
   if ("reltime_mega" %in% methods) paste0("MEGA-CC binary: ", megacc_bin) else NULL,
   paste0("RelTime (MEGA) bootstrap replicates: ", reltime_bootstrap_reps, " (megacc rerun per replicate)"),
   "RelTime (MEGA) Tao analytical CI: supplemental; uncertainty_summary_long.csv uses the bootstrap CI when present",

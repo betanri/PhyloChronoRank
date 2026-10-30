@@ -17,3 +17,23 @@
 [2026-10-28 19:34:38] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES
 [2026-10-28 19:34:38] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits
 [2026-10-28 19:34:38] Done.
+[2026-10-29 13:13:02] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/backbone_Raxml_besttree_matrix75.tre | tree_id=backbone_Raxml_besttree_matrix75
+[2026-10-29 13:13:03] Output prefix: syng
+[2026-10-29 13:13:03] Calibration rows input: 13
+[2026-10-29 13:13:03] Calibration rows mapped: 13
+[2026-10-29 13:13:03] Merged node bounds retained: 13
+[2026-10-29 13:13:03] Dropped calibrations (missing taxa): 0
+[2026-10-29 13:13:03] Dropped calibrations (bad MRCA): 0
+[2026-10-29 13:13:03] Calibration sources: csv=13
+[2026-10-29 13:13:03] Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50)
+[2026-10-29 13:13:03]   checkpoint: reusing MD-Cat tree
+[2026-10-29 13:13:03] Computing CIs for selected candidates...
+[2026-10-29 13:13:04]   MD-Cat CI for MDCat (100 reps, one random start each)...
+[2026-10-29 13:23:07]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/selected_ci/syng_MDCat_ci.csv (100 replicates tried)
+[2026-10-29 13:23:07] Post-selection CI computation done.
+[2026-10-29 13:23:07] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/syng_all_runs_summary.csv
+[2026-10-29 13:23:07] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/full_grid/candidates.csv
+[2026-10-29 13:23:07] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/candidates.csv
+[2026-10-29 13:23:07] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/MAIN_OUTPUT_TREES
+[2026-10-29 13:23:07] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/syngnatharia/mdcat_run/model_fits
+[2026-10-29 13:23:07] Done.

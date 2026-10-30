@@ -28,6 +28,10 @@
 ## order inside their bounds with a gap of 2e-3 per branch before each run.
 ## Point ages may move by at most 1e-4 of the root age for this.
 ##
+## MD-Cat itself reports no intervals. mdcat_bootstrap_ci adds them with
+## the Poisson branch-length bootstrap used for chronos, treePL and RelTime
+## in this pipeline (see the comment above mdcat_bootstrap_rep).
+##
 ## Install: python3 -m venv venv; venv/bin/pip install git+https://github.com/uym2/MD-Cat
 ## and pass venv/bin/md_cat.py as --mdcat-bin (or set MDCAT_BIN).
 ##############################################################
@@ -123,9 +127,12 @@ mdcat_resolve_bin <- function(user_bin = NULL) {
 ## `jobs` > 1 runs the `reps` random starts as parallel single-start
 ## processes (seeds seed + 1..reps) and keeps the best log-likelihood, which
 ## is what MD-Cat's own -p does in one process.
+## `start_calibrations` (a _calibrations_used.csv table of an earlier run)
+## starts the active set from the ages that run ended with fixed.
 mdcat_run <- function(mdcat_bin, phy, node_bounds, work_dir, prefix,
                       reps = 10L, ncat = 50L, seq_len = 1000L, seed = 1L,
-                      threads = 1L, jobs = 1L, rounds = 5L, quiet = FALSE) {
+                      threads = 1L, jobs = 1L, rounds = 5L, quiet = FALSE,
+                      start_calibrations = NULL) {
   bad <- grepl("[[:space:]+=():;,\\[\\]]", phy$tip.label)
   if (any(bad)) stop("MD-Cat cannot read tip labels with spaces or + = ( ) : ; , [ ]: ",
                      paste(head(phy$tip.label[bad], 3L), collapse = ", "))
@@ -144,6 +151,9 @@ mdcat_run <- function(mdcat_bin, phy, node_bounds, work_dir, prefix,
   cal <- data.frame(node = node_bounds$node, taxonA = node_bounds$taxonA, taxonB = node_bounds$taxonB,
                     age_min = node_bounds$age_min, age_max = node_bounds$age_max, stringsAsFactors = FALSE)
   cal$age_max[is.na(cal$age_max)] <- Inf
+  ## Nodes are found again from the taxa, so a tree read back from file
+  ## (where ape may number nodes differently) still matches.
+  cal$node <- unname(mapply(function(a, b) ape::getMRCA(phy, c(a, b)), cal$taxonA, cal$taxonB))
   scale <- max(cal$age_min, cal$age_max[is.finite(cal$age_max)])
   ## MD-Cat writes branch lengths with 4 decimals; summed over a root-to-tip
   ## path this moves node ages by a few 1e-4 time units, so the bounds check
@@ -158,6 +168,14 @@ mdcat_run <- function(mdcat_bin, phy, node_bounds, work_dir, prefix,
     i <- which.min(width)
     cal$fixed[i] <- "start_midpoint"
     cal$fixed_age[i] <- (cal$age_min[i] + cal$age_max[i]) / 2
+  }
+  if (!is.null(start_calibrations)) {
+    k <- match(paste(cal$taxonA, cal$taxonB), paste(start_calibrations$taxonA, start_calibrations$taxonB))
+    prev <- ifelse(is.na(start_calibrations$fixed[k]), "", start_calibrations$fixed[k])
+    if (!anyNA(k) && any(nzchar(prev))) {
+      cal$fixed <- prev
+      cal$fixed_age <- ifelse(nzchar(prev), start_calibrations$fixed_age[k], NA_real_)
+    }
   }
 
   started <- Sys.time()
@@ -219,4 +237,91 @@ mdcat_run <- function(mdcat_bin, phy, node_bounds, work_dir, prefix,
   list(tree = fit$tree, tree_file = f(".tre"), calibrations = cal, log_file = fit$log_file,
        seconds = seconds, log_likelihood = fit$llh, solver = fit$solver, rounds = r,
        n_starts_ok = fit$n_starts_ok, max_drift = fit$max_drift)
+}
+
+## ---- Bootstrap CIs ----
+## Each replicate resamples every branch length as Poisson(n_sites * length)
+## / n_sites, the scheme used for the chronos, treePL and RelTime intervals
+## in this pipeline, and dates the result with one random start. The active
+## set starts from the calibrations the point run ended with (`calibrations`,
+## its _calibrations_used.csv table); bounds a replicate crosses are added as
+## in mdcat_run, and a replicate still outside its bounds is replaced. Nodes
+## the point run fixed at a bound stay fixed, so their intervals have zero
+## width, like point calibrations. Replicate trees are kept in
+## work_dir/rep_NNN, so a stopped run resumes where it ended.
+mdcat_bootstrap_rep <- function(i, mdcat_bin, phy, calibrations, work_dir, prefix,
+                                n_sites = 1000L, ncat = 50L, seq_len = 1000L, seed = 1L,
+                                threads = 1L, rounds = 5L) {
+  rep_dir <- file.path(work_dir, sprintf("rep_%03d", i))
+  out <- file.path(rep_dir, paste0(prefix, "_MDCat.tre"))
+  if (file.exists(out)) {
+    tr <- try(ape::read.tree(out), silent = TRUE)
+    if (inherits(tr, "phylo") && ape::Ntip(tr) == ape::Ntip(phy)) return(out)
+  }
+  set.seed((as.integer(seed) * 1000L + as.integer(i)) %% .Machine$integer.max)
+  phy_b <- phy
+  phy_b$edge.length <- pmax(stats::rpois(length(phy$edge.length), pmax(phy$edge.length, 0) * n_sites) / n_sites,
+                            1e-12)
+  res <- try(mdcat_run(mdcat_bin, phy_b, calibrations, rep_dir, prefix, reps = 1L, ncat = ncat,
+                       seq_len = seq_len, seed = seed + i, threads = threads, jobs = 1L, rounds = rounds,
+                       quiet = TRUE, start_calibrations = calibrations), silent = TRUE)
+  if (inherits(res, "try-error") || any(!res$calibrations$within_bounds)) {
+    unlink(out)
+    return(NA_character_)
+  }
+  unlink(list.files(rep_dir, pattern = "(_input|_raw)\\.tre$", full.names = TRUE))
+  out
+}
+
+## Node ages of `tr` for the clades in `sig` (sorted tip labels per node).
+.mdcat_clade_signatures <- function(tr) {
+  parts <- ape::prop.part(tr)
+  labs <- attr(parts, "labels")
+  vapply(parts, function(p) paste(sort(labs[p]), collapse = "\r"), character(1))
+}
+
+.mdcat_ages_by_clade <- function(tr, sig) {
+  age <- .mdcat_node_ages(tr)
+  own <- .mdcat_clade_signatures(tr)
+  age[ape::Ntip(tr) + match(sig, own)]
+}
+
+## Percentile intervals (2.5-97.5 and 25-75) over B replicates, on the
+## nodes of `dated_tree` (the MD-Cat point estimate).
+mdcat_bootstrap_ci <- function(mdcat_bin, phy, calibrations, dated_tree, work_dir, prefix,
+                               B = 100L, n_sites = 1000L, ncat = 50L, seq_len = 1000L, seed = 1L,
+                               threads = 1L, jobs = 1L, rounds = 5L) {
+  dir.create(work_dir, recursive = TRUE, showWarnings = FALSE)
+  one <- function(i) mdcat_bootstrap_rep(i, mdcat_bin, phy, calibrations, work_dir, prefix,
+                                         n_sites = n_sites, ncat = ncat, seq_len = seq_len,
+                                         seed = seed, threads = threads, rounds = rounds)
+  run <- function(ids) {
+    res <- if (jobs > 1L && .Platform$OS.type == "unix") {
+      parallel::mclapply(ids, one, mc.cores = jobs, mc.preschedule = FALSE)
+    } else {
+      lapply(ids, one)
+    }
+    vapply(res, function(x) if (is.character(x) && length(x) == 1L) x else NA_character_, "")
+  }
+  trees <- run(seq_len(B))
+  ## failed replicates are replaced, up to B extra attempts
+  tried <- B
+  while (sum(!is.na(trees)) < B && tried < 2L * B) {
+    ids <- seq.int(tried + 1L, min(2L * B, tried + B - sum(!is.na(trees))))
+    trees <- c(trees, run(ids))
+    tried <- max(ids)
+  }
+  trees <- trees[!is.na(trees)]
+  if (length(trees) < B) stop("MD-Cat bootstrap: only ", length(trees), " of ", tried, " replicates finished.")
+  trees <- trees[seq_len(B)]
+
+  sig <- .mdcat_clade_signatures(dated_tree)
+  nodes <- ape::Ntip(dated_tree) + seq_along(sig)
+  boot_age <- vapply(trees, function(f) .mdcat_ages_by_clade(ape::read.tree(f), sig), numeric(length(sig)))
+  if (anyNA(boot_age)) stop("MD-Cat bootstrap: replicate trees do not match the point-estimate topology.")
+  q <- function(p) apply(boot_age, 1L, stats::quantile, probs = p, names = FALSE, type = 8)
+  ci <- data.frame(node = nodes, age = .mdcat_node_ages(dated_tree)[nodes],
+                   ci_lo = q(0.025), ci_hi = q(0.975), q50_lo = q(0.25), q50_hi = q(0.75),
+                   se = NA_real_, stringsAsFactors = FALSE)
+  list(ci = ci, n_bootstrap_ok = B, n_bootstrap_attempts = tried)
 }

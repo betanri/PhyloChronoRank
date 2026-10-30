@@ -5,4 +5,4 @@
 "chronos_discrete_lambda1_k2","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES/chronos_discrete_lambda1_k2_with_CI.tre","chronos","discrete",1,2,NA,"chronos_discrete_lambda1_k2",192.453207082735,"min_fit_score_then_lambda_closest_to_1"
 "treePL_smooth1000","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES/treePL_smooth1000_with_CI.tre","treePL","treePL",NA,NA,1000,"treePL_smooth1000",391.76026,"min_treepl_cv_chisq"
 "RelTime_MEGA","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES/RelTime_MEGA_with_bootstrap_CI.tre","RelTime_MEGA","RelTime_MEGA",NA,NA,NA,"RelTime_MEGA",NA,"mega_reltime_run"
-"MDCat","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES/MDCat.tre","MDCat","MDCat",NA,NA,NA,"MDCat",NA,"mdcat_run"
+"MDCat","/Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_dense19/MAIN_OUTPUT_TREES/MDCat_with_CI.tre","MDCat","MDCat",NA,NA,NA,"MDCat",NA,"mdcat_run"

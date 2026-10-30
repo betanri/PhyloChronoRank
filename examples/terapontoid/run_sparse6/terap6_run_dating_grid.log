@@ -403,3 +403,28 @@
 [2026-10-28 20:04:31] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
 [2026-10-28 20:04:31] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
 [2026-10-28 20:04:31] Done.
+[2026-10-29 13:01:23] Target tree: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/phylogram.tre | tree_id=phylogram
+[2026-10-29 13:01:23] Output prefix: terap6
+[2026-10-29 13:01:23] Calibration rows input: 6
+[2026-10-29 13:01:23] Calibration rows mapped: 6
+[2026-10-29 13:01:23] Merged node bounds retained: 6
+[2026-10-29 13:01:23] Dropped calibrations (missing taxa): 0
+[2026-10-29 13:01:23] Dropped calibrations (bad MRCA): 0
+[2026-10-29 13:01:23] Calibration sources: csv=6
+[2026-10-29 13:01:23] Running MD-Cat with /private/tmp/claude-503/-Users-ricardobetancur--claude-spares-spare-eM3N0o/02dfa6ff-f9f1-494c-892b-175509929a58/scratchpad/mdcat_eval/venv/bin/md_cat.py (10 random starts, k=50)
+[2026-10-29 13:01:23]   checkpoint: reusing MD-Cat tree
+[2026-10-29 13:01:23] Computing CIs for selected candidates...
+[2026-10-29 13:01:24]   checkpoint: reusing CI for chronos_clock_lambda1
+[2026-10-29 13:01:24]   checkpoint: reusing CI for chronos_correlated_lambda0p01
+[2026-10-29 13:01:24]   checkpoint: reusing CI for chronos_discrete_lambda1_k2
+[2026-10-29 13:01:24]   checkpoint: reusing CI for treePL_smooth1000
+[2026-10-29 13:01:24]   MD-Cat CI for MDCat (100 reps, one random start each)...
+[2026-10-29 13:06:56]   -> /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/selected_ci/terap6_MDCat_ci.csv (100 replicates tried)
+[2026-10-29 13:06:56] Post-selection CI computation done.
+[2026-10-29 13:06:56]   no CI available for chronos_relaxed_lambda0p01; MAIN_OUTPUT_TREES keeps the plain tree
+[2026-10-29 13:06:56] Saved combined runs summary: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/terap6_all_runs_summary.csv
+[2026-10-29 13:06:56] Saved full-grid candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/full_grid/candidates.csv
+[2026-10-29 13:06:56] Saved candidates CSV: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/candidates.csv
+[2026-10-29 13:06:56] Saved representative tree copies: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/MAIN_OUTPUT_TREES
+[2026-10-29 13:06:56] Saved model-fit summaries: /Users/ricardobetancur/Desktop/Proxy_Misplaced/PhyloChronoRank/examples/terapontoid/run_sparse6/model_fits
+[2026-10-29 13:06:56] Done.

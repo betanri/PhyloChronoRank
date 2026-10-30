@@ -1,0 +1,2 @@
+"candidate","uncertainty_source","uncertainty_n_bars","uncertainty_mean_width_ma","uncertainty_median_width_ma","uncertainty_sd_width_ma","uncertainty_min_width_ma","uncertainty_max_width_ma","uncertainty_q25_width_ma","uncertainty_q75_width_ma"
+"MDCat","MDCat-bootstrap",163,6.57897259713701,4.97249916666667,4.97814465669386,0.000200000000006639,22.3486533333333,2.54582555555554,10.3433873611111
